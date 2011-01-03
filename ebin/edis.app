@@ -1,0 +1,9 @@
+{application,edis,
+             [{description,[]},
+              {vsn,"1"},
+              {registered,[]},
+              {applications,[kernel,stdlib]},
+              {mod,{edis_app,[]}},
+              {env,[]},
+              {modules,[client_handler,client_manager,config,edis_app,
+                        edis_sup,server,tcp_listener]}]}.
