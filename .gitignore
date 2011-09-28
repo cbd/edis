@@ -1,3 +1,4 @@
+deps
 log/*.log
 tmp
 tmp/**/*

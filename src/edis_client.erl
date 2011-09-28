@@ -1,10 +1,12 @@
 %%%-------------------------------------------------------------------
+%%% @author Fernando Benavides <fernando.benavides@inakanetworks.com>
 %%% @author Chad DePue <chad@inakanetworks.com>
-%%% @copyright (C) 2010 Inaka Labs S.R.L.
-%%% @doc Client Process
+%%% @copyright (C) 2011 InakaLabs SRL
+%%% @doc edis client FSM
 %%% @end
 %%%-------------------------------------------------------------------
--module(client_handler).
+-module(edis_client).
+-author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -behaviour(gen_fsm).
@@ -12,10 +14,10 @@
 -export([start_link/0, set_socket/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([wait_for_socket/2, args_or_oldcmd/2,bytes_in_command/2,get_command/2, 
-    handle_command/2,recv_argument/2,running/2]).
+         handle_command/2,recv_argument/2,running/2]).
 -export([send/2, disconnect/1]).
-        
--include("log.hrl").
+
+-include("edis.hrl").
 -define(FSM_TIMEOUT, 60000).
 
 -record(state, {socket    :: port(),
@@ -66,7 +68,7 @@ wait_for_socket({socket_ready, Socket}, State) ->
       {ok, {_Ip, Port}} -> Port;
       Error -> Error
     end,
-  ?DEBUG("Connected: ~p ~n", [PeerPort]),
+  ?INFO("New Client: ~p ~n", [PeerPort]),
   ok = inet:setopts(Socket, [{active, once}, {packet, line}, binary]),
   {next_state, args_or_oldcmd, State#state{socket   = Socket,
                                              peerport = PeerPort}};
@@ -84,10 +86,6 @@ args_or_oldcmd({data, <<"*",N/binary>>}, State) ->
                  ?DEBUG("args: ~p ~n",[NArgs]),
                  NewState = State#state{nargs = NArgs, args=[]},
   {next_state, bytes_in_command, NewState};
-
-args_or_oldcmd({data, <<"PING",13,10>>}, State = #state{socket = Socket}) ->
-  tcp_send(Socket,<<"+PONG",13,10>>,State),
-  {next_state, args_or_oldcmd, State};
 
 args_or_oldcmd({data, <<"GET",Key/binary>>}, State = #state{socket = Socket}) ->
   case string:tokens(binary_to_list(Key),"\r\n") of
@@ -122,8 +120,16 @@ bytes_in_command(Event, State) ->
 get_command({data, Data}, State = #state{nextlength = Length}) ->
                  <<Command:Length/binary,13,10>> = Data,
                  ?DEBUG("Command: ~p ~n",[Command]),
-                 NewState = State#state{nextlength = undefined, command = Command, nargs = State#state.nargs - 1},
-  {next_state, recv_argument, NewState};
+                 NewState = State#state{nextlength  = undefined,
+                                        command     = Command,
+                                        nargs       = State#state.nargs - 1},
+                 case NewState#state.nargs of
+                   A when A > 1 ->
+                     {next_state, recv_argument, NewState};
+                   _ ->
+                     proc_lib:spawn(?MODULE, handle_command, [Command, NewState]),
+                     {next_state, args_or_oldcmd, NewState}
+                end;
 get_command(timeout, State) ->
     ?THROW("Timeout~n", []),
     {stop, timeout, State};
@@ -158,9 +164,11 @@ recv_argument(Event, State) ->
 
 %% @hidden
 -spec handle_command(binary(), #state{}) -> term().
-handle_command(<<"GET">>, _State) -> 
-  ?DEBUG("in get",[]),
-  ok.
+handle_command(<<"PING">>, State) ->
+  tcp_send(State#state.socket, <<"+PONG",13,10>>, State),
+  ok;
+handle_command(Command, #state{args = Args}) ->
+  ?WARN("Unknown command: ~s~p~n", [Command, Args]).
 
 %% @hidden
 -spec running(term(), #state{}) -> {next_state, running, #state{}} | {stop, normal | {unexpected_event, term()}, #state{}}.
@@ -188,9 +196,11 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 
 %% @hidden
 -spec handle_info(term(), atom(), #state{}) -> term().
-handle_info({tcp, Socket, Bin}, StateName, #state{socket = Socket} = StateData) ->
+handle_info({tcp, Socket, Bin}, StateName, #state{socket = Socket,
+                                                  peerport = PeerPort} = StateData) ->
     % Flow control: enable forwarding of next TCP message
     ok = inet:setopts(Socket, [{active, false}]),
+    ?DEBUG("Data received from ~p: ~s", [PeerPort, Bin]),
     Result = ?MODULE:StateName({data, Bin}, StateData),
     ok = inet:setopts(Socket, [{active, once}]),
     Result;

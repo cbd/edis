@@ -1,9 +1,11 @@
 {application,edis,
-             [{description,[]},
-              {vsn,"1"},
+             [{description,"Redis KV Store - The Erlang Way :)"},
+              {vsn,"0.1"},
               {registered,[]},
-              {applications,[kernel,stdlib]},
-              {mod,{edis_app,[]}},
-              {env,[]},
-              {modules,[client_handler,client_manager,config,edis_app,
-                        edis_sup,server,tcp_listener]}]}.
+              {applications,[kernel,stdlib,crypto]},
+              {mod,{edis,[]}},
+              {env,[{listener_port_range,{6379,6379}},{client_timeout,32000}]},
+              {modules,[client_handler,client_manager,config,edis,edis_app,
+                        edis_client,edis_client_mgr,edis_client_sup,
+                        edis_config,edis_listener,edis_listener_sup,edis_sup,
+                        server,tcp_listener]}]}.

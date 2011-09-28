@@ -1,32 +1,35 @@
 %%%-------------------------------------------------------------------
+%%% @author Fernando Benavides <fernando.benavides@inakanetworks.com>
 %%% @author Chad DePue <chad@inakanetworks.com>
-%%% @copyright (C) 2010 Inaka Labs SRL
+%%% @copyright (C) 2011 InakaLabs SRL
 %%% @doc Listener process for clients
 %%% @reference See <a href="http://www.trapexit.org/index.php/Building_a_Non-blocking_TCP_server_using_OTP_principles">this article</a> for more information, and liberally borrowed from Fernando Benavides' code - <fernando@inakanetworks.com>
 %%% @end
 %%%-------------------------------------------------------------------
--module(tcp_listener).
+-module(edis_listener).
 -author('Chad DePue <chad@inakanetworks.com>').
+-author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
+
+-include("edis.hrl").
 
 -behaviour(gen_server).
 
 %% -------------------------------------------------------------------
 %% Exported functions
 %% -------------------------------------------------------------------
--export([start_link/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+-export([start_link/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--include("log.hrl").
-
--define(DEFAULT_SOCKET_TIMEOUT, 35000).
--define(TCP_OPTIONS,[binary, {packet, line},
-                     {backlog, 128000},
+-define(TCP_OPTIONS,[binary,
+                     {packet, line},
                      {keepalive, true},
-                     {active, false}, 
+                     {active, false},
                      {reuseaddr, true},
-                     {send_timeout, config:get_env(client_timeout, ?DEFAULT_SOCKET_TIMEOUT)},
-                     {send_timeout_close, true}]).
+                     {nodelay, true}, %% We want to be informed even when packages are small
+                     {backlog, 128000}, %% We don't care if we have logs of pending connections, we'll process them anyway
+                     {send_timeout, edis_config:get(client_timeout)}, %% If we couldn't send a message in this interval, something is definitively wrong...
+                     {send_timeout_close, true} %%... and therefore the connection should be closed
+                     ]).
 
 -record(state, {listener :: port(), % Listening socket
                 acceptor :: term()  % Asynchronous acceptor's internal reference
@@ -36,13 +39,11 @@
 %% External functions
 %% ====================================================================
 
-%% @spec start_link(Port::pos_integer()) -> {ok, pid()}
-%% @doc  Starts a new client listener on port Port
--spec start_link() -> {ok, pid()}.
-start_link()-> 
-    Port = 6379, %% TODO: Config
-    ?INFO("Starting Client Listener on ~p...~n", [Port]),
-    gen_server:start_link({local, process_name(Port)}, ?MODULE, Port, []).
+%% @doc  Starts a new client listener
+-spec start_link(pos_integer()) -> {ok, pid()}.
+start_link(Port) -> 
+  gen_server:start_link(
+    {local, list_to_atom("edis-client-listener-" ++ integer_to_list(Port))}, ?MODULE, Port, []).
 
 %% ====================================================================
 %% Callback functions
@@ -50,14 +51,15 @@ start_link()->
 %% @hidden
 -spec init(pos_integer()) -> {ok, #state{}} | {stop, term()}.
 init(Port) ->
-    case gen_tcp:listen(Port, ?TCP_OPTIONS) of
-        {ok, Socket} ->
-            %%Create first accepting process
-            {ok, Ref} = prim_inet:async_accept(Socket, -1),
-            {ok, #state{listener = Socket,
-                        acceptor = Ref}};
-        {error, Reason} ->
-            {stop, Reason}
+  case gen_tcp:listen(Port, ?TCP_OPTIONS) of
+    {ok, Socket} ->
+      {ok, Ref} = prim_inet:async_accept(Socket, -1),
+      ?INFO("Client listener initialized (listening on port ~p)~n", [Port]),
+      {ok, #state{listener = Socket,
+                  acceptor = Ref}};
+    {error, Reason} ->
+      ?THROW("Client listener couldn't listen to port ~p: ~p~n", [Port, Reason]),
+      {stop, Reason}
     end.
 
 %% @hidden
@@ -66,12 +68,11 @@ handle_call(Request, _From, State) ->
   {stop, {unknown_request, Request}, {unknown_request, Request}, State}.
 
 %% @hidden
--spec handle_cast(any(), #state{}) -> {noreply, #state{}}.
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+-spec handle_cast(any(), #state{}) -> {noreply, #state{}, hibernate}.
+handle_cast(_Msg, State) -> {noreply, State, hibernate}.
 
 %% @hidden
--spec handle_info(any(), #state{}) -> {noreply, #state{}}.
+-spec handle_info(any(), #state{}) -> {noreply, #state{}, hibernate}.
 handle_info({inet_async, ListSock, Ref, {ok, CliSocket}},
             #state{listener = ListSock, acceptor = Ref} = State) ->
   try
@@ -84,18 +85,17 @@ handle_info({inet_async, ListSock, Ref, {ok, CliSocket}},
       ok ->
         void;
       {error, Reason} ->
-        ?THROW("Couldn't set sockopt: ~p~n", [Reason]),
         exit({set_sockopt, Reason})
     end,
     
-    %% New client connected - spawn a new process using the simple_one_for_one
-    %% supervisor.
+    %% New client connected - spawn a new process using the simple_one_for_one supervisor.
     ?DEBUG("Client ~p starting...~n", [PeerPort]),
-    {ok, Pid} = client_manager:start_client(),
+    {ok, Pid} = edis_client_sup:start_client(),
+
     ok = gen_tcp:controlling_process(CliSocket, Pid),
     
     %% Instruct the new FSM that it owns the socket.
-    ok = client_handler:set_socket(Pid, CliSocket),
+    ok = edis_client:set_socket(Pid, CliSocket),
     
     %% Signal the network driver that we are ready to accept another connection
     NewRef =
@@ -118,7 +118,7 @@ handle_info({inet_async, ListSock, Ref, Error},
   ?THROW("Error in socket acceptor: ~p.\n", [Error]),
   {stop, Error, State};
 handle_info(_Info, State) ->
-  {noreply, State}.
+  {noreply, State, hibernate}.
 
 %% @hidden
 -spec terminate(any(), #state{}) -> any().
@@ -151,7 +151,3 @@ set_sockopt(ListSock, CliSocket) ->
       gen_tcp:close(CliSocket),
       Error
   end.
-
-process_name(Port) ->
-  list_to_atom("italk-tcp_listener-" ++ integer_to_list(Port)).
-

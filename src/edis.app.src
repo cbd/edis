@@ -1,12 +1,14 @@
 {application, edis,
  [
-  {description, ""},
-  {vsn, "1"},
+  {description, "Redis KV Store - The Erlang Way :)"},
+  {vsn, "0.1"},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  crypto
                  ]},
-  {mod, { edis_app, []}},
-  {env, []}
+  {mod, {edis, []}},
+  {env, [{listener_port_range, {6379,6379}},
+         {client_timeout, 32000}]}
  ]}.
