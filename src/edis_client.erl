@@ -13,20 +13,23 @@
 
 -export([start_link/0, set_socket/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([wait_for_socket/2, args_or_oldcmd/2,bytes_in_command/2,get_command/2, 
-         handle_command/2,recv_argument/2,running/2]).
--export([send/2, disconnect/1]).
+-export([socket/2, command_start/2, arg_size/2, command_name/2, argument/2]).
+-export([disconnect/1]).
 
 -include("edis.hrl").
+
 -define(FSM_TIMEOUT, 60000).
 
--record(state, {socket    :: port(),
-                peerport  :: integer(),
-                nargs     :: integer(),
-                nextlength:: integer(),
-                command   :: list(),
-                args      :: list()
+-record(state, {socket            :: undefined | port(),
+                peerport          :: undefined | pos_integer(),
+                missing_args = 0  :: non_neg_integer(),
+                next_arg_size     :: undefined | integer(),
+                command_name      :: undefined | binary(),
+                args = []         :: [binary()],
+                buffer = <<>>     :: binary(),
+                command_runner    :: undefined | pid()
                }).
+-opaque state() :: #state{}.
 
 %% ====================================================================
 %% External functions
@@ -42,10 +45,6 @@ start_link() ->
 set_socket(Client, Socket) ->
   gen_fsm:send_event(Client, {socket_ready, Socket}).
 
--spec send(pid(), term()) -> ok.
-send(Client, Event) ->
-  gen_fsm:send_event(Client, {send, Event}).
-
 -spec disconnect(pid()) -> ok.
 disconnect(Client) ->
   gen_fsm:send_event(Client, disconnect).
@@ -54,14 +53,14 @@ disconnect(Client) ->
 %% Server functions
 %% ====================================================================
 %% @hidden
--spec init([]) -> {ok, wait_for_socket, #state{}, ?FSM_TIMEOUT}.
+-spec init([]) -> {ok, socket, state(), ?FSM_TIMEOUT}.
 init([]) ->
-  {ok, wait_for_socket, #state{}, ?FSM_TIMEOUT}.
+  {ok, socket, #state{}, ?FSM_TIMEOUT}.
 
 %% ASYNC EVENTS -------------------------------------------------------
 %% @hidden
--spec wait_for_socket({socket_ready, port()} | timeout | term(), #state{}) -> {next_state, wait_for_socket, #state{}, ?FSM_TIMEOUT} | {stop, timeout, #state{}}.
-wait_for_socket({socket_ready, Socket}, State) ->
+-spec socket({socket_ready, port()} | timeout | term(), state()) -> {next_state, command_start, state(), hibernate} | {stop, timeout | {unexpected_event, term()}, state()}.
+socket({socket_ready, Socket}, State) ->
   % Now we own the socket
   PeerPort =
     case inet:peername(Socket) of
@@ -70,171 +69,224 @@ wait_for_socket({socket_ready, Socket}, State) ->
     end,
   ?INFO("New Client: ~p ~n", [PeerPort]),
   ok = inet:setopts(Socket, [{active, once}, {packet, line}, binary]),
-  {next_state, args_or_oldcmd, State#state{socket   = Socket,
-                                             peerport = PeerPort}};
-wait_for_socket(timeout, State) ->
+  {ok, CmdRunner} = edis_command_runner:start_link(Socket),
+  {next_state, command_start, State#state{socket         = Socket,
+                                          peerport       = PeerPort,
+                                          command_runner = CmdRunner}, hibernate};
+socket(timeout, State) ->
   ?THROW("Timeout~n", []),
   {stop, timeout, State};
-wait_for_socket(Other, State) ->
+socket(Other, State) ->
   ?THROW("Unexpected message: ~p\n", [Other]),
-  {next_state, wait_for_socket, State, ?FSM_TIMEOUT}.
+  {stop, {unexpected_event, Other}, State}.
 
 %% @hidden
--spec args_or_oldcmd(term(), #state{}) -> {next_state, bytes_in_command, #state{}} | {stop, timeout, #state{}} | {stop, {unexpected_event, term()}, #state{}}.
-args_or_oldcmd({data, <<"*",N/binary>>}, State) ->
-                 {NArgs,"\r\n"} = string:to_integer(binary_to_list(N)),
-                 ?DEBUG("args: ~p ~n",[NArgs]),
-                 NewState = State#state{nargs = NArgs, args=[]},
-  {next_state, bytes_in_command, NewState};
-
-args_or_oldcmd({data, <<"GET",Key/binary>>}, State = #state{socket = Socket}) ->
-  case string:tokens(binary_to_list(Key),"\r\n") of
-    [] -> err(Socket,"wrong number of arguments for 'get' command", State);
-    [K] -> ?DEBUG("~p~n",[K]), handle_command(<<"GET">>,State#state{args=[K]})
-  end,
-  {next_state, args_or_oldcmd, State};
-
-args_or_oldcmd(timeout, State) ->
-    ?THROW("Timeout~n", []),
-    {stop, timeout, State};
-args_or_oldcmd(Event, State) ->
-    ?THROW("Unexpected Event: ~p~n", [Event]),
-    {stop, {unexpected_event, Event}, State}.
-
-%% @hidden
--spec bytes_in_command(term(), #state{}) -> {next_state, get_command, #state{}} | {stop, timeout, #state{}} | {stop, {unexpected_event, term()}, #state{}}.
-bytes_in_command({data, <<"$",N/binary>>}, State) ->
-                 {Length,"\r\n"} = string:to_integer(binary_to_list(N)),
-                 ?DEBUG("length: ~p ~n",[Length]),
-                 NewState = State#state{nextlength = Length},
-  {next_state, get_command, NewState};
-bytes_in_command(timeout, State) ->
-    ?THROW("Timeout~n", []),
-    {stop, timeout, State};
-bytes_in_command(Event, State) ->
-    ?THROW("Unexpected Event: ~p~n", [Event]),
-    {stop, {unexpected_event, Event}, State}.
-
-%% @hidden
--spec get_command(term(), #state{}) -> {next_state, recv_argument, #state{}} | {stop, timeout, #state{}} | {stop, {unexpected_event, term()}, #state{}}.
-get_command({data, Data}, State = #state{nextlength = Length}) ->
-                 <<Command:Length/binary,13,10>> = Data,
-                 ?DEBUG("Command: ~p ~n",[Command]),
-                 NewState = State#state{nextlength  = undefined,
-                                        command     = Command,
-                                        nargs       = State#state.nargs - 1},
-                 case NewState#state.nargs of
-                   A when A > 1 ->
-                     {next_state, recv_argument, NewState};
-                   _ ->
-                     proc_lib:spawn(?MODULE, handle_command, [Command, NewState]),
-                     {next_state, args_or_oldcmd, NewState}
-                end;
-get_command(timeout, State) ->
-    ?THROW("Timeout~n", []),
-    {stop, timeout, State};
-get_command(Event, State) ->
-    ?THROW("Unexpected Event: ~p~n", [Event]),
-    {stop, {unexpected_event, Event}, State}.
-
-%% @hidden
--spec recv_argument(term(), #state{}) -> {next_state, running, #state{}} | {stop, timeout, #state{}} | {stop, {unexpected_event, term()}, #state{}}.
-recv_argument({data, <<"$",N/binary>>}, State = #state{socket = Socket, command = Command, nargs = Nargs}) ->
-                 {Length,"\r\n"} = string:to_integer(binary_to_list(N)),
-                 ?DEBUG("length: ~p ~n",[Length]),
-                 inet:setopts(Socket, [{packet,0}]),
-                 {ok, <<Argument:Length/binary,"\r\n">>} = gen_tcp:recv(Socket, Length + 2, ?FSM_TIMEOUT),
-                 ?DEBUG("packet: ~p ~n",[Argument]),
-                 inet:setopts(Socket, [{active, once},{packet,line}]),
-                 NewState = State#state{nextlength = Length, args = State#state.args ++ [Argument], nargs = Nargs - 1},
-                 case Nargs of 
-                   A when A > 1 -> 
-                    {next_state, recv_argument, NewState};
-                   _ -> 
-                     proc_lib:spawn(?MODULE, handle_command, [Command, NewState]),
-                    {next_state, args_or_oldcmd, NewState}
-                end;
-                   
-recv_argument(timeout, State) ->
-    ?THROW("Timeout~n", []),
-    {stop, timeout, State};
-recv_argument(Event, State) ->
-    ?THROW("Unexpected Event: ~p~n", [Event]),
-    {stop, {unexpected_event, Event}, State}.
-
-%% @hidden
--spec handle_command(binary(), #state{}) -> term().
-handle_command(<<"PING">>, State) ->
-  tcp_send(State#state.socket, <<"+PONG",13,10>>, State),
-  ok;
-handle_command(Command, #state{args = Args}) ->
-  ?WARN("Unknown command: ~s~p~n", [Command, Args]).
-
-%% @hidden
--spec running(term(), #state{}) -> {next_state, running, #state{}} | {stop, normal | {unexpected_event, term()}, #state{}}.
-running({send, Message}, State = #state{socket = S}) ->
-  ?DEBUG("Sending: ~p~n", [Message]),
-  ok = tcp_send(S, frame(Message), State),
-  {next_state, running, State};
-running(disconnect, State) ->
-  ?DEBUG("disconnecting...~n", []),
-  {stop, normal, State};
-running(Event, State) ->
-  ?THROW("Unexpected Event:~n\t~p~n", [Event]),
+-spec command_start(term(), state()) -> {next_state, command_start, state(), hibernate} | {next_state, arg_size | argument, state()} | {stop, {unexpected_event, term()}, state()}.
+command_start({data, <<"\r\n">>}, State) ->
+  ?INFO("Empty command in connection with ~p~n", [State#state.peerport]),
+  {next_state, command_start, State};
+command_start({data, <<"\n">>}, State) ->
+  ?INFO("Empty command in connection with ~p~n", [State#state.peerport]),
+  {next_state, command_start, State};
+command_start({data, <<"*", N/binary>>}, State) -> %% Unified Request Protocol
+  {NArgs, "\r\n"} = string:to_integer(binary_to_list(N)),
+  ?DEBUG("URP command - ~p args~n",[NArgs]),
+  {next_state, arg_size, State#state{missing_args = NArgs, command_name = undefined, args = []}};
+command_start({data, OldCmd}, State) ->
+  [Command|Args] = binary:split(OldCmd, [<<" ">>, <<"\r\n">>], [global,trim]),
+  ?DEBUG("Old protocol command - ~p args~n",[Command, length(Args)]),
+  case edis:define_command(to_upper(Command)) of
+    undefined ->
+      ok = edis_command_runner:err(State#state.command_runner,
+                                   <<"unknown command '", Command/binary, "'">>),
+      {next_state, command_start, State, hibernate};
+    #edis_command{last_arg_is_safe = false} -> %% Last argument is inlined
+      ok = edis_command_runner:run(State#state.command_runner, Command, Args),
+      {next_state, command_start, State, hibernate};
+    #edis_command{args = N} ->
+      case erlang:length(Args) of
+        N ->
+          case lists:reverse(Args) of
+            [LastArg | FirstArgs] ->
+              case string:to_integer(binary_to_list(LastArg)) of
+                {error, no_integer} ->
+                  ok = edis_command_runner:err(State#state.command_runner,
+                                               io_lib:format(
+                                                 "lenght of last param expected for '~s'. ~s received instead",
+                                                 [Command, LastArg])),
+                  {next_state, command_start, State, hibernate};
+                {ArgSize, _Rest} ->
+                  {next_state, argument, State#state{command_name   = Command,
+                                                     args           = lists:reverse(FirstArgs),
+                                                     missing_args   = 1,
+                                                     buffer         = <<>>,
+                                                     next_arg_size  = ArgSize}}
+              end;
+            [] ->
+              ok = edis_command_runner:run(State#state.command_runner, Command, []),
+              {next_state, command_start, State, hibernate}
+          end;
+        _ ->
+          ok = edis_command_runner:err(State#state.command_runner,
+                                       <<"wrong number of arguments for '", Command/binary, "' command">>),
+          {next_state, command_start, State, hibernate}
+      end
+  end;
+command_start(Event, State) ->
+  ?THROW("Unexpected Event: ~p~n", [Event]),
   {stop, {unexpected_event, Event}, State}.
+
+%% @hidden
+-spec arg_size(term(), state()) -> {next_state, command_start, state(), hibernate} | {next_state, command_name | argument, state()} | {stop, {unexpected_event, term()}, state()}.
+arg_size({data, <<"$", N/binary>>}, State) ->
+  case string:to_integer(binary_to_list(N)) of
+    {error, no_integer} ->
+      ok = edis_command_runner:err(State#state.command_runner,
+                                   io_lib:format(
+                                     "lenght of next arg expected. ~s received instead", [N])),
+      {next_state, command_start, State, hibernate};
+    {ArgSize, _Rest} ->
+      ?DEBUG("Arg Size: ~p ~n", [ArgSize]),
+      {next_state, case State#state.command_name of
+                     undefined -> command_name;
+                     _Command -> argument
+                   end, State#state{next_arg_size = ArgSize, buffer = <<>>}}
+  end;
+arg_size(Event, State) ->
+    ?THROW("Unexpected Event: ~p~n", [Event]),
+    {stop, {unexpected_event, Event}, State}.
+
+%% @hidden
+-spec command_name(term(), state()) -> {next_state, command_start, state(), hibernate} | {next_state, arg_size, state()} | {stop, {unexpected_event, term()}, state()}.
+command_name({data, Data}, State = #state{next_arg_size = Size, missing_args = 1}) ->
+  <<CommandName:Size/binary, _Rest>> = Data,
+  ?DEBUG("Command: ~p ~n", [CommandName]),
+  ok = edis_command_runner:run(State#state.command_runner, CommandName, []),
+  {next_state, command_start, State, hibernate};
+command_name({data, Data}, State = #state{next_arg_size = Size, missing_args = MissingArgs}) ->
+  <<CommandName:Size/binary, _Rest>> = Data,
+  ?DEBUG("Command: ~p ~n", [CommandName]),
+  {next_state, arg_size, State#state{command_name = CommandName,
+                                     missing_args = MissingArgs - 1}};
+command_name(Event, State) ->
+  ?THROW("Unexpected Event: ~p~n", [Event]),
+  {stop, {unexpected_event, Event}, State}.
+
+%% @hidden
+-spec argument(term(), state()) -> {next_state, command_start, state(), hibernate} | {next_state, argument | arg_size, state()} | {stop, {unexpected_event, term()}, state()}.
+argument({data, Data}, State = #state{buffer        = Buffer,
+                                      next_arg_size = Size}) ->
+  case <<Buffer/binary, Data/binary>> of
+    <<Argument:Size/binary, _Rest>> ->
+      case State#state.missing_args of
+        1 ->
+          ok = edis_command_runner:run(State#state.command_runner,
+                                       State#state.command_name,
+                                       lists:reverse([Argument|State#state.args])),
+          {next_state, command_start, State, hibernate};
+        MissingArgs ->
+          {next_state, arg_size, State#state{missing_args = MissingArgs - 1,
+                                             args = [Argument | State#state.args]}}
+      end;
+    NewBuffer -> %% Not the whole argument yet, just an \r\n in the middle of it
+      {next_state, argument, State#state{buffer = NewBuffer}}
+  end;
+argument(Event, State) ->
+    ?THROW("Unexpected Event: ~p~n", [Event]),
+    {stop, {unexpected_event, Event}, State}.
 
 %% OTHER EVENTS -------------------------------------------------------
 %% @hidden
--spec handle_event(X, atom(), #state{}) -> {stop, {atom(), undefined_event, X}, #state{}}.
+-spec handle_event(X, atom(), state()) -> {stop, {atom(), unexpected_event, X}, state()}.
 handle_event(Event, StateName, StateData) ->
-    {stop, {StateName, undefined_event, Event}, StateData}.
+  {stop, {StateName, unexpected_event, Event}, StateData}.
 
 %% @hidden
--spec handle_sync_event(X, reference(), atom(), #state{}) -> {stop, {atom(), undefined_event, X}, #state{}}.
+-spec handle_sync_event(X, reference(), atom(), state()) -> {stop, {atom(), unexpected_event, X}, state()}.
 handle_sync_event(Event, _From, StateName, StateData) ->
-    {stop, {StateName, undefined_event, Event}, StateData}.
+  {stop, {StateName, unexpected_event, Event}, StateData}.
 
 %% @hidden
--spec handle_info(term(), atom(), #state{}) -> term().
+-spec handle_info(term(), atom(), state()) -> term().
 handle_info({tcp, Socket, Bin}, StateName, #state{socket = Socket,
                                                   peerport = PeerPort} = StateData) ->
-    % Flow control: enable forwarding of next TCP message
-    ok = inet:setopts(Socket, [{active, false}]),
-    ?DEBUG("Data received from ~p: ~s", [PeerPort, Bin]),
-    Result = ?MODULE:StateName({data, Bin}, StateData),
-    ok = inet:setopts(Socket, [{active, once}]),
-    Result;
+  % Flow control: enable forwarding of next TCP message
+  ok = inet:setopts(Socket, [{active, false}]),
+  ?DEBUG("Data received from ~p: ~s", [PeerPort, Bin]),
+  Result = ?MODULE:StateName({data, Bin}, StateData),
+  ok = inet:setopts(Socket, [{active, once}]),
+  Result;
 handle_info({tcp_closed, Socket}, _StateName, #state{socket = Socket,
                                                      peerport = PeerPort} = StateData) ->
-    ?DEBUG("Disconnected ~p.~n", [PeerPort]),
-    {stop, normal, StateData};
+  ?DEBUG("Disconnected ~p.~n", [PeerPort]),
+  {stop, normal, StateData};
 handle_info(_Info, StateName, StateData) ->
-    {next_state, StateName, StateData}.
+  {next_state, StateName, StateData}.
 
 %% @hidden
--spec terminate(term(), atom(), #state{}) -> ok.
-terminate(normal, _StateName, #state{socket = Socket}) ->
+-spec terminate(term(), atom(), state()) -> ok.
+terminate(normal, _StateName, #state{socket = Socket, command_runner = CmdRunner}) ->
+  edis_command_runner:stop(CmdRunner),
   (catch gen_tcp:close(Socket)),
   ok;
-terminate(Reason, _StateName, #state{socket = Socket}) ->
+terminate(Reason, _StateName, #state{socket = Socket, command_runner = CmdRunner}) ->
   ?WARN("Terminating client: ~p~n", [Reason]),
+  edis_command_runner:stop(CmdRunner),
   (catch gen_tcp:close(Socket)),
   ok.
 
 %% @hidden
--spec code_change(term(), atom(), #state{}, any()) -> {ok, atom(), #state{}}.
+-spec code_change(term(), atom(), state(), any()) -> {ok, atom(), state()}.
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-%% @spec tcp_send(port(), binary(), term()) -> ok
-%% @doc  Sends a message through TCP socket or fails gracefully 
-%%       (in a gen_fsm fashion)
--spec tcp_send(port(), binary(), term()) -> ok.
-tcp_send(Socket, Message, State) ->
-  try gen_tcp:send(Socket, Message) of
+%% @private
+err(Message) ->
+  Self = self(),
+  proc_lib:spawn_link(
+    fun() ->
+            edis_client:reply(Self, ["-ERR ", Message])
+    end).
+
+%% @private
+handle_command(Command, Args) ->
+  Self = self(),
+  proc_lib:spawn_link(
+    fun() ->
+            edis_client:reply(Self, do_handle_command(to_upper(Command), Args))
+    end).
+
+%% @private
+do_handle_command(<<"PING">>, []) ->
+  <<"+PONG">>;
+do_handle_command(Cmd, Args) ->
+  ?WARN("Unknown command: ~s~p~n", [Cmd, Args]),
+  io_lib:format("-ERR unknown command '~s'", [Cmd]).
+
+%% @private
+-spec to_upper(binary()) -> binary().
+to_upper(Bin) ->
+  to_upper(Bin, <<>>).
+
+%% @private
+to_upper(<<>>, Acc) ->
+  Acc;
+to_upper(<<C, Rest/binary>>, Acc) when $a =< C, C =< $z ->
+  to_upper(Rest, <<Acc/binary, (C-32)>>);
+to_upper(<<195, C, Rest/binary>>, Acc) when 160 =< C, C =< 182 -> %% A-0 with tildes plus enye
+  to_upper(Rest, <<Acc/binary, 195, (C-32)>>);
+to_upper(<<195, C, Rest/binary>>, Acc) when 184 =< C, C =< 190 -> %% U and Y with tilde plus greeks
+  to_upper(Rest, <<Acc/binary, 195, (C-32)>>);
+to_upper(<<C, Rest/binary>>, Acc) ->
+  to_upper(Rest, <<Acc/binary, C>>).
+
+%% @private
+-spec tcp_send(binary(), state()) -> ok.
+tcp_send(Message, State) ->
+  try gen_tcp:send(State#state.socket, [Message, $\r, $\n]) of
     ok ->
       ok;
     {error, closed} ->
@@ -251,16 +303,3 @@ tcp_send(Socket, Message, State) ->
       ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
       throw({stop, normal, State})
   end.
-
-err(Socket, Message, State) -> 
-  tcp_send(Socket,"-ERR " ++ Message ++ "\r\n", State).
-
-frame(List) when is_list(List) -> 
-  frame(list_to_binary(List));
-
-frame(Bin) -> 
-  Length = size(Bin),
-  Result = <<0,Length:8/little-unsigned-integer-unit:8,Bin/binary,255>>,
-  ?DEBUG("client sending ~p bytes:~n\t~s~n", [Length, Bin]),
-  Result.
-
