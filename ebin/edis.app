@@ -6,5 +6,5 @@
               {mod,{edis,[]}},
               {env,[{listener_port_range,{6379,6379}},{client_timeout,32000}]},
               {modules,[edis,edis_client,edis_client_mgr,edis_client_sup,
-                        edis_command_runner,edis_config,edis_listener,
-                        edis_listener_sup,edis_sup]}]}.
+                        edis_command_runner,edis_config,edis_db,edis_db_sup,
+                        edis_listener,edis_listener_sup,edis_sup]}]}.

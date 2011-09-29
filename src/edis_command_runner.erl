@@ -15,8 +15,9 @@
 
 -include("edis.hrl").
 
--record(state, {socket    :: port(),
-                peerport  :: pos_integer()}).
+-record(state, {socket        :: port(),
+                db_index = 0  :: non_neg_integer(),
+                peerport      :: pos_integer()}).
 -opaque state() :: #state{}.
 
 -export([start_link/1, stop/1, err/2, run/3]).
@@ -48,6 +49,8 @@ run(Runner, Command, Arguments) ->
 -spec define_command(binary()) -> undefined | #edis_command{}.
 define_command(<<"PING">>) ->
   #edis_command{name = <<"PING">>, args = 0};
+define_command(<<"SELECT">>) ->
+  #edis_command{name = <<"SELECT">>, args = 1};
 define_command(_) ->
   undefined.
 
@@ -65,25 +68,36 @@ init(Socket) ->
   {ok, #state{socket = Socket, peerport = PeerPort}}.
 
 %% @hidden
--spec handle_call(X, reference(), state()) -> {stop, {unexpected_request, X}, state()}.
-handle_call(X, _From, State) -> {stop, {unexpected_request, X}, State}.
+-spec handle_call(X, reference(), state()) -> {stop, {unexpected_request, X}, {unexpected_request, X}, state()}.
+handle_call(X, _From, State) -> {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
 %% @hidden
 -spec handle_cast(stop | {err, binary()} | {run, binary(), [binary()]}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 handle_cast(stop, State) ->
   {stop, normal, State};
 handle_cast({err, Message}, State) ->
-  tcp_send(["-ERR ", Message], State);
+  tcp_err(Message, State);
+handle_cast({run, <<"SELECT">>, [Index]}, State) ->
+  try {list_to_integer(binary_to_list(Index)), edis_config:get(databases)} of
+    {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
+      tcp_err("invalid DB index", State);
+    {Db, _} ->
+      tcp_ok(State#state{db_index = Db})
+  catch
+    error:badarg ->
+      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
+      tcp_ok(State#state{db_index = 0})
+  end;
 handle_cast({run, <<"PING">>, []}, State) ->
   tcp_send(<<"+PONG">>, State);
 handle_cast({run, Command, Args}, State) ->
   case {define_command(Command), length(Args)} of
     {undefined, _} ->
-      tcp_send(["-ERR unknown command '", Command, "'"], State);
+      tcp_err(["unknown command '", Command, "'"], State);
     {#edis_command{args = L}, L} ->
-      tcp_send(["-ERR unsupported command '", Command, "'"], State);
+      tcp_err(["unsupported command '", Command, "'"], State);
     {_, _} ->
-      tcp_send(["-ERR wrong number of arguments for '", Command, "' command"], State)
+      tcp_err(["wrong number of arguments for '", Command, "' command"], State)
   end.
 
 %% @hidden
@@ -101,6 +115,17 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+%% @private
+-spec tcp_err(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_err(Message, State) ->
+  tcp_send(["-ERR ", Message], State).
+
+%% @private
+-spec tcp_ok(state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_ok(State) ->
+  tcp_send("+OK", State).
+
+
 %% @private
 -spec tcp_send(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_send(Message, State) ->
@@ -122,4 +147,3 @@ tcp_send(Message, State) ->
       ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
       {stop, normal, State}
   end.
-
