@@ -69,6 +69,7 @@ socket({socket_ready, Socket}, State) ->
     end,
   ?INFO("New Client: ~p ~n", [PeerPort]),
   ok = inet:setopts(Socket, [{active, once}, {packet, line}, binary]),
+  _ = erlang:process_flag(trap_exit, true), %% We want to know even if it stops normally
   {ok, CmdRunner} = edis_command_runner:start_link(Socket),
   {next_state, command_start, State#state{socket         = Socket,
                                           peerport       = PeerPort,
@@ -95,13 +96,13 @@ command_start({data, <<"*", N/binary>>}, State) -> %% Unified Request Protocol
 command_start({data, OldCmd}, State) ->
   [Command|Args] = binary:split(OldCmd, [<<" ">>, <<"\r\n">>], [global,trim]),
   ?DEBUG("Old protocol command - ~p args~n",[Command, length(Args)]),
-  case edis:define_command(to_upper(Command)) of
+  case edis_command_runner:define_command(to_upper(Command)) of
     undefined ->
       ok = edis_command_runner:err(State#state.command_runner,
                                    <<"unknown command '", Command/binary, "'">>),
       {next_state, command_start, State, hibernate};
     #edis_command{last_arg_is_safe = false} -> %% Last argument is inlined
-      ok = edis_command_runner:run(State#state.command_runner, Command, Args),
+      ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), Args),
       {next_state, command_start, State, hibernate};
     #edis_command{args = N} ->
       case erlang:length(Args) of
@@ -123,7 +124,7 @@ command_start({data, OldCmd}, State) ->
                                                      next_arg_size  = ArgSize}}
               end;
             [] ->
-              ok = edis_command_runner:run(State#state.command_runner, Command, []),
+              ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), []),
               {next_state, command_start, State, hibernate}
           end;
         _ ->
@@ -159,15 +160,14 @@ arg_size(Event, State) ->
 %% @hidden
 -spec command_name(term(), state()) -> {next_state, command_start, state(), hibernate} | {next_state, arg_size, state()} | {stop, {unexpected_event, term()}, state()}.
 command_name({data, Data}, State = #state{next_arg_size = Size, missing_args = 1}) ->
-  <<CommandName:Size/binary, _Rest>> = Data,
-  ?DEBUG("Command: ~p ~n", [CommandName]),
-  ok = edis_command_runner:run(State#state.command_runner, CommandName, []),
+  <<Command:Size/binary, _Rest/binary>> = Data,
+  ?DEBUG("Command: ~p ~n", [Command]),
+  ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), []),
   {next_state, command_start, State, hibernate};
 command_name({data, Data}, State = #state{next_arg_size = Size, missing_args = MissingArgs}) ->
-  <<CommandName:Size/binary, _Rest>> = Data,
-  ?DEBUG("Command: ~p ~n", [CommandName]),
-  {next_state, arg_size, State#state{command_name = CommandName,
-                                     missing_args = MissingArgs - 1}};
+  <<Command:Size/binary, _Rest/binary>> = Data,
+  ?DEBUG("Command: ~p ~n", [Command]),
+  {next_state, arg_size, State#state{command_name = Command, missing_args = MissingArgs - 1}};
 command_name(Event, State) ->
   ?THROW("Unexpected Event: ~p~n", [Event]),
   {stop, {unexpected_event, Event}, State}.
@@ -177,11 +177,11 @@ command_name(Event, State) ->
 argument({data, Data}, State = #state{buffer        = Buffer,
                                       next_arg_size = Size}) ->
   case <<Buffer/binary, Data/binary>> of
-    <<Argument:Size/binary, _Rest>> ->
+    <<Argument:Size/binary, _Rest/binary>> ->
       case State#state.missing_args of
         1 ->
           ok = edis_command_runner:run(State#state.command_runner,
-                                       State#state.command_name,
+                                       to_upper(State#state.command_name),
                                        lists:reverse([Argument|State#state.args])),
           {next_state, command_start, State, hibernate};
         MissingArgs ->
@@ -208,6 +208,9 @@ handle_sync_event(Event, _From, StateName, StateData) ->
 
 %% @hidden
 -spec handle_info(term(), atom(), state()) -> term().
+handle_info({'EXIT', CmdRunner, Reason}, _StateName, State = #state{command_runner = CmdRunner}) ->
+  ?DEBUG("Command runner stopped: ~p~n", [Reason]),
+  {stop, Reason, State};
 handle_info({tcp, Socket, Bin}, StateName, #state{socket = Socket,
                                                   peerport = PeerPort} = StateData) ->
   % Flow control: enable forwarding of next TCP message
@@ -244,29 +247,6 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% Internal functions
 %% ====================================================================
 %% @private
-err(Message) ->
-  Self = self(),
-  proc_lib:spawn_link(
-    fun() ->
-            edis_client:reply(Self, ["-ERR ", Message])
-    end).
-
-%% @private
-handle_command(Command, Args) ->
-  Self = self(),
-  proc_lib:spawn_link(
-    fun() ->
-            edis_client:reply(Self, do_handle_command(to_upper(Command), Args))
-    end).
-
-%% @private
-do_handle_command(<<"PING">>, []) ->
-  <<"+PONG">>;
-do_handle_command(Cmd, Args) ->
-  ?WARN("Unknown command: ~s~p~n", [Cmd, Args]),
-  io_lib:format("-ERR unknown command '~s'", [Cmd]).
-
-%% @private
 -spec to_upper(binary()) -> binary().
 to_upper(Bin) ->
   to_upper(Bin, <<>>).
@@ -282,24 +262,3 @@ to_upper(<<195, C, Rest/binary>>, Acc) when 184 =< C, C =< 190 -> %% U and Y wit
   to_upper(Rest, <<Acc/binary, 195, (C-32)>>);
 to_upper(<<C, Rest/binary>>, Acc) ->
   to_upper(Rest, <<Acc/binary, C>>).
-
-%% @private
--spec tcp_send(binary(), state()) -> ok.
-tcp_send(Message, State) ->
-  try gen_tcp:send(State#state.socket, [Message, $\r, $\n]) of
-    ok ->
-      ok;
-    {error, closed} ->
-      ?DEBUG("Connection closed~n", []),
-      throw({stop, normal, State});
-    {error, Error} ->
-      ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Error]),
-      throw({stop, {error, Error}, State})
-  catch
-    _:{Exception, _} ->
-      ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
-      throw({stop, normal, State});
-    _:Exception ->
-      ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
-      throw({stop, normal, State})
-  end.
