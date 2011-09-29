@@ -15,9 +15,9 @@
 
 -include("edis.hrl").
 
--record(state, {socket        :: port(),
-                db_index = 0  :: non_neg_integer(),
-                peerport      :: pos_integer()}).
+-record(state, {socket                  :: port(),
+                db = edis_db:process(0) :: atom(),
+                peerport                :: pos_integer()}).
 -opaque state() :: #state{}.
 
 -export([start_link/1, stop/1, err/2, run/3]).
@@ -82,14 +82,20 @@ handle_cast({run, <<"SELECT">>, [Index]}, State) ->
     {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
       tcp_err("invalid DB index", State);
     {Db, _} ->
-      tcp_ok(State#state{db_index = Db})
+      tcp_ok(State#state{db = edis_db:process(Db)})
   catch
     error:badarg ->
       ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
-      tcp_ok(State#state{db_index = 0})
+      tcp_ok(State#state{db = edis_db:process(0)})
   end;
 handle_cast({run, <<"PING">>, []}, State) ->
-  tcp_send(<<"+PONG">>, State);
+  try edis_db:ping(State#state.db) of
+    pong -> tcp_ok(<<"PONG">>, State)
+  catch
+    _:Error ->
+      ?WARN("Error pinging db #~p: ~p~n", [Error]),
+      tcp_err(<<"database is down">>, State)
+  end;
 handle_cast({run, Command, Args}, State) ->
   case {define_command(Command), length(Args)} of
     {undefined, _} ->
@@ -123,7 +129,11 @@ tcp_err(Message, State) ->
 %% @private
 -spec tcp_ok(state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_ok(State) ->
-  tcp_send("+OK", State).
+  tcp_ok("OK", State).
+%% @private
+-spec tcp_ok(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_ok(Message, State) ->
+  tcp_send(["+", Message], State).
 
 
 %% @private
