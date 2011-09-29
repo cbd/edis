@@ -215,7 +215,7 @@ handle_info({tcp, Socket, Bin}, StateName, #state{socket = Socket,
                                                   peerport = PeerPort} = StateData) ->
   % Flow control: enable forwarding of next TCP message
   ok = inet:setopts(Socket, [{active, false}]),
-  ?DEBUG("Data received from ~p: ~s", [PeerPort, Bin]),
+  ?CDEBUG(data, "~p >> ~s", [PeerPort, Bin]),
   Result = ?MODULE:StateName({data, Bin}, StateData),
   ok = inet:setopts(Socket, [{active, once}]),
   Result;

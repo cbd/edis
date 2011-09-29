@@ -15,7 +15,8 @@
 
 -include("edis.hrl").
 
--record(state, {socket :: port()}).
+-record(state, {socket    :: port(),
+                peerport  :: pos_integer()}).
 -opaque state() :: #state{}.
 
 -export([start_link/1, stop/1, err/2, run/3]).
@@ -56,7 +57,12 @@ define_command(_) ->
 %% @hidden
 -spec init(port()) -> {ok, state()}.
 init(Socket) ->
-  {ok, #state{socket = Socket}}.
+  PeerPort =
+    case inet:peername(Socket) of
+      {ok, {_Ip, Port}} -> Port;
+      Error -> Error
+    end,
+  {ok, #state{socket = Socket, peerport = PeerPort}}.
 
 %% @hidden
 -spec handle_call(X, reference(), state()) -> {stop, {unexpected_request, X}, state()}.
@@ -98,6 +104,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% @private
 -spec tcp_send(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_send(Message, State) ->
+  ?CDEBUG(data, "~p << ~s~n", [State#state.peerport, Message]),
   try gen_tcp:send(State#state.socket, [Message, "\r\n"]) of
     ok ->
       {noreply, State};
