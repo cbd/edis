@@ -126,11 +126,11 @@ handle_cast({run, <<"ECHO">>, _}, State) ->
   tcp_err("wrong number of arguments for 'ECHO' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
-handle_cast({run, <<"SHUTDOWN">>, []}, State) ->
-  _ = spawn(edis, stop, []),
-  {stop, normal, State};
-handle_cast({run, <<"SHUTDOWN">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'SHUTDOWN' command", State);
+handle_cast({run, <<"MONITOR">>, []}, State) ->
+  ok = edis_db_monitor:add_sup_handler(),
+  tcp_ok(State);
+handle_cast({run, <<"MONITOR">>, _}, State) ->
+  tcp_err("wrong number of arguments for 'MONITOR' command", State);
 handle_cast({run, <<"SAVE">>, []}, State) ->
   try edis_db:save(State#state.db) of
     ok -> tcp_ok(State)
@@ -141,7 +141,11 @@ handle_cast({run, <<"SAVE">>, []}, State) ->
   end;
 handle_cast({run, <<"SAVE">>, _}, State) ->
   tcp_err("wrong number of arguments for 'SAVE' command", State);
-
+handle_cast({run, <<"SHUTDOWN">>, []}, State) ->
+  _ = spawn(edis, stop, []),
+  {stop, normal, State};
+handle_cast({run, <<"SHUTDOWN">>, _}, State) ->
+  tcp_err("wrong number of arguments for 'SHUTDOWN' command", State);
 handle_cast({run, Command, Args}, State)
   when Command == <<"SYNC">> orelse Command == <<"SLOWLOG">>
   orelse Command == <<"SLAVEOF">> ->
@@ -154,6 +158,18 @@ handle_cast({run, Command, _Args}, State) ->
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
+handle_info(#edis_command{db = 0} = Command, State) ->
+  tcp_ok(io_lib:format("~p ~p ~p", [Command#edis_command.timestamp,
+                                    Command#edis_command.cmd,
+                                    Command#edis_command.args]), State);
+handle_info(#edis_command{} = Command, State) ->
+  tcp_ok(io_lib:format("~p (db ~p) ~p ~p", [Command#edis_command.timestamp,
+                                            Command#edis_command.db,
+                                            Command#edis_command.cmd,
+                                            Command#edis_command.args]), State);
+handle_info({gen_event_EXIT, _Handler, Reason}, State) ->
+  ?INFO("Monitor deactivated. Reason: ~p~n", [Reason]),
+  {noreply, State, hibernate};
 handle_info(_, State) -> {noreply, State, hibernate}.
 
 %% @hidden
