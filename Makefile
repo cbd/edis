@@ -7,7 +7,8 @@ clean:
 	rebar clean
 
 build_plt: all
-	dialyzer --build_plt --apps ssl public_key kernel stdlib inets crypto --output_plt ~/.edis_plt -pa deps/*/ebin ebin
+	dialyzer --build_plt --apps kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
+				    xmerl webtool snmp public_key mnesia eunit syntax_tools compiler --output_plt ~/.edis_plt -pa deps/*/ebin ebin
 
 analyze: all
 	dialyzer -pa deps/*/ebin --plt ~/.itweet_dialyzer_plt -Wunmatched_returns -Werror_handling -Wbehaviours ebin
