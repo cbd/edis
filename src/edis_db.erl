@@ -14,7 +14,8 @@
 -include("edis.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
 
--record(state, {index :: non_neg_integer()}).
+-record(state, {index :: non_neg_integer(),
+                db    :: eleveldb:db_ref()}).
 -opaque state() :: #state{}.
 
 %% Administrative functions
@@ -46,9 +47,15 @@ ping(Db) ->
 %% Server functions
 %% =================================================================================================
 %% @hidden
--spec init(non_neg_integer()) -> {ok, state()}.
+-spec init(non_neg_integer()) -> {ok, state()} | {stop, any()}.
 init(Index) ->
-  {ok, #state{index = Index}}.
+  case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
+    {ok, Ref} ->
+      {ok, #state{index = Index, db = Ref}};
+    {error, Reason} ->
+      ?THROW("Couldn't start level db #~p:~b\t~p~n", [Index, Reason]),
+      {stop, Reason}
+  end.
 
 %% @hidden
 -spec handle_call(term(), reference(), state()) -> {reply, ok | {ok, term()} | {error, term()}, state()} | {stop, {unexpected_request, term()}, {unexpected_request, term()}, state()}.
