@@ -74,6 +74,15 @@ handle_cast(stop, State) ->
 handle_cast({err, Message}, State) ->
   tcp_err(Message, State);
 %% -- Connection -----------------------------------------------------------------------------------
+handle_cast({run, <<"QUIT">>, []}, State) ->
+  case tcp_ok(State) of
+    {noreply, NewState} ->
+      {stop, normal, NewState};
+    Error ->
+      Error
+  end;
+handle_cast({run, <<"QUIT">>, _}, State) ->
+  tcp_err(["wrong number of arguments for 'QUIT' command"], State);
 handle_cast({run, <<"AUTH">>, [Password]}, State) ->
   case edis_config:get(requirepass) of
     false ->
