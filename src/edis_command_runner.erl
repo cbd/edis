@@ -126,6 +126,17 @@ handle_cast({run, <<"ECHO">>, _}, State) ->
   tcp_err("wrong number of arguments for 'ECHO' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
+handle_cast({run, <<"LASTSAVE">>, []}, State) ->
+  try edis_db:last_save(State#state.db) of
+    Ts ->
+      tcp_number(erlang:round(Ts), State)
+  catch
+    _:Error ->
+      ?WARN("Error saving db #~p: ~p~n", [Error]),
+      tcp_err(<<"database is down">>, State)
+  end;
+handle_cast({run, <<"LASTSAVE">>, _}, State) ->
+  tcp_err("wrong number of arguments for 'LASTSAVE' command", State);
 handle_cast({run, <<"MONITOR">>, []}, State) ->
   ok = edis_db_monitor:add_sup_handler(),
   tcp_ok(State);
@@ -190,6 +201,11 @@ tcp_bulk(Message, State) ->
     {noreply, NewState} -> tcp_send(Message, NewState);
     Error -> Error
   end.
+
+%% @private
+-spec tcp_number(integer(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_number(Number, State) ->
+  tcp_send([":", integer_to_list(Number)], State).
 
 %% @private
 -spec tcp_err(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.

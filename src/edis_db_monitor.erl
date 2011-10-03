@@ -51,8 +51,6 @@ delete_handler() ->
 -spec notify(atom(), term()) -> ok.
 notify(DbProcess, Command) ->
   "edis-db-" ++ Index = atom_to_list(DbProcess),
-  Ts = calendar:datetime_to_gregorian_seconds(calendar:universal_time()) - 62167219200 +
-         element(3, erlang:now()) / 1000000,
   {Cmd, Args} =
     case Command of
       Command when is_atom(Command) -> {Command, []};
@@ -60,7 +58,7 @@ notify(DbProcess, Command) ->
         [C|A] = tuple_to_list(Command),
         {C, A}
     end,
-  gen_event:notify(?MODULE, #edis_command{timestamp = Ts,
+  gen_event:notify(?MODULE, #edis_command{timestamp = edis_util:timestamp(),
                                           db = list_to_integer(Index),
                                           cmd = Cmd,
                                           args = Args}).

@@ -17,8 +17,9 @@
 -include("edis.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
 
--record(state, {index :: non_neg_integer(),
-                db    :: eleveldb:db_ref()}).
+-record(state, {index     :: non_neg_integer(),
+                db        :: eleveldb:db_ref(),
+                last_save :: float()}).
 -opaque state() :: #state{}.
 
 %% Administrative functions
@@ -26,7 +27,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Commands ========================================================================================
--export([ping/1, save/1]).
+-export([ping/1, save/1, last_save/1]).
 
 %% =================================================================================================
 %% External functions
@@ -50,6 +51,10 @@ ping(Db) ->
 save(Db) ->
   make_call(Db, save).
 
+-spec last_save(atom()) -> ok.
+last_save(Db) ->
+  make_call(Db, last_save).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -58,7 +63,7 @@ save(Db) ->
 init(Index) ->
   case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
     {ok, Ref} ->
-      {ok, #state{index = Index, db = Ref}};
+      {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp()}};
     {error, Reason} ->
       ?THROW("Couldn't start level db #~p:~b\t~p~n", [Index, Reason]),
       {stop, Reason}
@@ -67,7 +72,9 @@ init(Index) ->
 %% @hidden
 -spec handle_call(term(), reference(), state()) -> {reply, ok | {ok, term()} | {error, term()}, state()} | {stop, {unexpected_request, term()}, {unexpected_request, term()}, state()}.
 handle_call(save, _From, State) ->
-  {reply, ok, State};
+  {reply, ok, State#state{last_save = edis_util:timestamp()}};
+handle_call(last_save, _From, State) ->
+  {reply, {ok, State#state.last_save}, State};
 handle_call(ping, _From, State) ->
   {reply, {ok, pong}, State};
 handle_call(X, _From, State) ->
