@@ -110,6 +110,10 @@ handle_cast({run, <<"PING">>, []}, State) ->
   end;
 handle_cast({run, <<"PING">>, _}, State) ->
   tcp_err(["wrong number of arguments for 'PING' command"], State);
+handle_cast({run, <<"ECHO">>, [Word]}, State) ->
+  tcp_bulk(Word, State);
+handle_cast({run, <<"ECHO">>, _}, State) ->
+  tcp_err(["wrong number of arguments for 'ECHO' command"], State);
 
 %% -- Errors ---------------------------------------------------------------------------------------
 handle_cast({run, Command, _Args}, State) ->
@@ -130,6 +134,14 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+%% @private
+-spec tcp_bulk(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_bulk(Message, State) ->
+  case tcp_send(["$", integer_to_list(iolist_size(Message))], State) of
+    {noreply, NewState} -> tcp_send(Message, NewState);
+    Error -> Error
+  end.
+
 %% @private
 -spec tcp_err(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_err(Message, State) ->
