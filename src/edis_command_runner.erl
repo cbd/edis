@@ -17,11 +17,12 @@
 
 -record(state, {socket                  :: port(),
                 db = edis_db:process(0) :: atom(),
-                peerport                :: pos_integer()}).
+                peerport                :: pos_integer(),
+                authenticated = false   :: boolean()}).
 -opaque state() :: #state{}.
 
 -export([start_link/1, stop/1, err/2, run/3]).
--export([define_command/1]).
+-export([last_arg/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% =================================================================================================
@@ -43,16 +44,10 @@ err(Runner, Message) ->
 run(Runner, Command, Arguments) ->
   gen_server:cast(Runner, {run, Command, Arguments}).
 
-%% @doc Describes a command given its name
-%% @todo Optimize (i.e. command list may be a huge one and we shouldn't write all those in here)
-%%       We may want to store them on ets, mnesia, etc...
--spec define_command(binary()) -> undefined | #edis_command{}.
-define_command(<<"PING">>) ->
-  #edis_command{name = <<"PING">>, args = 0};
-define_command(<<"SELECT">>) ->
-  #edis_command{name = <<"SELECT">>, args = 1};
-define_command(_) ->
-  undefined.
+%% @doc Should last argument be inlined?
+%%      Useful for old protocol calls.
+-spec last_arg(binary()) -> inlined | safe.
+last_arg(_) -> inlined.
 
 %% =================================================================================================
 %% Server functions
@@ -65,7 +60,8 @@ init(Socket) ->
       {ok, {_Ip, Port}} -> Port;
       Error -> Error
     end,
-  {ok, #state{socket = Socket, peerport = PeerPort}}.
+  Authenticated = false =:= edis_config:get(requirepass),
+  {ok, #state{socket = Socket, peerport = PeerPort, authenticated = Authenticated}}.
 
 %% @hidden
 -spec handle_call(X, reference(), state()) -> {stop, {unexpected_request, X}, {unexpected_request, X}, state()}.
@@ -77,6 +73,20 @@ handle_cast(stop, State) ->
   {stop, normal, State};
 handle_cast({err, Message}, State) ->
   tcp_err(Message, State);
+%% -- Connection -----------------------------------------------------------------------------------
+handle_cast({run, <<"AUTH">>, [Password]}, State) ->
+  case edis_config:get(requirepass) of
+    false ->
+      tcp_ok(State);
+    Password ->
+      tcp_ok(State#state{authenticated = true});
+    _ ->
+      tcp_err(<<"invalid password">>, State#state{authenticated = false})
+  end;
+handle_cast({run, <<"AUTH">>, _}, State) ->
+  tcp_err(["wrong number of arguments for 'AUTH' command"], State);
+handle_cast({run, _, _}, State = #state{authenticated = false}) ->
+  tcp_err("operation not permitted", State);
 handle_cast({run, <<"SELECT">>, [Index]}, State) ->
   try {list_to_integer(binary_to_list(Index)), edis_config:get(databases)} of
     {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
@@ -88,6 +98,8 @@ handle_cast({run, <<"SELECT">>, [Index]}, State) ->
       ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
       tcp_ok(State#state{db = edis_db:process(0)})
   end;
+handle_cast({run, <<"SELECT">>, _}, State) ->
+  tcp_err(["wrong number of arguments for 'SELECT' command"], State);
 handle_cast({run, <<"PING">>, []}, State) ->
   try edis_db:ping(State#state.db) of
     pong -> tcp_ok(<<"PONG">>, State)
@@ -96,15 +108,12 @@ handle_cast({run, <<"PING">>, []}, State) ->
       ?WARN("Error pinging db #~p: ~p~n", [Error]),
       tcp_err(<<"database is down">>, State)
   end;
-handle_cast({run, Command, Args}, State) ->
-  case {define_command(Command), length(Args)} of
-    {undefined, _} ->
-      tcp_err(["unknown command '", Command, "'"], State);
-    {#edis_command{args = L}, L} ->
-      tcp_err(["unsupported command '", Command, "'"], State);
-    {_, _} ->
-      tcp_err(["wrong number of arguments for '", Command, "' command"], State)
-  end.
+handle_cast({run, <<"PING">>, _}, State) ->
+  tcp_err(["wrong number of arguments for 'PING' command"], State);
+
+%% -- Errors ---------------------------------------------------------------------------------------
+handle_cast({run, Command, _Args}, State) ->
+  tcp_err(["unknown command '", Command, "'"], State).
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.

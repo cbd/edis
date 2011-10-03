@@ -13,7 +13,7 @@
 
 -include("edis.hrl").
 
--type config_option() :: listener_port_range | client_timeout | databases.
+-type config_option() :: listener_port_range | client_timeout | databases | requirepass.
 
 -spec get(config_option()) -> term().
 get(listener_port_range) ->
@@ -21,7 +21,9 @@ get(listener_port_range) ->
 get(client_timeout) ->
   get(client_tiemout, 35000);
 get(databases) ->
-  get(databases, 16).
+  get(databases, 16);
+get(requirepass) ->
+  get(requirepass, false).
 
 get(Field, Default) ->
   case application:get_env(edis, Field) of

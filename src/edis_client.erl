@@ -96,40 +96,29 @@ command_start({data, <<"*", N/binary>>}, State) -> %% Unified Request Protocol
 command_start({data, OldCmd}, State) ->
   [Command|Args] = binary:split(OldCmd, [<<" ">>, <<"\r\n">>], [global,trim]),
   ?DEBUG("Old protocol command - ~p args~n",[Command, length(Args)]),
-  case edis_command_runner:define_command(to_upper(Command)) of
-    undefined ->
-      ok = edis_command_runner:err(State#state.command_runner,
-                                   <<"unknown command '", Command/binary, "'">>),
-      {next_state, command_start, State, hibernate};
-    #edis_command{last_arg_is_safe = false} -> %% Last argument is inlined
+  case edis_command_runner:last_arg(to_upper(Command)) of
+    inlined ->
       ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), Args),
       {next_state, command_start, State, hibernate};
-    #edis_command{args = N} ->
-      case erlang:length(Args) of
-        N ->
-          case lists:reverse(Args) of
-            [LastArg | FirstArgs] ->
-              case string:to_integer(binary_to_list(LastArg)) of
-                {error, no_integer} ->
-                  ok = edis_command_runner:err(State#state.command_runner,
-                                               io_lib:format(
-                                                 "lenght of last param expected for '~s'. ~s received instead",
-                                                 [Command, LastArg])),
-                  {next_state, command_start, State, hibernate};
-                {ArgSize, _Rest} ->
-                  {next_state, argument, State#state{command_name   = Command,
-                                                     args           = lists:reverse(FirstArgs),
-                                                     missing_args   = 1,
-                                                     buffer         = <<>>,
-                                                     next_arg_size  = ArgSize}}
-              end;
-            [] ->
-              ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), []),
-              {next_state, command_start, State, hibernate}
+    safe ->
+      case lists:reverse(Args) of
+        [LastArg | FirstArgs] ->
+          case string:to_integer(binary_to_list(LastArg)) of
+            {error, no_integer} ->
+              ok = edis_command_runner:err(State#state.command_runner,
+                                           io_lib:format(
+                                             "lenght of last param expected for '~s'. ~s received instead",
+                                             [Command, LastArg])),
+              {next_state, command_start, State, hibernate};
+            {ArgSize, _Rest} ->
+              {next_state, argument, State#state{command_name   = Command,
+                                                 args           = lists:reverse(FirstArgs),
+                                                 missing_args   = 1,
+                                                 buffer         = <<>>,
+                                                 next_arg_size  = ArgSize}}
           end;
-        _ ->
-          ok = edis_command_runner:err(State#state.command_runner,
-                                       <<"wrong number of arguments for '", Command/binary, "' command">>),
+        [] ->
+          ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), []),
           {next_state, command_start, State, hibernate}
       end
   end;
