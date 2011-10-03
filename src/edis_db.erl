@@ -6,6 +6,7 @@
 %%% @todo It's currently delivering all operations to the leveldb instance, i.e. no in-memory management
 %%%       Therefore, operations like save/1 are not really implemented
 %%% @todo We need to evaluate which calls should in fact be casts
+%%% @todo We need to add info to INFO
 %%% @end
 %%%-------------------------------------------------------------------
 -module(edis_db).
@@ -27,7 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Commands ========================================================================================
--export([ping/1, save/1, last_save/1]).
+-export([ping/1, save/1, last_save/1, info/1]).
 
 %% =================================================================================================
 %% External functions
@@ -55,6 +56,10 @@ save(Db) ->
 last_save(Db) ->
   make_call(Db, last_save).
 
+-spec info(atom()) -> [{atom(), term()}].
+info(Db) ->
+  make_call(Db, info).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -77,6 +82,15 @@ handle_call(last_save, _From, State) ->
   {reply, {ok, State#state.last_save}, State};
 handle_call(ping, _From, State) ->
   {reply, {ok, pong}, State};
+handle_call(info, _From, State) ->
+  Version =
+    case lists:keyfind(edis, 1, application:loaded_applications()) of
+      false -> "0";
+      {edis, _Desc, V} -> V
+    end,
+  {reply, {ok, [{edis_version, Version},
+                {last_save, State#state.last_save}]}, %%TODO: add info
+   State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 

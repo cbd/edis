@@ -115,7 +115,7 @@ handle_cast({run, <<"PING">>, []}, State) ->
     pong -> tcp_ok(<<"PONG">>, State)
   catch
     _:Error ->
-      ?WARN("Error pinging db #~p: ~p~n", [Error]),
+      ?WARN("Error on db #~p: ~p~n", [State#state.db, Error]),
       tcp_err(<<"database is down">>, State)
   end;
 handle_cast({run, <<"PING">>, _}, State) ->
@@ -126,13 +126,26 @@ handle_cast({run, <<"ECHO">>, _}, State) ->
   tcp_err("wrong number of arguments for 'ECHO' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
+handle_cast({run, <<"INFO">>, []}, State) ->
+  try edis_db:info(State#state.db) of
+    Info ->
+      tcp_bulk(lists:map(fun({K,V}) ->
+                                 io_lib:format("~p:~p~n", [K, V])
+                         end, Info), State)
+  catch
+    _:Error ->
+      ?ERROR("Error on db #~p: ~p~n", [State#state.db, Error]),
+      tcp_err(<<"database is down">>, State)
+  end;
+handle_cast({run, <<"INFO">>, _}, State) ->
+  tcp_err("wrong number of arguments for 'INFO' command", State);
 handle_cast({run, <<"LASTSAVE">>, []}, State) ->
   try edis_db:last_save(State#state.db) of
     Ts ->
       tcp_number(erlang:round(Ts), State)
   catch
     _:Error ->
-      ?WARN("Error saving db #~p: ~p~n", [Error]),
+      ?WARN("Error on db #~p: ~p~n", [State#state.db, Error]),
       tcp_err(<<"database is down">>, State)
   end;
 handle_cast({run, <<"LASTSAVE">>, _}, State) ->
@@ -147,7 +160,7 @@ handle_cast({run, <<"SAVE">>, []}, State) ->
     ok -> tcp_ok(State)
   catch
     _:Error ->
-      ?WARN("Error saving db #~p: ~p~n", [Error]),
+      ?WARN("Error on db #~p: ~p~n", [State#state.db, Error]),
       tcp_err(<<"database is down">>, State)
   end;
 handle_cast({run, <<"SAVE">>, _}, State) ->
