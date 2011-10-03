@@ -3,6 +3,9 @@
 %%% @author Chad DePue <chad@inakanetworks.com>
 %%% @copyright (C) 2011 InakaLabs SRL
 %%% @doc edis Database
+%%% @todo It's currently delivering all operations to the leveldb instance, i.e. no in-memory management
+%%%       Therefore, operations like save/1 are not really implemented
+%%% @todo We need to evaluate which calls should in fact be casts
 %%% @end
 %%%-------------------------------------------------------------------
 -module(edis_db).
@@ -23,8 +26,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Commands ========================================================================================
-%% Strings -----------------------------------------------------------------------------------------
--export([ping/1]).
+-export([ping/1, save/1]).
 
 %% =================================================================================================
 %% External functions
@@ -44,6 +46,10 @@ process(Index) ->
 ping(Db) ->
   make_call(Db, ping).
 
+-spec save(atom()) -> ok.
+save(Db) ->
+  make_call(Db, save).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -60,6 +66,8 @@ init(Index) ->
 
 %% @hidden
 -spec handle_call(term(), reference(), state()) -> {reply, ok | {ok, term()} | {error, term()}, state()} | {stop, {unexpected_request, term()}, {unexpected_request, term()}, state()}.
+handle_call(save, _From, State) ->
+  {reply, ok, State};
 handle_call(ping, _From, State) ->
   {reply, {ok, pong}, State};
 handle_call(X, _From, State) ->

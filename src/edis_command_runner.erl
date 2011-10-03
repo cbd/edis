@@ -5,6 +5,7 @@
 %%% @doc edis Command runner.
 %%%      It helps pipelining commands and running them in order, thanks to
 %%%      regular Erlang mechanisms
+%%% @todo Unsupported commands: SYNC, SLOWLOG, SLAVEOF
 %%% @end
 %%%-------------------------------------------------------------------
 -module(edis_command_runner).
@@ -82,7 +83,7 @@ handle_cast({run, <<"QUIT">>, []}, State) ->
       Error
   end;
 handle_cast({run, <<"QUIT">>, _}, State) ->
-  tcp_err(["wrong number of arguments for 'QUIT' command"], State);
+  tcp_err("wrong number of arguments for 'QUIT' command", State);
 handle_cast({run, <<"AUTH">>, [Password]}, State) ->
   case edis_config:get(requirepass) of
     false ->
@@ -93,7 +94,7 @@ handle_cast({run, <<"AUTH">>, [Password]}, State) ->
       tcp_err(<<"invalid password">>, State#state{authenticated = false})
   end;
 handle_cast({run, <<"AUTH">>, _}, State) ->
-  tcp_err(["wrong number of arguments for 'AUTH' command"], State);
+  tcp_err("wrong number of arguments for 'AUTH' command", State);
 handle_cast({run, _, _}, State = #state{authenticated = false}) ->
   tcp_err("operation not permitted", State);
 handle_cast({run, <<"SELECT">>, [Index]}, State) ->
@@ -108,7 +109,7 @@ handle_cast({run, <<"SELECT">>, [Index]}, State) ->
       tcp_ok(State#state{db = edis_db:process(0)})
   end;
 handle_cast({run, <<"SELECT">>, _}, State) ->
-  tcp_err(["wrong number of arguments for 'SELECT' command"], State);
+  tcp_err("wrong number of arguments for 'SELECT' command", State);
 handle_cast({run, <<"PING">>, []}, State) ->
   try edis_db:ping(State#state.db) of
     pong -> tcp_ok(<<"PONG">>, State)
@@ -118,11 +119,34 @@ handle_cast({run, <<"PING">>, []}, State) ->
       tcp_err(<<"database is down">>, State)
   end;
 handle_cast({run, <<"PING">>, _}, State) ->
-  tcp_err(["wrong number of arguments for 'PING' command"], State);
+  tcp_err("wrong number of arguments for 'PING' command", State);
 handle_cast({run, <<"ECHO">>, [Word]}, State) ->
   tcp_bulk(Word, State);
 handle_cast({run, <<"ECHO">>, _}, State) ->
-  tcp_err(["wrong number of arguments for 'ECHO' command"], State);
+  tcp_err("wrong number of arguments for 'ECHO' command", State);
+
+%% -- Server ---------------------------------------------------------------------------------------
+handle_cast({run, <<"SHUTDOWN">>, []}, State) ->
+  _ = spawn(edis, stop, []),
+  {stop, normal, State};
+handle_cast({run, <<"SHUTDOWN">>, _}, State) ->
+  tcp_err("wrong number of arguments for 'SHUTDOWN' command", State);
+handle_cast({run, <<"SAVE">>, []}, State) ->
+  try edis_db:save(State#state.db) of
+    ok -> tcp_ok(State)
+  catch
+    _:Error ->
+      ?WARN("Error saving db #~p: ~p~n", [Error]),
+      tcp_err(<<"database is down">>, State)
+  end;
+handle_cast({run, <<"SAVE">>, _}, State) ->
+  tcp_err("wrong number of arguments for 'SAVE' command", State);
+
+handle_cast({run, Command, Args}, State)
+  when Command == <<"SYNC">> orelse Command == <<"SLOWLOG">>
+  orelse Command == <<"SLAVEOF">> ->
+  ?WARN("Unsupported command: ~s~p~n", [Command, Args]),
+  tcp_err("unsupported command", State);
 
 %% -- Errors ---------------------------------------------------------------------------------------
 handle_cast({run, Command, _Args}, State) ->
