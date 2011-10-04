@@ -79,7 +79,7 @@ handle_cast({run, Cmd, Args}, State) ->
   try run_command(Cmd, Args, State)
   catch
     _:Error ->
-      ?WARN("Error running ~s on db #~p:~n\t~p~n", [Cmd, State#state.db, Error]),
+      ?ERROR("Error running ~s on db #~p:~n\t~p~n", [Cmd, State#state.db, Error]),
       tcp_err(io_lib:format("~p", [Error]), State)
   end.
 
@@ -157,8 +157,28 @@ run_command(<<"ECHO">>, _, State) ->
   tcp_err("wrong number of arguments for 'ECHO' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
+run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
+  run_command(<<"CONFIG ", (edis_util:upper(SubCommand))/binary>>, Rest, State);
+run_command(<<"CONFIG GET">>, [Pattern], State) ->
+  Configs = edis_config:get(
+              binary:replace(
+                binary:replace(Pattern, <<"*">>, <<".*">>, [global]),
+                <<"?">>, <<".">>, [global])),
+  Lines = lists:flatten(
+            [[atom_to_binary(K, utf8),
+              erlang:iolist_to_binary(
+                io_lib:format("~p", [V]))] || {K, V} <- Configs]),
+  tcp_multi_bulk(Lines, State);
+run_command(<<"CONFIG">>, _, State) ->
+  tcp_err("wrong number of arguments for 'CONFIG' command", State);
+run_command(<<"CONFIG GET">>, _, State) ->
+  tcp_err("wrong number of arguments for CONFIG GET", State);
+run_command(<<"CONFIG SET">>, _, State) ->
+  tcp_err("wrong number of arguments for CONFIG SET", State);
 run_command(<<"DBSIZE">>, [], State) ->
   tcp_number(edis_db:size(State#state.db), State);
+run_command(<<"DBSIZE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'DBSIZE' command", State);
 run_command(<<"FLUSHALL">>, [], State) ->
   ok = edis_db:flush(),
   tcp_ok(State);
@@ -207,6 +227,16 @@ run_command(Command, Args, State)
 %% -- Errors ---------------------------------------------------------------------------------------
 run_command(Command, _Args, State) ->
   tcp_err(["unknown command '", Command, "'"], State).
+
+%% @private
+-spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_multi_bulk(Lines, State) ->
+  lists:foldl(
+    fun(Line, {noreply, AccState}) ->
+            tcp_bulk(Line, AccState);
+       (_Line, Error) ->
+            Error
+    end, tcp_send(["*", integer_to_list(erlang:length(Lines))], State), Lines).
 
 %% @private
 -spec tcp_bulk(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.

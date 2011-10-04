@@ -15,7 +15,7 @@
 
 -type config_option() :: listener_port_range | client_timeout | databases | requirepass.
 
--spec get(config_option()) -> term().
+-spec get(binary() | config_option()) -> term().
 get(listener_port_range) ->
   get(listener_port_range, {6379,6379});
 get(client_timeout) ->
@@ -23,7 +23,11 @@ get(client_timeout) ->
 get(databases) ->
   get(databases, 16);
 get(requirepass) ->
-  get(requirepass, false).
+  get(requirepass, false);
+get(Pattern) ->
+  [{K, V} ||
+   {K, V} <- application:get_all_env(edis),
+   re:run(atom_to_binary(K, utf8), Pattern) =/= nomatch].
 
 get(Field, Default) ->
   case application:get_env(edis, Field) of
