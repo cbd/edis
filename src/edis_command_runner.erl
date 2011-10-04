@@ -137,7 +137,7 @@ run_command(<<"AUTH">>, _, State) ->
 run_command(_, _, State = #state{authenticated = false}) ->
   tcp_err("operation not permitted", State);
 run_command(<<"SELECT">>, [Index], State) ->
-  try {list_to_integer(binary_to_list(Index)), edis_config:get(databases)} of
+  try {edis_util:binary_to_integer(Index), edis_config:get(databases)} of
     {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
       tcp_err("invalid DB index", State);
     {Db, _} ->
@@ -164,11 +164,20 @@ run_command(<<"APPEND">>, [Key, Value], State) ->
   tcp_number(edis_db:append(State#state.db, Key, Value), State);
 run_command(<<"APPEND">>, _, State) ->
   tcp_err("wrong number of arguments for 'APPEND' command", State);
+run_command(<<"DECR">>, [Key], State) ->
+  tcp_number(edis_db:decr(State#state.db, Key, 1), State);
+run_command(<<"DECR">>, _, State) ->
+  tcp_err("wrong number of arguments for 'DECR' command", State);
+run_command(<<"DECRBY">>, [Key, Decrement], State) ->
+  tcp_number(edis_db:decr(State#state.db, Key,
+                          edis_util:binary_to_integer(Decrement)), State);
+run_command(<<"DECRBY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'DECRBY' command", State);
 run_command(<<"GETRANGE">>, [Key, Start, End], State) ->
   tcp_bulk(edis_db:get_range(
              State#state.db, Key,
-             list_to_integer(binary_to_list(Start)),
-             list_to_integer(binary_to_list(End))), State);
+             edis_util:binary_to_integer(Start),
+             edis_util:binary_to_integer(End)), State);
 run_command(<<"GETRANGE">>, _, State) ->
   tcp_err("wrong number of arguments for 'GETRANGE' command", State);
 
@@ -197,16 +206,16 @@ run_command(<<"CONFIG SET">>, [Key | Values], State) ->
   Value =
     case {Param, Values} of
       {listener_port_range, [P1, P2]} ->
-        {list_to_integer(binary_to_list(P1)),
-         list_to_integer(binary_to_list(P2))};
+        {edis_util:binary_to_integer(P1),
+         edis_util:binary_to_integer(P2)};
       {listener_port_range, _} ->
         wrong_args;
       {client_timeout, [Timeout]} ->
-        list_to_integer(binary_to_list(Timeout));
+        edis_util:binary_to_integer(Timeout);
       {client_tiemout, _} ->
         wrong_args;
       {databases, [Dbs]} ->
-        list_to_integer(binary_to_list(Dbs));
+        edis_util:binary_to_integer(Dbs);
       {databases, _} ->
         wrong_args;
       {requirepass, []} ->

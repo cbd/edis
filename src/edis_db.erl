@@ -29,7 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, get_range/4]).
+-export([append/3, get_range/4, decr/3]).
 
 %% =================================================================================================
 %% External functions
@@ -82,6 +82,10 @@ append(Db, Key, Value) ->
 get_range(Db, Key, Start, End) ->
   make_call(Db, {get_range, Key, Start, End}).
 
+-spec decr(atom(), binary(), integer()) -> integer().
+decr(Db, Key, Decrement) ->
+  make_call(Db, {decr, Key, Decrement}).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -130,31 +134,14 @@ handle_call(size, _From, State) ->
            [{verify_checksums, false}]),
   {reply, {ok, Size}, State};
 handle_call({append, Key, Value}, _From, State) ->
-  try
-    NewItem =
-      case eleveldb:get(State#state.db, Key, []) of
-        {ok, Bin} ->
-          case erlang:binary_to_term(Bin) of
-            Item = #edis_item{type = string, value = OldV} ->
-              Item#edis_item{value = <<OldV/binary, Value/binary>>};
-            Other ->
-              ?THROW("Not a string:~n\t~p~n", [Other]),
-              throw(bad_item_type)
-          end;
-        not_found ->
-          #edis_item{type = string, value = Value, key = Key};
-        {error, Reason} ->
-          throw(Reason)
-      end,
-    case eleveldb:put(State#state.db, Key, erlang:term_to_binary(NewItem), []) of
-      ok ->
-        {reply, {ok, erlang:size(NewItem#edis_item.value)}, State};
-      {error, Reason2} ->
-        {reply, {error, Reason2}, State}
-    end
-  catch
-    _:Error ->
-      {reply, {error, Error}, State}
+  case update(State#state.db, Key, string,
+              fun(Item = #edis_item{value = OldV}) ->
+                      Item#edis_item{value = <<OldV/binary, Value/binary>>}
+              end, <<>>) of
+    {ok, NewItem} ->
+      {reply, {ok, erlang:size(NewItem#edis_item.value)}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
   end;
 handle_call({get_range, Key, Start, End}, _From, State) ->
   try
@@ -196,6 +183,22 @@ handle_call({get_range, Key, Start, End}, _From, State) ->
     _:empty ->
       {reply, {ok, <<>>}, State}
   end;
+handle_call({decr, Key, Decrement}, _From, State) ->
+  case update(State#state.db, Key, string,
+              fun(Item = #edis_item{value = OldV}) ->
+                      try edis_util:binary_to_integer(OldV) of
+                        OldInt ->
+                          Item#edis_item{value = edis_util:integer_to_binary(OldInt - Decrement)}
+                      catch
+                        _:badarg ->
+                          throw(bad_item_type)
+                      end
+              end, <<"0">>) of
+    {ok, NewItem} ->
+      {reply, {ok, edis_util:binary_to_integer(NewItem#edis_item.value)}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -218,6 +221,33 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% =================================================================================================
 %% Private functions
 %% =================================================================================================
+%% @private
+update(Db, Key, Type, Fun, Default) ->
+  try
+    NewItem =
+      case eleveldb:get(Db, Key, []) of
+        {ok, Bin} ->
+          case erlang:binary_to_term(Bin) of
+            Item = #edis_item{type = Type} ->
+              Fun(Item);
+            Other ->
+              ?THROW("Not a ~p:~n\t~p~n", [Type, Other]),
+              throw(bad_item_type)
+          end;
+        not_found ->
+          Fun(#edis_item{key = Key, type = Type, value = Default});
+        {error, Reason} ->
+          throw(Reason)
+      end,
+    case eleveldb:put(Db, Key, erlang:term_to_binary(NewItem), []) of
+      ok -> {ok, NewItem};
+      {error, Reason2} -> {error, Reason2}
+    end
+  catch
+    _:Error ->
+      {error, Error}
+  end.
+
 %% @private
 make_call(Process, Request) ->
   make_call(Process, Request, ?DEFAULT_TIMEOUT).

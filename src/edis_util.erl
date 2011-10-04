@@ -9,7 +9,7 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--export([timestamp/0, upper/1, lower/1]).
+-export([timestamp/0, upper/1, lower/1, binary_to_integer/1, integer_to_binary/1]).
 
 -define(EPOCH, 62167219200).
 
@@ -50,3 +50,11 @@ lower(<<195, C, Rest/binary>>, Acc) when 152 =< C, C =< 158 -> %% U and Y with t
   lower(Rest, <<Acc/binary, 195, (C+32)>>);
 lower(<<C, Rest/binary>>, Acc) ->
   lower(Rest, <<Acc/binary, C>>).
+
+-spec binary_to_integer(binary()) -> integer().
+binary_to_integer(Bin) ->
+  list_to_integer(binary_to_list(Bin)).
+
+-spec integer_to_binary(binary()) -> integer().
+integer_to_binary(Int) ->
+  list_to_binary(integer_to_list(Int)).
