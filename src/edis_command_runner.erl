@@ -219,6 +219,11 @@ run_command(<<"CONFIG SET">>, [Key | Values], State) ->
   end;
 run_command(<<"CONFIG SET">>, _, State) ->
   tcp_err("wrong number of arguments for CONFIG SET", State);
+run_command(<<"CONFIG RESETSTAT">>, [], State) ->
+  %%TODO: Reset the statistics
+  tcp_ok(State);
+run_command(<<"CONFIG RESETSTAT">>, _, State) ->
+  tcp_err("wrong number of arguments for CONFIG RESETSTAT", State);
 run_command(<<"DBSIZE">>, [], State) ->
   tcp_number(edis_db:size(State#state.db), State);
 run_command(<<"DBSIZE">>, _, State) ->
