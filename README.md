@@ -12,4 +12,4 @@ Just run `$ make run` and open connections with your favourite redis client.
 * Dynamic node configuration (i.e. the _SLAVEOF_ command is not implemented)
 
 ### Unsupported Commands
-_SYNC_, _SLOWLOG_, _SLAVEOF_
+_SYNC_, _SLOWLOG_, _SLAVEOF_, _DEBUG *_

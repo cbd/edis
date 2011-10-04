@@ -157,6 +157,8 @@ run_command(<<"ECHO">>, _, State) ->
   tcp_err("wrong number of arguments for 'ECHO' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
+run_command(<<"DBSIZE">>, [], State) ->
+  tcp_number(edis_db:size(State#state.db), State);
 run_command(<<"FLUSHALL">>, [], State) ->
   ok = edis_db:flush(),
   tcp_ok(State);

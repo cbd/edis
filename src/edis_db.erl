@@ -28,7 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Commands ========================================================================================
--export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1]).
+-export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 
 %% =================================================================================================
 %% External functions
@@ -44,6 +44,10 @@ process(Index) ->
 %% =================================================================================================
 %% Commands
 %% =================================================================================================
+-spec size(atom()) -> non_neg_integer().
+size(Db) ->
+  make_call(Db, size).
+
 -spec flush() -> ok.
 flush() ->
   lists:foreach(
@@ -110,6 +114,12 @@ handle_call(flush, _From, State) ->
     {stop, Reason} ->
       {reply, {error, Reason}, State}
   end;
+handle_call(size, _From, State) ->
+  %%TODO: Is there any way to improve this?
+  Size = eleveldb:fold_keys(
+           State#state.db, fun(_, Acc) -> Acc + 1 end, 0,
+           [{verify_checksums, false}]),
+  {reply, {ok, Size}, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
