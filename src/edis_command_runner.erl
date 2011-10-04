@@ -74,10 +74,12 @@ handle_cast(stop, State) ->
   {stop, normal, State};
 handle_cast({err, Message}, State) ->
   tcp_err(Message, State);
-%% -- Connection -----------------------------------------------------------------------------------
 handle_cast({run, Cmd, Args}, State) ->
   try run_command(Cmd, Args, State)
   catch
+    _:bad_item_type ->
+      ?ERROR("Bad type running ~s on db #~p~n", [Cmd, State#state.db]),
+      tcp_err("Operation against a key holding the wrong kind of value", State);
     _:Error ->
       ?ERROR("Error running ~s on db #~p:~n\t~p~n", [Cmd, State#state.db, Error]),
       tcp_err(io_lib:format("~p", [Error]), State)
@@ -111,6 +113,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% Internal functions
 %% ====================================================================
 -spec run_command(binary(), [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+%% -- Connection -----------------------------------------------------------------------------------
 run_command(<<"QUIT">>, [], State) ->
   case tcp_ok(State) of
     {noreply, NewState} ->
@@ -155,6 +158,13 @@ run_command(<<"ECHO">>, [Word], State) ->
   tcp_bulk(Word, State);
 run_command(<<"ECHO">>, _, State) ->
   tcp_err("wrong number of arguments for 'ECHO' command", State);
+
+%% -- Strings --------------------------------------------------------------------------------------
+run_command(<<"APPEND">>, [Key, Value], State) ->
+  Length = edis_db:append(State#state.db, Key, Value),
+  tcp_number(Length, State);
+run_command(<<"APPEND">>, _, State) ->
+  tcp_err("wrong number of arguments for 'APPEND' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

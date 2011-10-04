@@ -29,6 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
+-export([append/3]).
 
 %% =================================================================================================
 %% External functions
@@ -72,6 +73,10 @@ last_save(Db) ->
 -spec info(atom()) -> [{atom(), term()}].
 info(Db) ->
   make_call(Db, info).
+
+-spec append(atom(), binary(), binary()) -> pos_integer().
+append(Db, Key, Value) ->
+  make_call(Db, {append, Key, Value}).
 
 %% =================================================================================================
 %% Server functions
@@ -120,6 +125,33 @@ handle_call(size, _From, State) ->
            State#state.db, fun(_, Acc) -> Acc + 1 end, 0,
            [{verify_checksums, false}]),
   {reply, {ok, Size}, State};
+handle_call({append, Key, Value}, _From, State) ->
+  try
+    NewItem =
+      case eleveldb:get(State#state.db, Key, []) of
+        {ok, V} ->
+          case erlang:binary_to_term(V) of
+            Item = #edis_item{type = string, value = OldV} ->
+              Item#edis_item{value = <<OldV/binary, Value/binary>>};
+            Other ->
+              ?THROW("Not a string:~n\t~p~n", [Other]),
+              throw(bad_item_type)
+          end;
+        not_found ->
+          #edis_item{type = string, value = Value, key = Key};
+        {error, Reason} ->
+          throw(Reason)
+      end,
+    case eleveldb:put(State#state.db, Key, erlang:term_to_binary(NewItem), []) of
+      ok ->
+        {reply, {ok, erlang:size(NewItem#edis_item.value)}, State};
+      {error, Reason2} ->
+        {reply, {error, Reason2}, State}
+    end
+  catch
+    _:Error ->
+      {reply, {error, Error}, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -156,20 +188,4 @@ make_call(Process, Request, Timeout) ->
     {error, Error} ->
       ?THROW("Error trying ~p on ~p:~n\t~p~n", [Request, Process, Error]),
       throw(Error)
-  end.
-
-%% @private
-make_call(Process, Request, Timeout, Default) ->
-  ?DEBUG("CALL for ~p: ~p~n", [Process, Request]),
-  ok = edis_db_monitor:notify(Process, Request),
-  try gen_server:call(Process, Request, Timeout) of
-    ok -> ok;
-    {ok, Reply} -> Reply;
-    {error, Error} ->
-      ?THROW("Error trying ~p:~n\t~p~n\tReturning ~p~n", [Request, Error, Default]),
-      Default
-  catch
-    _:Error ->
-      ?ERROR("Error trying ~p:~n\t~p~n\tReturning ~p~n", [Request, Error, Default]),
-      Default
   end.
