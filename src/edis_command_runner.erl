@@ -61,7 +61,7 @@ init(Socket) ->
       {ok, {_Ip, Port}} -> Port;
       Error -> Error
     end,
-  Authenticated = false =:= edis_config:get(requirepass),
+  Authenticated = undefined =:= edis_config:get(requirepass),
   {ok, #state{socket = Socket, peerport = PeerPort, authenticated = Authenticated}}.
 
 %% @hidden
@@ -122,7 +122,7 @@ run_command(<<"QUIT">>, _, State) ->
   tcp_err("wrong number of arguments for 'QUIT' command", State);
 run_command(<<"AUTH">>, [Password], State) ->
   case edis_config:get(requirepass) of
-    false ->
+    undefined ->
       tcp_ok(State);
     Password ->
       tcp_ok(State#state{authenticated = true});
@@ -166,13 +166,57 @@ run_command(<<"CONFIG GET">>, [Pattern], State) ->
                 <<"?">>, <<".">>, [global])),
   Lines = lists:flatten(
             [[atom_to_binary(K, utf8),
-              erlang:iolist_to_binary(
-                io_lib:format("~p", [V]))] || {K, V} <- Configs]),
+              case V of
+                undefined -> undefined;
+                V when is_binary(V) -> V;
+                V -> erlang:iolist_to_binary(io_lib:format("~p", [V]))
+              end] || {K, V} <- Configs]),
   tcp_multi_bulk(Lines, State);
 run_command(<<"CONFIG">>, _, State) ->
   tcp_err("wrong number of arguments for 'CONFIG' command", State);
 run_command(<<"CONFIG GET">>, _, State) ->
   tcp_err("wrong number of arguments for CONFIG GET", State);
+run_command(<<"CONFIG SET">>, [Key | Values], State) ->
+  Param = binary_to_atom(edis_util:lower(Key), utf8),
+  Value =
+    case {Param, Values} of
+      {listener_port_range, [P1, P2]} ->
+        {list_to_integer(binary_to_list(P1)),
+         list_to_integer(binary_to_list(P2))};
+      {listener_port_range, _} ->
+        wrong_args;
+      {client_timeout, [Timeout]} ->
+        list_to_integer(binary_to_list(Timeout));
+      {client_tiemout, _} ->
+        wrong_args;
+      {databases, [Dbs]} ->
+        list_to_integer(binary_to_list(Dbs));
+      {databases, _} ->
+        wrong_args;
+      {requirepass, []} ->
+        undefined;
+      {requirepass, [Pass]} ->
+        Pass;
+      {requirepass, _} ->
+        wrong_args;
+      {Param, [V]} ->
+        V;
+      {Param, Vs} ->
+        Vs
+    end,
+  case Value of
+    wrong_args ->
+      tcp_err("wrong number of arguments for CONFIG SET", State);
+    Value ->
+      try edis_config:set(Param, Value) of
+        ok -> tcp_ok(State)
+      catch
+        _:invalid_param ->
+          tcp_err(["Invalid argument '", Value, "' for CONFIG SET '", Key, "'"], State);
+        _:unsupported_param ->
+          tcp_err(["Unsopported CONFIG parameter: ", Key], State)
+      end
+  end;
 run_command(<<"CONFIG SET">>, _, State) ->
   tcp_err("wrong number of arguments for CONFIG SET", State);
 run_command(<<"DBSIZE">>, [], State) ->
@@ -239,7 +283,9 @@ tcp_multi_bulk(Lines, State) ->
     end, tcp_send(["*", integer_to_list(erlang:length(Lines))], State), Lines).
 
 %% @private
--spec tcp_bulk(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_bulk(undefined | iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_bulk(undefined, State) ->
+  tcp_send("$-1", State);
 tcp_bulk(Message, State) ->
   case tcp_send(["$", integer_to_list(iolist_size(Message))], State) of
     {noreply, NewState} -> tcp_send(Message, NewState);

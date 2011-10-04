@@ -9,7 +9,7 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--export([timestamp/0, upper/1]).
+-export([timestamp/0, upper/1, lower/1]).
 
 -define(EPOCH, 62167219200).
 
@@ -35,3 +35,18 @@ upper(<<195, C, Rest/binary>>, Acc) when 184 =< C, C =< 190 -> %% U and Y with t
   upper(Rest, <<Acc/binary, 195, (C-32)>>);
 upper(<<C, Rest/binary>>, Acc) ->
   upper(Rest, <<Acc/binary, C>>).
+
+-spec lower(binary()) -> binary().
+lower(Bin) ->
+  lower(Bin, <<>>).
+
+lower(<<>>, Acc) ->
+  Acc;
+lower(<<C, Rest/binary>>, Acc) when $A =< C, C =< $Z ->
+  lower(Rest, <<Acc/binary, (C+32)>>);
+lower(<<195, C, Rest/binary>>, Acc) when 128 =< C, C =< 150 -> %% A-0 with tildes plus enye
+  lower(Rest, <<Acc/binary, 195, (C+32)>>);
+lower(<<195, C, Rest/binary>>, Acc) when 152 =< C, C =< 158 -> %% U and Y with tilde plus greeks
+  lower(Rest, <<Acc/binary, 195, (C+32)>>);
+lower(<<C, Rest/binary>>, Acc) ->
+  lower(Rest, <<Acc/binary, C>>).

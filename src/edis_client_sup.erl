@@ -14,7 +14,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_client/0, init/1, count_clients/0]).
+-export([start_link/0, start_client/0, init/1, count_clients/0, reload/0]).
 
 %% ====================================================================
 %% External functions
@@ -31,6 +31,12 @@ start_client() ->
   Manager =
     list_to_atom("edis-client-mgr-" ++ integer_to_list(random:uniform(?MANAGERS))),
   supervisor:start_child(Manager, []).
+
+%% @doc  Reloads configuration. Restarts the managers
+-spec reload() -> ok.
+reload() ->
+  true = exit(erlang:whereis(?MODULE), kill),
+  ok.
 
 %% @doc  Returns the count of reigstered clients under the supervision of this process
 -spec count_clients() -> non_neg_integer().
@@ -57,4 +63,4 @@ init([]) ->
       {edis_client_mgr, start_link, [list_to_atom("edis-client-mgr-" ++ integer_to_list(I))]},
       permanent, brutal_kill, supervisor, [edis_client_mgr]}
      || I <- lists:seq(1, ?MANAGERS)],
-  {ok, {{one_for_one, 5, 10}, Managers}}.
+  {ok, {{one_for_one, length(Managers), 1}, Managers}}.
