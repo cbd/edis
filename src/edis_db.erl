@@ -28,7 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Commands ========================================================================================
--export([ping/1, save/1, last_save/1, info/1]).
+-export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1]).
 
 %% =================================================================================================
 %% External functions
@@ -44,6 +44,15 @@ process(Index) ->
 %% =================================================================================================
 %% Commands
 %% =================================================================================================
+-spec flush() -> ok.
+flush() ->
+  lists:foreach(
+    fun flush/1, [process(Index) || Index <- lists:seq(0, edis_config:get(databases) - 1)]).
+
+-spec flush(atom()) -> ok.
+flush(Db) ->
+  make_call(Db, flush).
+
 -spec ping(atom()) -> pong.
 ping(Db) ->
   make_call(Db, ping).
@@ -88,9 +97,19 @@ handle_call(info, _From, State) ->
       false -> "0";
       {edis, _Desc, V} -> V
     end,
+  {ok, Stats} = eleveldb:status(State#state.db, <<"leveldb.stats">>),
   {reply, {ok, [{edis_version, Version},
-                {last_save, State#state.last_save}]}, %%TODO: add info
+                {last_save, State#state.last_save},
+                {db_stats, Stats}]}, %%TODO: add info
    State};
+handle_call(flush, _From, State) ->
+  ok = eleveldb:destroy("db/edis-" ++ integer_to_list(State#state.index), []),
+  case init(State#state.index) of
+    {ok, NewState} ->
+      {reply, ok, NewState};
+    {stop, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 

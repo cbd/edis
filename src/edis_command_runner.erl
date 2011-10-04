@@ -75,110 +75,13 @@ handle_cast(stop, State) ->
 handle_cast({err, Message}, State) ->
   tcp_err(Message, State);
 %% -- Connection -----------------------------------------------------------------------------------
-handle_cast({run, <<"QUIT">>, []}, State) ->
-  case tcp_ok(State) of
-    {noreply, NewState} ->
-      {stop, normal, NewState};
-    Error ->
-      Error
-  end;
-handle_cast({run, <<"QUIT">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'QUIT' command", State);
-handle_cast({run, <<"AUTH">>, [Password]}, State) ->
-  case edis_config:get(requirepass) of
-    false ->
-      tcp_ok(State);
-    Password ->
-      tcp_ok(State#state{authenticated = true});
-    _ ->
-      tcp_err(<<"invalid password">>, State#state{authenticated = false})
-  end;
-handle_cast({run, <<"AUTH">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'AUTH' command", State);
-handle_cast({run, _, _}, State = #state{authenticated = false}) ->
-  tcp_err("operation not permitted", State);
-handle_cast({run, <<"SELECT">>, [Index]}, State) ->
-  try {list_to_integer(binary_to_list(Index)), edis_config:get(databases)} of
-    {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
-      tcp_err("invalid DB index", State);
-    {Db, _} ->
-      tcp_ok(State#state{db = edis_db:process(Db)})
-  catch
-    error:badarg ->
-      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
-      tcp_ok(State#state{db = edis_db:process(0)})
-  end;
-handle_cast({run, <<"SELECT">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'SELECT' command", State);
-handle_cast({run, <<"PING">>, []}, State) ->
-  try edis_db:ping(State#state.db) of
-    pong -> tcp_ok(<<"PONG">>, State)
+handle_cast({run, Cmd, Args}, State) ->
+  try run_command(Cmd, Args, State)
   catch
     _:Error ->
-      ?WARN("Error on db #~p: ~p~n", [State#state.db, Error]),
-      tcp_err(<<"database is down">>, State)
-  end;
-handle_cast({run, <<"PING">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'PING' command", State);
-handle_cast({run, <<"ECHO">>, [Word]}, State) ->
-  tcp_bulk(Word, State);
-handle_cast({run, <<"ECHO">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'ECHO' command", State);
-
-%% -- Server ---------------------------------------------------------------------------------------
-handle_cast({run, <<"INFO">>, []}, State) ->
-  try edis_db:info(State#state.db) of
-    Info ->
-      tcp_bulk(lists:map(fun({K,V}) ->
-                                 io_lib:format("~p:~p~n", [K, V])
-                         end, Info), State)
-  catch
-    _:Error ->
-      ?ERROR("Error on db #~p: ~p~n", [State#state.db, Error]),
-      tcp_err(<<"database is down">>, State)
-  end;
-handle_cast({run, <<"INFO">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'INFO' command", State);
-handle_cast({run, <<"LASTSAVE">>, []}, State) ->
-  try edis_db:last_save(State#state.db) of
-    Ts ->
-      tcp_number(erlang:round(Ts), State)
-  catch
-    _:Error ->
-      ?WARN("Error on db #~p: ~p~n", [State#state.db, Error]),
-      tcp_err(<<"database is down">>, State)
-  end;
-handle_cast({run, <<"LASTSAVE">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'LASTSAVE' command", State);
-handle_cast({run, <<"MONITOR">>, []}, State) ->
-  ok = edis_db_monitor:add_sup_handler(),
-  tcp_ok(State);
-handle_cast({run, <<"MONITOR">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'MONITOR' command", State);
-handle_cast({run, <<"SAVE">>, []}, State) ->
-  try edis_db:save(State#state.db) of
-    ok -> tcp_ok(State)
-  catch
-    _:Error ->
-      ?WARN("Error on db #~p: ~p~n", [State#state.db, Error]),
-      tcp_err(<<"database is down">>, State)
-  end;
-handle_cast({run, <<"SAVE">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'SAVE' command", State);
-handle_cast({run, <<"SHUTDOWN">>, []}, State) ->
-  _ = spawn(edis, stop, []),
-  {stop, normal, State};
-handle_cast({run, <<"SHUTDOWN">>, _}, State) ->
-  tcp_err("wrong number of arguments for 'SHUTDOWN' command", State);
-handle_cast({run, Command, Args}, State)
-  when Command == <<"SYNC">> orelse Command == <<"SLOWLOG">>
-  orelse Command == <<"SLAVEOF">> ->
-  ?WARN("Unsupported command: ~s~p~n", [Command, Args]),
-  tcp_err("unsupported command", State);
-
-%% -- Errors ---------------------------------------------------------------------------------------
-handle_cast({run, Command, _Args}, State) ->
-  tcp_err(["unknown command '", Command, "'"], State).
+      ?WARN("Error running ~s on db #~p:~n\t~p~n", [Cmd, State#state.db, Error]),
+      tcp_err(io_lib:format("~p", [Error]), State)
+  end.
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
@@ -207,6 +110,102 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+-spec run_command(binary(), [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+run_command(<<"QUIT">>, [], State) ->
+  case tcp_ok(State) of
+    {noreply, NewState} ->
+      {stop, normal, NewState};
+    Error ->
+      Error
+  end;
+run_command(<<"QUIT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'QUIT' command", State);
+run_command(<<"AUTH">>, [Password], State) ->
+  case edis_config:get(requirepass) of
+    false ->
+      tcp_ok(State);
+    Password ->
+      tcp_ok(State#state{authenticated = true});
+    _ ->
+      tcp_err(<<"invalid password">>, State#state{authenticated = false})
+  end;
+run_command(<<"AUTH">>, _, State) ->
+  tcp_err("wrong number of arguments for 'AUTH' command", State);
+run_command(_, _, State = #state{authenticated = false}) ->
+  tcp_err("operation not permitted", State);
+run_command(<<"SELECT">>, [Index], State) ->
+  try {list_to_integer(binary_to_list(Index)), edis_config:get(databases)} of
+    {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
+      tcp_err("invalid DB index", State);
+    {Db, _} ->
+      tcp_ok(State#state{db = edis_db:process(Db)})
+  catch
+    error:badarg ->
+      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
+      tcp_ok(State#state{db = edis_db:process(0)})
+  end;
+run_command(<<"SELECT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SELECT' command", State);
+run_command(<<"PING">>, [], State) ->
+  pong = edis_db:ping(State#state.db),
+  tcp_ok(<<"PONG">>, State);
+run_command(<<"PING">>, _, State) ->
+  tcp_err("wrong number of arguments for 'PING' command", State);
+run_command(<<"ECHO">>, [Word], State) ->
+  tcp_bulk(Word, State);
+run_command(<<"ECHO">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ECHO' command", State);
+
+%% -- Server ---------------------------------------------------------------------------------------
+run_command(<<"FLUSHALL">>, [], State) ->
+  ok = edis_db:flush(),
+  tcp_ok(State);
+run_command(<<"FLUSHALL">>, _, State) ->
+  tcp_err("wrong number of arguments for 'FLUSHALL' command", State);
+run_command(<<"FLUSHDB">>, [], State) ->
+  ok = edis_db:flush(State#state.db),
+  tcp_ok(State);
+run_command(<<"FLUSHDB">>, _, State) ->
+  tcp_err("wrong number of arguments for 'FLUSHDB' command", State);
+run_command(<<"INFO">>, [], State) ->
+  Info = edis_db:info(State#state.db),
+  tcp_bulk(lists:map(fun({K,V}) when is_binary(V) ->
+                             io_lib:format("~p:~s~n", [K, V]);
+                        ({K,V}) ->
+                             io_lib:format("~p:~p~n", [K, V])
+                     end, Info), State);
+run_command(<<"INFO">>, _, State) ->
+  tcp_err("wrong number of arguments for 'INFO' command", State);
+run_command(<<"LASTSAVE">>, [], State) ->
+  Ts = edis_db:last_save(State#state.db),
+  tcp_number(erlang:round(Ts), State);
+run_command(<<"LASTSAVE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LASTSAVE' command", State);
+run_command(<<"MONITOR">>, [], State) ->
+  ok = edis_db_monitor:add_sup_handler(),
+  tcp_ok(State);
+run_command(<<"MONITOR">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MONITOR' command", State);
+run_command(<<"SAVE">>, [], State) ->
+  ok = edis_db:save(State#state.db),
+  tcp_ok(State);
+run_command(<<"SAVE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SAVE' command", State);
+run_command(<<"SHUTDOWN">>, [], State) ->
+  _ = spawn(edis, stop, []),
+  {stop, normal, State};
+run_command(<<"SHUTDOWN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SHUTDOWN' command", State);
+run_command(Command, Args, State)
+  when Command == <<"SYNC">> orelse Command == <<"SLOWLOG">>
+  orelse Command == <<"SLAVEOF">> ->
+  ?WARN("Unsupported command: ~s~p~n", [Command, Args]),
+  tcp_err("unsupported command", State);
+
+%% -- Errors ---------------------------------------------------------------------------------------
+run_command(Command, _Args, State) ->
+  tcp_err(["unknown command '", Command, "'"], State).
+
 %% @private
 -spec tcp_bulk(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_bulk(Message, State) ->
