@@ -29,7 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3]).
+-export([append/3, get_range/4]).
 
 %% =================================================================================================
 %% External functions
@@ -77,6 +77,10 @@ info(Db) ->
 -spec append(atom(), binary(), binary()) -> pos_integer().
 append(Db, Key, Value) ->
   make_call(Db, {append, Key, Value}).
+
+-spec get_range(atom(), binary(), integer(), integer()) -> binary().
+get_range(Db, Key, Start, End) ->
+  make_call(Db, {get_range, Key, Start, End}).
 
 %% =================================================================================================
 %% Server functions
@@ -129,8 +133,8 @@ handle_call({append, Key, Value}, _From, State) ->
   try
     NewItem =
       case eleveldb:get(State#state.db, Key, []) of
-        {ok, V} ->
-          case erlang:binary_to_term(V) of
+        {ok, Bin} ->
+          case erlang:binary_to_term(Bin) of
             Item = #edis_item{type = string, value = OldV} ->
               Item#edis_item{value = <<OldV/binary, Value/binary>>};
             Other ->
@@ -151,6 +155,46 @@ handle_call({append, Key, Value}, _From, State) ->
   catch
     _:Error ->
       {reply, {error, Error}, State}
+  end;
+handle_call({get_range, Key, Start, End}, _From, State) ->
+  try
+    case eleveldb:get(State#state.db, Key, []) of
+      {ok, Bin} ->
+        case erlang:binary_to_term(Bin) of
+          #edis_item{type = string, value = Value} ->
+            L = erlang:size(Value),
+            StartPos =
+              case Start of
+                Start when Start >= L -> throw(empty);
+                Start when Start >= 0 -> Start;
+                Start when Start < (-1)*L -> 0;
+                Start -> L + Start
+              end,
+            EndPos =
+              case End of
+                End when End >= 0, End >= L -> L - 1;
+                End when End >= 0 -> End;
+                End when End < (-1)*L -> 0;
+                End -> L + End
+              end,
+            case EndPos - StartPos + 1 of
+              Len when Len =< 0 ->
+                {reply, {ok, <<>>}, State};
+              Len ->
+                {reply, {ok, binary:part(Value, StartPos, Len)}, State}
+            end;
+          Other ->
+            ?THROW("Not a string:~n\t~p~n", [Other]),
+            {reply, {error, bad_item_type}, State}
+        end;
+      not_found ->
+        throw(empty);
+      {error, Reason} ->
+        {reply, {error, Reason}, State}
+    end
+  catch
+    _:empty ->
+      {reply, {ok, <<>>}, State}
   end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

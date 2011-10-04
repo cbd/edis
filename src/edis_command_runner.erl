@@ -161,10 +161,16 @@ run_command(<<"ECHO">>, _, State) ->
 
 %% -- Strings --------------------------------------------------------------------------------------
 run_command(<<"APPEND">>, [Key, Value], State) ->
-  Length = edis_db:append(State#state.db, Key, Value),
-  tcp_number(Length, State);
+  tcp_number(edis_db:append(State#state.db, Key, Value), State);
 run_command(<<"APPEND">>, _, State) ->
   tcp_err("wrong number of arguments for 'APPEND' command", State);
+run_command(<<"GETRANGE">>, [Key, Start, End], State) ->
+  tcp_bulk(edis_db:get_range(
+             State#state.db, Key,
+             list_to_integer(binary_to_list(Start)),
+             list_to_integer(binary_to_list(End))), State);
+run_command(<<"GETRANGE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'GETRANGE' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
