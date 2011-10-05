@@ -29,7 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3]).
+-export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3]).
 
 %% =================================================================================================
 %% External functions
@@ -97,6 +97,10 @@ get_range(Db, Key, Start, End) ->
 -spec get_and_set(atom(), binary(), binary()) -> undefined | binary().
 get_and_set(Db, Key, Value) ->
   make_call(Db, {get_and_set, Key, Value}).
+
+-spec incr(atom(), binary(), integer()) -> integer().
+incr(Db, Key, Increment) ->
+  make_call(Db, {incr, Key, Increment}).
 
 %% =================================================================================================
 %% Server functions
@@ -253,6 +257,23 @@ handle_call({get_and_set, Key, Value}, _From, State) ->
               end, undefined) of
     {ok, OldValue} ->
       {reply, {ok, OldValue}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
+handle_call({incr, Key, Increment}, _From, State) ->
+  case update(State#state.db, Key, string,
+              fun(Item = #edis_item{value = OldV}) ->
+                      try edis_util:binary_to_integer(OldV) of
+                        OldInt ->
+                          Res = OldInt + Increment,
+                          {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
+                      catch
+                        _:badarg ->
+                          throw(bad_item_type)
+                      end
+              end, <<"0">>) of
+    {ok, NewValue} ->
+      {reply, {ok, NewValue}, State};
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;

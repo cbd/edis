@@ -200,6 +200,15 @@ run_command(<<"GETSET">>, [Key, Value], State) ->
   tcp_bulk(edis_db:get_and_set(State#state.db, Key, Value), State);
 run_command(<<"GETSET">>, _, State) ->
   tcp_err("wrong number of arguments for 'GETSET' command", State);
+run_command(<<"INCR">>, [Key], State) ->
+  tcp_number(edis_db:incr(State#state.db, Key, 1), State);
+run_command(<<"INCR">>, _, State) ->
+  tcp_err("wrong number of arguments for 'INCR' command", State);
+run_command(<<"INCRBY">>, [Key, Decrement], State) ->
+  tcp_number(edis_db:incr(State#state.db, Key,
+                          edis_util:binary_to_integer(Decrement)), State);
+run_command(<<"INCRBY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'INCRBY' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
