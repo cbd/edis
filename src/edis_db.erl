@@ -29,7 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, get_range/4, decr/3]).
+-export([append/3, get_range/4, decr/3, get/2]).
 
 %% =================================================================================================
 %% External functions
@@ -78,13 +78,17 @@ info(Db) ->
 append(Db, Key, Value) ->
   make_call(Db, {append, Key, Value}).
 
--spec get_range(atom(), binary(), integer(), integer()) -> binary().
-get_range(Db, Key, Start, End) ->
-  make_call(Db, {get_range, Key, Start, End}).
-
 -spec decr(atom(), binary(), integer()) -> integer().
 decr(Db, Key, Decrement) ->
   make_call(Db, {decr, Key, Decrement}).
+
+-spec get(atom(), binary()) -> undefined | binary().
+get(Db, Key) ->
+  make_call(Db, {get, Key}).
+
+-spec get_range(atom(), binary(), integer(), integer()) -> binary().
+get_range(Db, Key, Start, End) ->
+  make_call(Db, {get_range, Key, Start, End}).
 
 %% =================================================================================================
 %% Server functions
@@ -140,6 +144,21 @@ handle_call({append, Key, Value}, _From, State) ->
               end, <<>>) of
     {ok, NewItem} ->
       {reply, {ok, erlang:size(NewItem#edis_item.value)}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
+handle_call({get, Key}, _From, State) ->
+  case eleveldb:get(State#state.db, Key, []) of
+    {ok, Bin} ->
+      case erlang:binary_to_term(Bin) of
+        #edis_item{type = string, value = Value} ->
+          {reply, {ok, Value}, State};
+        Other ->
+          ?THROW("Not a string:~n\t~p~n", [Other]),
+          {reply, {error, bad_item_type}, State}
+      end;
+    not_found ->
+      {reply, {ok, undefined}, State};
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;

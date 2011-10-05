@@ -173,6 +173,10 @@ run_command(<<"DECRBY">>, [Key, Decrement], State) ->
                           edis_util:binary_to_integer(Decrement)), State);
 run_command(<<"DECRBY">>, _, State) ->
   tcp_err("wrong number of arguments for 'DECRBY' command", State);
+run_command(<<"GET">>, [Key], State) ->
+  tcp_bulk(edis_db:get(State#state.db, Key), State);
+run_command(<<"GET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'GET' command", State);
 run_command(<<"GETRANGE">>, [Key, Start, End], State) ->
   tcp_bulk(edis_db:get_range(
              State#state.db, Key,
