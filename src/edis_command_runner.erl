@@ -213,6 +213,17 @@ run_command(<<"MGET">>, [], State) ->
   tcp_err("wrong number of arguments for 'MGET' command", State);
 run_command(<<"MGET">>, Keys, State) ->
   tcp_multi_bulk(edis_db:get(State#state.db, Keys), State);
+run_command(<<"MSET">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+  ok = edis_db:set(State#state.db, edis_util:make_pairs(KVs)),
+  tcp_ok(State);
+run_command(<<"MSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MSET' command", State);
+
+run_command(<<"SET">>, [Key, Value], State) ->
+  ok = edis_db:set(State#state.db, Key, Value),
+  tcp_ok(State);
+run_command(<<"SET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SET' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
