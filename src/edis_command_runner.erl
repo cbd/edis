@@ -270,6 +270,18 @@ run_command(<<"SETNX">>, [Key, Value], State) ->
   end;
 run_command(<<"SETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETNX' command", State);
+run_command(<<"SETRANGE">>, [Key, Offset, Value], State) ->
+  try edis_util:binary_to_integer(Offset) of
+    Off when Off =< 0 ->
+      tcp_err("offset is out of range", State);
+    Off ->
+      tcp_number(edis_db:set_range(State#state.db, Key, Off, Value), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"SETRANGE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETRANGE' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

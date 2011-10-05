@@ -30,7 +30,7 @@
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
-         set_nx/2, set_nx/3, set_bit/4, set_ex/4]).
+         set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4]).
 
 %% =================================================================================================
 %% External functions
@@ -129,6 +129,10 @@ set_bit(Db, Key, Offset, Bit) ->
 -spec set_ex(atom(), binary(), pos_integer(), binary()) -> ok.
 set_ex(Db, Key, Seconds, Value) ->
   make_call(Db, {set_ex, Key, Seconds, Value}).
+
+-spec set_range(atom(), binary(), pos_integer(), binary()) -> non_neg_integer().
+set_range(Db, Key, Offset, Value) ->
+  make_call(Db, {set_range, Key, Offset, Value}).
 
 %% =================================================================================================
 %% Server functions
@@ -333,6 +337,26 @@ handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
                    expire = edis_util:now() + Seconds,
                    value = Value}), []),
   {reply, Reply, State};
+handle_call({set_range, Key, Offset, Value}, _From, State) ->
+  case erlang:size(Value) of
+    0 ->
+      {reply, {ok, 0}, State}; %% Copying redis behaviour even when documentation said different
+    Length ->
+      Reply =
+        update(State#state.db, Key, string,
+               fun(Item = #edis_item{value = <<Prefix:Offset/binary, _:Length/binary, Suffix/binary>>}) ->
+                       NewV = <<Prefix/binary, Value/binary, Suffix/binary>>,
+                       {erlang:size(NewV), Item#edis_item{value = NewV}};
+                  (Item = #edis_item{value = <<Prefix:Offset/binary, _/binary>>}) ->
+                       NewV = <<Prefix/binary, Value/binary>>,
+                       {erlang:size(NewV), Item#edis_item{value = NewV}};
+                  (Item = #edis_item{value = Prefix}) ->
+                       Pad = Offset - erlang:size(Prefix),
+                       NewV = <<Prefix/binary, 0:Pad/unit:8, Value/binary>>,
+                       {erlang:size(NewV), Item#edis_item{value = NewV}}
+               end, <<>>),
+      {reply, Reply, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
