@@ -282,6 +282,10 @@ run_command(<<"SETRANGE">>, [Key, Offset, Value], State) ->
   end;
 run_command(<<"SETRANGE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETRANGE' command", State);
+run_command(<<"STRLEN">>, [Key], State) ->
+  tcp_number(edis_db:str_len(State#state.db, Key), State);
+run_command(<<"STRLEN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'STRLEN' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

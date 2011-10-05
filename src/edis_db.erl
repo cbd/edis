@@ -30,7 +30,7 @@
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
-         set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4]).
+         set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 
 %% =================================================================================================
 %% External functions
@@ -133,6 +133,10 @@ set_ex(Db, Key, Seconds, Value) ->
 -spec set_range(atom(), binary(), pos_integer(), binary()) -> non_neg_integer().
 set_range(Db, Key, Offset, Value) ->
   make_call(Db, {set_range, Key, Offset, Value}).
+
+-spec str_len(atom(), binary()) -> non_neg_integer().
+str_len(Db, Key) ->
+  make_call(Db, {str_len, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -356,6 +360,15 @@ handle_call({set_range, Key, Offset, Value}, _From, State) ->
                        {erlang:size(NewV), Item#edis_item{value = NewV}}
                end, <<>>),
       {reply, Reply, State}
+  end;
+handle_call({str_len, Key}, _From, State) ->
+  case get_item(State#state.db, string, Key) of
+    #edis_item{value = Value} ->
+      {reply, {ok, erlang:size(Value)}, State};
+    not_found ->
+      {reply, {ok, 0}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
   end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
