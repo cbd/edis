@@ -29,7 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, decr/3, get/2, get_bit/3, get_range/4]).
+-export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3]).
 
 %% =================================================================================================
 %% External functions
@@ -94,6 +94,10 @@ get_bit(Db, Key, Offset) ->
 get_range(Db, Key, Start, End) ->
   make_call(Db, {get_range, Key, Start, End}).
 
+-spec get_and_set(atom(), binary(), binary()) -> undefined | binary().
+get_and_set(Db, Key, Value) ->
+  make_call(Db, {get_and_set, Key, Value}).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -144,10 +148,28 @@ handle_call(size, _From, State) ->
 handle_call({append, Key, Value}, _From, State) ->
   case update(State#state.db, Key, string,
               fun(Item = #edis_item{value = OldV}) ->
-                      Item#edis_item{value = <<OldV/binary, Value/binary>>}
+                      NewV = <<OldV/binary, Value/binary>>,
+                      {NewV, Item#edis_item{value = NewV}}
               end, <<>>) of
-    {ok, NewItem} ->
-      {reply, {ok, erlang:size(NewItem#edis_item.value)}, State};
+    {ok, NewValue} ->
+      {reply, {ok, erlang:size(NewValue)}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
+handle_call({decr, Key, Decrement}, _From, State) ->
+  case update(State#state.db, Key, string,
+              fun(Item = #edis_item{value = OldV}) ->
+                      try edis_util:binary_to_integer(OldV) of
+                        OldInt ->
+                          Res = OldInt - Decrement,
+                          {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
+                      catch
+                        _:badarg ->
+                          throw(bad_item_type)
+                      end
+              end, <<"0">>) of
+    {ok, NewValue} ->
+      {reply, {ok, NewValue}, State};
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;
@@ -224,19 +246,13 @@ handle_call({get_range, Key, Start, End}, _From, State) ->
     _:empty ->
       {reply, {ok, <<>>}, State}
   end;
-handle_call({decr, Key, Decrement}, _From, State) ->
+handle_call({get_and_set, Key, Value}, _From, State) ->
   case update(State#state.db, Key, string,
               fun(Item = #edis_item{value = OldV}) ->
-                      try edis_util:binary_to_integer(OldV) of
-                        OldInt ->
-                          Item#edis_item{value = edis_util:integer_to_binary(OldInt - Decrement)}
-                      catch
-                        _:badarg ->
-                          throw(bad_item_type)
-                      end
-              end, <<"0">>) of
-    {ok, NewItem} ->
-      {reply, {ok, edis_util:binary_to_integer(NewItem#edis_item.value)}, State};
+                      {OldV, Item#edis_item{value = Value}}
+              end, undefined) of
+    {ok, OldValue} ->
+      {reply, {ok, OldValue}, State};
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;
@@ -265,7 +281,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% @private
 update(Db, Key, Type, Fun, Default) ->
   try
-    NewItem =
+    {Res, NewItem} =
       case eleveldb:get(Db, Key, []) of
         {ok, Bin} ->
           case erlang:binary_to_term(Bin) of
@@ -281,7 +297,7 @@ update(Db, Key, Type, Fun, Default) ->
           throw(Reason)
       end,
     case eleveldb:put(Db, Key, erlang:term_to_binary(NewItem), []) of
-      ok -> {ok, NewItem};
+      ok -> {ok, Res};
       {error, Reason2} -> {error, Reason2}
     end
   catch

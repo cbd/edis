@@ -196,6 +196,10 @@ run_command(<<"GETRANGE">>, [Key, Start, End], State) ->
              edis_util:binary_to_integer(End)), State);
 run_command(<<"GETRANGE">>, _, State) ->
   tcp_err("wrong number of arguments for 'GETRANGE' command", State);
+run_command(<<"GETSET">>, [Key, Value], State) ->
+  tcp_bulk(edis_db:get_and_set(State#state.db, Key, Value), State);
+run_command(<<"GETSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'GETSET' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
