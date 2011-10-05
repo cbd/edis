@@ -30,7 +30,7 @@
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
-         set_nx/2, set_nx/3]).
+         set_nx/2, set_nx/3, set_bit/4]).
 
 %% =================================================================================================
 %% External functions
@@ -122,6 +122,10 @@ set_nx(Db, Key, Value) ->
 set_nx(Db, KVs) ->
   make_call(Db, {set_nx, KVs}).
 
+-spec set_bit(atom(), binary(), non_neg_integer(), 1|0) -> 1|0.
+set_bit(Db, Key, Offset, Bit) ->
+  make_call(Db, {set_bit, Key, Offset, Bit}).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -170,33 +174,27 @@ handle_call(size, _From, State) ->
            [{verify_checksums, false}]),
   {reply, {ok, Size}, State};
 handle_call({append, Key, Value}, _From, State) ->
-  case update(State#state.db, Key, string,
-              fun(Item = #edis_item{value = OldV}) ->
-                      NewV = <<OldV/binary, Value/binary>>,
-                      {NewV, Item#edis_item{value = NewV}}
-              end, <<>>) of
-    {ok, NewValue} ->
-      {reply, {ok, erlang:size(NewValue)}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    update(State#state.db, Key, string,
+           fun(Item = #edis_item{value = OldV}) ->
+                   NewV = <<OldV/binary, Value/binary>>,
+                   {erlang:size(NewV), Item#edis_item{value = NewV}}
+           end, <<>>),
+  {reply, Reply, State};
 handle_call({decr, Key, Decrement}, _From, State) ->
-  case update(State#state.db, Key, string,
-              fun(Item = #edis_item{value = OldV}) ->
-                      try edis_util:binary_to_integer(OldV) of
-                        OldInt ->
-                          Res = OldInt - Decrement,
-                          {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
-                      catch
-                        _:badarg ->
-                          throw(bad_item_type)
-                      end
-              end, <<"0">>) of
-    {ok, NewValue} ->
-      {reply, {ok, NewValue}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    update(State#state.db, Key, string,
+           fun(Item = #edis_item{value = OldV}) ->
+                   try edis_util:binary_to_integer(OldV) of
+                     OldInt ->
+                       Res = OldInt - Decrement,
+                       {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
+                   catch
+                     _:badarg ->
+                       throw(bad_item_type)
+                   end
+           end, <<"0">>),
+  {reply, Reply, State};
 handle_call({get, Keys}, _From, State) ->
   Reply =
     lists:foldr(
@@ -277,32 +275,26 @@ handle_call({get_range, Key, Start, End}, _From, State) ->
       {reply, {ok, <<>>}, State}
   end;
 handle_call({get_and_set, Key, Value}, _From, State) ->
-  case update(State#state.db, Key, string,
-              fun(Item = #edis_item{value = OldV}) ->
-                      {OldV, Item#edis_item{value = Value}}
-              end, undefined) of
-    {ok, OldValue} ->
-      {reply, {ok, OldValue}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    update(State#state.db, Key, string,
+           fun(Item = #edis_item{value = OldV}) ->
+                   {OldV, Item#edis_item{value = Value}}
+           end, undefined),
+  {reply, Reply, State};
 handle_call({incr, Key, Increment}, _From, State) ->
-  case update(State#state.db, Key, string,
-              fun(Item = #edis_item{value = OldV}) ->
-                      try edis_util:binary_to_integer(OldV) of
-                        OldInt ->
-                          Res = OldInt + Increment,
-                          {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
-                      catch
-                        _:badarg ->
-                          throw(bad_item_type)
-                      end
-              end, <<"0">>) of
-    {ok, NewValue} ->
-      {reply, {ok, NewValue}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    update(State#state.db, Key, string,
+           fun(Item = #edis_item{value = OldV}) ->
+                   try edis_util:binary_to_integer(OldV) of
+                     OldInt ->
+                       Res = OldInt + Increment,
+                       {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
+                   catch
+                     _:badarg ->
+                       throw(bad_item_type)
+                   end
+           end, <<"0">>),
+  {reply, Reply, State};
 handle_call({set, KVs}, _From, State) ->
   Reply =
     eleveldb:write(State#state.db,
@@ -327,6 +319,23 @@ handle_call({set_nx, KVs}, _From, State) ->
                        []),
       {reply, Reply, State}
   end;
+handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, string,
+           fun(Item = #edis_item{value = <<Prefix:Offset/unit:1, OldBit:1/unit:1, _Rest/bitstring>>}) ->
+                   {OldBit,
+                    Item#edis_item{value = <<Prefix:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>}};
+              (Item) when Bit == 0 -> %% Value is shorter than offset
+                   {0, Item};
+              (Item = #edis_item{value = Value}) when Bit == 1 -> %% Value is shorter than offset
+                   BitsBefore = Offset - (erlang:size(Value) * 8),
+                   BitsAfter = 7 - (Offset rem 8),
+                   {0, Item#edis_item{value = <<Value/bitstring, 
+                                                0:BitsBefore/unit:1,
+                                                1:1/unit:1,
+                                                0:BitsAfter/unit:1>>}}
+           end, <<>>),
+  {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 

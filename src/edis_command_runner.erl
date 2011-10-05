@@ -227,12 +227,27 @@ run_command(<<"MSETNX">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 -
   end;
 run_command(<<"MSETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'MSETNX' command", State);
-
 run_command(<<"SET">>, [Key, Value], State) ->
   ok = edis_db:set(State#state.db, Key, Value),
   tcp_ok(State);
 run_command(<<"SET">>, _, State) ->
   tcp_err("wrong number of arguments for 'SET' command", State);
+run_command(<<"SETBIT">>, [Key, Offset, Bit], State) ->
+  try {edis_util:binary_to_integer(Offset), Bit} of
+    {O, Bit} when O >= 0, Bit == <<"0">> ->
+      tcp_number(edis_db:set_bit(State#state.db, Key, O, 0), State);
+    {O, Bit} when O >= 0, Bit == <<"1">> ->
+      tcp_number(edis_db:set_bit(State#state.db, Key, O, 1), State);
+    {O, _BadBit} when O >= 0 ->
+      tcp_err("bit is not an integer or out of range", State);
+    _ ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  catch
+    _:badarg ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  end;
+run_command(<<"SETBIT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETBIT' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
