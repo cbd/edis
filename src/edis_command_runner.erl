@@ -248,6 +248,19 @@ run_command(<<"SETBIT">>, [Key, Offset, Bit], State) ->
   end;
 run_command(<<"SETBIT">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETBIT' command", State);
+run_command(<<"SETEX">>, [Key, Seconds, Value], State) ->
+  try edis_util:binary_to_integer(Seconds) of
+    Secs when Secs =< 0 ->
+      tcp_err("invalid expire time in SETEX", State);
+    Secs ->
+      ok = edis_db:set_ex(State#state.db, Key, Secs, Value),
+      tcp_ok(State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"SETEX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETEX' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

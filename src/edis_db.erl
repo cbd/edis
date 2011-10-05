@@ -30,7 +30,7 @@
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
-         set_nx/2, set_nx/3, set_bit/4]).
+         set_nx/2, set_nx/3, set_bit/4, set_ex/4]).
 
 %% =================================================================================================
 %% External functions
@@ -126,6 +126,10 @@ set_nx(Db, KVs) ->
 set_bit(Db, Key, Offset, Bit) ->
   make_call(Db, {set_bit, Key, Offset, Bit}).
 
+-spec set_ex(atom(), binary(), pos_integer(), binary()) -> ok.
+set_ex(Db, Key, Seconds, Value) ->
+  make_call(Db, {set_ex, Key, Seconds, Value}).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
@@ -199,15 +203,12 @@ handle_call({get, Keys}, _From, State) ->
   Reply =
     lists:foldr(
       fun(Key, {ok, AccValues}) ->
-              case eleveldb:get(State#state.db, Key, []) of
-                {ok, Bin} ->
-                  case erlang:binary_to_term(Bin) of
-                    #edis_item{type = string, value = Value} ->
-                      {ok, [Value | AccValues]};
-                    _Other ->
-                      {ok, [undefined | AccValues]}
-                  end;
+              case get_item(State#state.db, string, Key) of
+                #edis_item{type = string, value = Value} ->
+                  {ok, [Value | AccValues]};
                 not_found ->
+                  {ok, [undefined | AccValues]};
+                {error, bad_item_type} ->
                   {ok, [undefined | AccValues]};
                 {error, Reason} ->
                   {error, Reason}
@@ -217,18 +218,11 @@ handle_call({get, Keys}, _From, State) ->
       end, {ok, []}, Keys),
   {reply, Reply, State};
 handle_call({get_bit, Key, Offset}, _From, State) ->
-  case eleveldb:get(State#state.db, Key, []) of
-    {ok, Bin} ->
-      case erlang:binary_to_term(Bin) of
-        #edis_item{type = string,
-                   value = <<_:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>} ->
-          {reply, {ok, Bit}, State};
-        #edis_item{type = string} -> %% Value is shorter than offset
-          {reply, {ok, 0}, State};
-        Other ->
-          ?THROW("Not a string:~n\t~p~n", [Other]),
-          {reply, {error, bad_item_type}, State}
-      end;
+  case get_item(State#state.db, string, Key) of
+    #edis_item{value = <<_:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>} ->
+      {reply, {ok, Bit}, State};
+    #edis_item{} -> %% Value is shorter than offset
+      {reply, {ok, 0}, State};
     not_found ->
       {reply, {ok, 0}, State};
     {error, Reason} ->
@@ -236,37 +230,31 @@ handle_call({get_bit, Key, Offset}, _From, State) ->
   end;
 handle_call({get_range, Key, Start, End}, _From, State) ->
   try
-    case eleveldb:get(State#state.db, Key, []) of
-      {ok, Bin} ->
-        case erlang:binary_to_term(Bin) of
-          #edis_item{type = string, value = Value} ->
-            L = erlang:size(Value),
-            StartPos =
-              case Start of
-                Start when Start >= L -> throw(empty);
-                Start when Start >= 0 -> Start;
-                Start when Start < (-1)*L -> 0;
-                Start -> L + Start
-              end,
-            EndPos =
-              case End of
-                End when End >= 0, End >= L -> L - 1;
-                End when End >= 0 -> End;
-                End when End < (-1)*L -> 0;
-                End -> L + End
-              end,
-            case EndPos - StartPos + 1 of
-              Len when Len =< 0 ->
-                {reply, {ok, <<>>}, State};
-              Len ->
-                {reply, {ok, binary:part(Value, StartPos, Len)}, State}
-            end;
-          Other ->
-            ?THROW("Not a string:~n\t~p~n", [Other]),
-            {reply, {error, bad_item_type}, State}
+    case get_item(State#state.db, string, Key) of
+      #edis_item{value = Value} ->
+        L = erlang:size(Value),
+        StartPos =
+          case Start of
+            Start when Start >= L -> throw(empty);
+            Start when Start >= 0 -> Start;
+            Start when Start < (-1)*L -> 0;
+            Start -> L + Start
+          end,
+        EndPos =
+          case End of
+            End when End >= 0, End >= L -> L - 1;
+            End when End >= 0 -> End;
+            End when End < (-1)*L -> 0;
+            End -> L + End
+          end,
+        case EndPos - StartPos + 1 of
+          Len when Len =< 0 ->
+            {reply, {ok, <<>>}, State};
+          Len ->
+            {reply, {ok, binary:part(Value, StartPos, Len)}, State}
         end;
       not_found ->
-        throw(empty);
+        {reply, {ok, <<>>}, State};
       {error, Reason} ->
         {reply, {error, Reason}, State}
     end
@@ -306,7 +294,7 @@ handle_call({set, KVs}, _From, State) ->
 handle_call({set_nx, KVs}, _From, State) ->
   case lists:any(
          fun({Key, _}) ->
-                 not_found =/= eleveldb:get(State#state.db, Key, [])
+                 not_found =/= get_item(State#state.db, Key)
          end, KVs) of
     true ->
       {reply, {error, already_exists}, State};
@@ -336,6 +324,15 @@ handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
                                                 0:BitsAfter/unit:1>>}}
            end, <<>>),
   {reply, Reply, State};
+handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
+  Reply =
+    eleveldb:put(
+      State#state.db, Key,
+      erlang:term_to_binary(
+        #edis_item{key = Key, type = string,
+                   expire = edis_util:now() + Seconds,
+                   value = Value}), []),
+  {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -359,22 +356,42 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% Private functions
 %% =================================================================================================
 %% @private
+get_item(Db, Key) -> get_item(Db, any, Key).
+
+%% @private
+get_item(Db, Type, Key) ->
+  case eleveldb:get(Db, Key, []) of
+    {ok, Bin} ->
+      Now = edis_util:now(),
+      case erlang:binary_to_term(Bin) of
+        Item = #edis_item{type = T, expire = Expire}
+          when Type =:= any orelse T =:= Type ->
+          case Expire of
+            Expire when Expire >= Now ->
+              Item;
+            _ ->
+              _ = eleveldb:delete(Db, Key, []),
+              not_found
+          end;
+        _Other -> {error, bad_item_type}
+      end;
+    not_found ->
+      not_found;
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% @private
 update(Db, Key, Type, Fun, Default) ->
   try
     {Res, NewItem} =
-      case eleveldb:get(Db, Key, []) of
-        {ok, Bin} ->
-          case erlang:binary_to_term(Bin) of
-            Item = #edis_item{type = Type} ->
-              Fun(Item);
-            Other ->
-              ?THROW("Not a ~p:~n\t~p~n", [Type, Other]),
-              throw(bad_item_type)
-          end;
+      case get_item(Db, Type, Key) of
         not_found ->
           Fun(#edis_item{key = Key, type = Type, value = Default});
         {error, Reason} ->
-          throw(Reason)
+          throw(Reason);
+        Item ->
+          Fun(Item)
       end,
     case eleveldb:put(Db, Key, erlang:term_to_binary(NewItem), []) of
       ok -> {ok, Res};
