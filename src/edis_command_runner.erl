@@ -261,6 +261,15 @@ run_command(<<"SETEX">>, [Key, Seconds, Value], State) ->
   end;
 run_command(<<"SETEX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETEX' command", State);
+run_command(<<"SETNX">>, [Key, Value], State) ->
+  try edis_db:set_nx(State#state.db, Key, Value) of
+    ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State)
+  end;
+run_command(<<"SETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETNX' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
