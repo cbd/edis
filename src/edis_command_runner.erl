@@ -177,6 +177,18 @@ run_command(<<"GET">>, [Key], State) ->
   tcp_bulk(edis_db:get(State#state.db, Key), State);
 run_command(<<"GET">>, _, State) ->
   tcp_err("wrong number of arguments for 'GET' command", State);
+run_command(<<"GETBIT">>, [Key, Offset], State) ->
+  try edis_util:binary_to_integer(Offset) of
+    O when O >= 0 ->
+      tcp_number(edis_db:get_bit(State#state.db, Key, O), State);
+    _ ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  catch
+    _:badarg ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  end;
+run_command(<<"GETBIT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'GETBIT' command", State);
 run_command(<<"GETRANGE">>, [Key, Start, End], State) ->
   tcp_bulk(edis_db:get_range(
              State#state.db, Key,

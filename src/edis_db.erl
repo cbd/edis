@@ -29,7 +29,7 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, get_range/4, decr/3, get/2]).
+-export([append/3, decr/3, get/2, get_bit/3, get_range/4]).
 
 %% =================================================================================================
 %% External functions
@@ -85,6 +85,10 @@ decr(Db, Key, Decrement) ->
 -spec get(atom(), binary()) -> undefined | binary().
 get(Db, Key) ->
   make_call(Db, {get, Key}).
+
+-spec get_bit(atom(), binary(), non_neg_integer()) -> 1|0.
+get_bit(Db, Key, Offset) ->
+  make_call(Db, {get_bit, Key, Offset}).
 
 -spec get_range(atom(), binary(), integer(), integer()) -> binary().
 get_range(Db, Key, Start, End) ->
@@ -159,6 +163,24 @@ handle_call({get, Key}, _From, State) ->
       end;
     not_found ->
       {reply, {ok, undefined}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
+handle_call({get_bit, Key, Offset}, _From, State) ->
+  case eleveldb:get(State#state.db, Key, []) of
+    {ok, Bin} ->
+      case erlang:binary_to_term(Bin) of
+        #edis_item{type = string,
+                   value = <<_:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>} ->
+          {reply, {ok, Bit}, State};
+        #edis_item{type = string} -> %% Value is shorter than offset
+          {reply, {ok, 0}, State};
+        Other ->
+          ?THROW("Not a string:~n\t~p~n", [Other]),
+          {reply, {error, bad_item_type}, State}
+      end;
+    not_found ->
+      {reply, {ok, 0}, State};
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;
