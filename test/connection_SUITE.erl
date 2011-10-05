@@ -29,13 +29,14 @@ auth(Config) ->
 	Pwd = <<"hhedls56329">>,
 	
 	[ok] = erldis_client:scall(Client, [<<"config">>,<<"set">>,<<"requirepass">>, Pwd]),
-	{error,<<"ERR operation not permitted">>} = erldis_client:sr_scall(Client, <<"ping">>),
+	{ok,NewClient} = connect_erldis(10), 
+	{error,<<"ERR operation not permitted">>} = erldis_client:sr_scall(NewClient, <<"ping">>),
 	
-	[{error,<<"ERR invalid password">>}] = erldis_client:scall(Client, [<<"auth">>, <<"bad_pass">>]),
-	{error,<<"ERR operation not permitted">>} = erldis_client:sr_scall(Client, <<"ping">>),
+	[{error,<<"ERR invalid password">>}] = erldis_client:scall(NewClient, [<<"auth">>, <<"bad_pass">>]),
+	{error,<<"ERR operation not permitted">>} = erldis_client:sr_scall(NewClient, <<"ping">>),
 	
-	[ok] = erldis_client:scall(Client, [<<"auth">>, Pwd]),
-	pong = erldis_client:sr_scall(Client, <<"ping">>).
+	[ok] = erldis_client:scall(NewClient, [<<"auth">>, Pwd]),
+	pong = erldis_client:sr_scall(NewClient, <<"ping">>).
 
 echo(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
@@ -48,8 +49,11 @@ ping(Config) ->
 
 select(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
-	ok = erldis_client:sr_scall(Client, [<<"select">>, 2]),
-	ok = erldis_client:sr_scall(Client, [<<"select">>, 0]).
+	ok = erldis_client:sr_scall(Client, [<<"select">>, 15]),
+	{error,<<"ERR invalid DB index">>} = erldis_client:sr_scall(Client, [<<"select">>, 16]),
+	{error,<<"ERR wrong number of arguments for 'SELECT' command">>} = erldis_client:sr_scall(Client, [<<"select">>, 4, 3]),
+	{error,<<"ERR invalid DB index">>} = erldis_client:sr_scall(Client, [<<"select">>, -1]),
+	ok = erldis_client:sr_scall(Client, [<<"select">>, a]).
 
 quit(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
