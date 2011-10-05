@@ -1,13 +1,4 @@
+db
+ebin
 deps
-log/*.log
-tmp
-tmp/**/*
-.DS_Store
-*.swp
-*.swo
-engine/*.dump
-*.beam
-config/database.yml
 erl_crash.dump
-priv/*
-c_src/*.o

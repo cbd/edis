@@ -10,5 +10,7 @@
                  ]},
   {mod, {edis, []}},
   {env, [{listener_port_range, {6379,6379}},
-         {client_timeout, 32000}]}
+         {client_timeout, 32000},
+         {databases, 16},
+         {requirepass, false}]}
  ]}.

@@ -13,7 +13,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, init/1]).
+-export([start_link/0, reload/0, init/1]).
 
 %% ====================================================================
 %% External functions
@@ -23,6 +23,12 @@
 start_link() ->
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+%% @doc  Reloads configuration. Restarts the dbs
+-spec reload() -> ok.
+reload() ->
+  true = exit(erlang:whereis(?MODULE), kill),
+  ok.
+
 %% ====================================================================
 %% Server functions
 %% ====================================================================
@@ -31,8 +37,10 @@ start_link() ->
 init([]) ->
   Databases = edis_config:get(databases),
   ?INFO("Client supervisor initialized (~p databases)~n", [Databases]),
+  Monitor = {edis_db_monitor, {edis_db_monitor, start_link, []},
+             permanent, brutal_kill, worker, [edis_db_monitor]},
   Children =
     [{edis_db:process(I), {edis_db, start_link, [I]},
       permanent, brutal_kill, supervisor, [edis_db]}
      || I <- lists:seq(0, Databases - 1)],
-  {ok, {{one_for_one, 5, 10}, Children}}.
+  {ok, {{one_for_one, length(Children), 1}, [Monitor | Children]}}.

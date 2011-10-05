@@ -13,7 +13,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, init/1]).
+-export([start_link/0, init/1, reload/0]).
 
 %% ====================================================================
 %% External functions
@@ -22,6 +22,12 @@
 -spec start_link() -> ignore | {error, term()} | {ok, pid()}.
 start_link() ->
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+%% @doc  Reloads configuration. Restarts the listeners
+-spec reload() -> ok.
+reload() ->
+  true = exit(erlang:whereis(?MODULE), kill),
+  ok.
 
 %% ====================================================================
 %% Server functions

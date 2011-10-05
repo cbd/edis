@@ -96,40 +96,29 @@ command_start({data, <<"*", N/binary>>}, State) -> %% Unified Request Protocol
 command_start({data, OldCmd}, State) ->
   [Command|Args] = binary:split(OldCmd, [<<" ">>, <<"\r\n">>], [global,trim]),
   ?DEBUG("Old protocol command - ~p args~n",[Command, length(Args)]),
-  case edis_command_runner:define_command(to_upper(Command)) of
-    undefined ->
-      ok = edis_command_runner:err(State#state.command_runner,
-                                   <<"unknown command '", Command/binary, "'">>),
+  case edis_command_runner:last_arg(edis_util:upper(Command)) of
+    inlined ->
+      ok = edis_command_runner:run(State#state.command_runner, edis_util:upper(Command), Args),
       {next_state, command_start, State, hibernate};
-    #edis_command{last_arg_is_safe = false} -> %% Last argument is inlined
-      ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), Args),
-      {next_state, command_start, State, hibernate};
-    #edis_command{args = N} ->
-      case erlang:length(Args) of
-        N ->
-          case lists:reverse(Args) of
-            [LastArg | FirstArgs] ->
-              case string:to_integer(binary_to_list(LastArg)) of
-                {error, no_integer} ->
-                  ok = edis_command_runner:err(State#state.command_runner,
-                                               io_lib:format(
-                                                 "lenght of last param expected for '~s'. ~s received instead",
-                                                 [Command, LastArg])),
-                  {next_state, command_start, State, hibernate};
-                {ArgSize, _Rest} ->
-                  {next_state, argument, State#state{command_name   = Command,
-                                                     args           = lists:reverse(FirstArgs),
-                                                     missing_args   = 1,
-                                                     buffer         = <<>>,
-                                                     next_arg_size  = ArgSize}}
-              end;
-            [] ->
-              ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), []),
-              {next_state, command_start, State, hibernate}
+    safe ->
+      case lists:reverse(Args) of
+        [LastArg | FirstArgs] ->
+          case string:to_integer(binary_to_list(LastArg)) of
+            {error, no_integer} ->
+              ok = edis_command_runner:err(State#state.command_runner,
+                                           io_lib:format(
+                                             "lenght of last param expected for '~s'. ~s received instead",
+                                             [Command, LastArg])),
+              {next_state, command_start, State, hibernate};
+            {ArgSize, _Rest} ->
+              {next_state, argument, State#state{command_name   = Command,
+                                                 args           = lists:reverse(FirstArgs),
+                                                 missing_args   = 1,
+                                                 buffer         = <<>>,
+                                                 next_arg_size  = ArgSize}}
           end;
-        _ ->
-          ok = edis_command_runner:err(State#state.command_runner,
-                                       <<"wrong number of arguments for '", Command/binary, "' command">>),
+        [] ->
+          ok = edis_command_runner:run(State#state.command_runner, edis_util:upper(Command), []),
           {next_state, command_start, State, hibernate}
       end
   end;
@@ -162,7 +151,7 @@ arg_size(Event, State) ->
 command_name({data, Data}, State = #state{next_arg_size = Size, missing_args = 1}) ->
   <<Command:Size/binary, _Rest/binary>> = Data,
   ?DEBUG("Command: ~p ~n", [Command]),
-  ok = edis_command_runner:run(State#state.command_runner, to_upper(Command), []),
+  ok = edis_command_runner:run(State#state.command_runner, edis_util:upper(Command), []),
   {next_state, command_start, State, hibernate};
 command_name({data, Data}, State = #state{next_arg_size = Size, missing_args = MissingArgs}) ->
   <<Command:Size/binary, _Rest/binary>> = Data,
@@ -181,7 +170,7 @@ argument({data, Data}, State = #state{buffer        = Buffer,
       case State#state.missing_args of
         1 ->
           ok = edis_command_runner:run(State#state.command_runner,
-                                       to_upper(State#state.command_name),
+                                       edis_util:upper(State#state.command_name),
                                        lists:reverse([Argument|State#state.args])),
           {next_state, command_start, State, hibernate};
         MissingArgs ->
@@ -242,23 +231,3 @@ terminate(Reason, _StateName, #state{socket = Socket, command_runner = CmdRunner
 -spec code_change(term(), atom(), state(), any()) -> {ok, atom(), state()}.
 code_change(_OldVsn, StateName, StateData, _Extra) ->
     {ok, StateName, StateData}.
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-%% @private
--spec to_upper(binary()) -> binary().
-to_upper(Bin) ->
-  to_upper(Bin, <<>>).
-
-%% @private
-to_upper(<<>>, Acc) ->
-  Acc;
-to_upper(<<C, Rest/binary>>, Acc) when $a =< C, C =< $z ->
-  to_upper(Rest, <<Acc/binary, (C-32)>>);
-to_upper(<<195, C, Rest/binary>>, Acc) when 160 =< C, C =< 182 -> %% A-0 with tildes plus enye
-  to_upper(Rest, <<Acc/binary, 195, (C-32)>>);
-to_upper(<<195, C, Rest/binary>>, Acc) when 184 =< C, C =< 190 -> %% U and Y with tilde plus greeks
-  to_upper(Rest, <<Acc/binary, 195, (C-32)>>);
-to_upper(<<C, Rest/binary>>, Acc) ->
-  to_upper(Rest, <<Acc/binary, C>>).
