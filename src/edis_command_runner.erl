@@ -204,11 +204,15 @@ run_command(<<"INCR">>, [Key], State) ->
   tcp_number(edis_db:incr(State#state.db, Key, 1), State);
 run_command(<<"INCR">>, _, State) ->
   tcp_err("wrong number of arguments for 'INCR' command", State);
-run_command(<<"INCRBY">>, [Key, Decrement], State) ->
+run_command(<<"INCRBY">>, [Key, Increment], State) ->
   tcp_number(edis_db:incr(State#state.db, Key,
-                          edis_util:binary_to_integer(Decrement)), State);
+                          edis_util:binary_to_integer(Increment)), State);
 run_command(<<"INCRBY">>, _, State) ->
   tcp_err("wrong number of arguments for 'INCRBY' command", State);
+run_command(<<"MGET">>, [], State) ->
+  tcp_err("wrong number of arguments for 'MGET' command", State);
+run_command(<<"MGET">>, Keys, State) ->
+  tcp_multi_bulk(edis_db:get(State#state.db, Keys), State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

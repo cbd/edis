@@ -82,9 +82,12 @@ append(Db, Key, Value) ->
 decr(Db, Key, Decrement) ->
   make_call(Db, {decr, Key, Decrement}).
 
--spec get(atom(), binary()) -> undefined | binary().
-get(Db, Key) ->
-  make_call(Db, {get, Key}).
+-spec get(atom(), binary()|[binary()]) -> undefined | binary().
+get(Db, Key) when is_binary(Key) ->
+  [Value] = get(Db, [Key]),
+  Value;
+get(Db, Keys) ->
+  make_call(Db, {get, Keys}).
 
 -spec get_bit(atom(), binary(), non_neg_integer()) -> 1|0.
 get_bit(Db, Key, Offset) ->
@@ -177,21 +180,27 @@ handle_call({decr, Key, Decrement}, _From, State) ->
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;
-handle_call({get, Key}, _From, State) ->
-  case eleveldb:get(State#state.db, Key, []) of
-    {ok, Bin} ->
-      case erlang:binary_to_term(Bin) of
-        #edis_item{type = string, value = Value} ->
-          {reply, {ok, Value}, State};
-        Other ->
-          ?THROW("Not a string:~n\t~p~n", [Other]),
-          {reply, {error, bad_item_type}, State}
-      end;
-    not_found ->
-      {reply, {ok, undefined}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+handle_call({get, Keys}, _From, State) ->
+  Reply =
+    lists:foldr(
+      fun(Key, {ok, AccValues}) ->
+              case eleveldb:get(State#state.db, Key, []) of
+                {ok, Bin} ->
+                  case erlang:binary_to_term(Bin) of
+                    #edis_item{type = string, value = Value} ->
+                      {ok, [Value | AccValues]};
+                    _Other ->
+                      {ok, [undefined | AccValues]}
+                  end;
+                not_found ->
+                  {ok, [undefined | AccValues]};
+                {error, Reason} ->
+                  {error, Reason}
+              end;
+         (_, AccErr) ->
+              AccErr
+      end, {ok, []}, Keys),
+  {reply, Reply, State};
 handle_call({get_bit, Key, Offset}, _From, State) ->
   case eleveldb:get(State#state.db, Key, []) of
     {ok, Bin} ->
