@@ -29,7 +29,8 @@
 
 %% Commands ========================================================================================
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3]).
+-export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
+         set_nx/2, set_nx/3]).
 
 %% =================================================================================================
 %% External functions
@@ -112,6 +113,14 @@ set(Db, Key, Value) ->
 -spec set(atom(), [{binary(), binary()}]) -> ok.
 set(Db, KVs) ->
   make_call(Db, {set, KVs}).
+
+-spec set_nx(atom(), binary(), binary()) -> ok.
+set_nx(Db, Key, Value) ->
+  set_nx(Db, [{Key, Value}]).
+
+-spec set_nx(atom(), [{binary(), binary()}]) -> ok.
+set_nx(Db, KVs) ->
+  make_call(Db, {set_nx, KVs}).
 
 %% =================================================================================================
 %% Server functions
@@ -302,6 +311,22 @@ handle_call({set, KVs}, _From, State) ->
                        #edis_item{key = Key, type = string, value = Value})} || {Key, Value} <- KVs],
                     []),
   {reply, Reply, State};
+handle_call({set_nx, KVs}, _From, State) ->
+  case lists:any(
+         fun({Key, _}) ->
+                 not_found =/= eleveldb:get(State#state.db, Key, [])
+         end, KVs) of
+    true ->
+      {reply, {error, already_exists}, State};
+    false ->
+      Reply =
+        eleveldb:write(State#state.db,
+                       [{put, Key,
+                         erlang:term_to_binary(
+                           #edis_item{key = Key, type = string, value = Value})} || {Key, Value} <- KVs],
+                       []),
+      {reply, Reply, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 

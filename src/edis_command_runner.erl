@@ -218,6 +218,15 @@ run_command(<<"MSET">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
   tcp_ok(State);
 run_command(<<"MSET">>, _, State) ->
   tcp_err("wrong number of arguments for 'MSET' command", State);
+run_command(<<"MSETNX">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+  try edis_db:set_nx(State#state.db, edis_util:make_pairs(KVs)) of
+    ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State)
+  end;
+run_command(<<"MSETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MSETNX' command", State);
 
 run_command(<<"SET">>, [Key, Value], State) ->
   ok = edis_db:set(State#state.db, Key, Value),
