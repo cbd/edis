@@ -306,6 +306,16 @@ run_command(<<"EXPIRE">>, [Key, Seconds], State) ->
   end;
 run_command(<<"EXPIRE">>, _, State) ->
   tcp_err("wrong number of arguments for 'EXPIRE' command", State);
+run_command(<<"EXPIREAT">>, [Key, Timestamp], State) ->
+  try edis_util:binary_to_integer(Timestamp) of
+    TS ->
+      tcp_boolean(edis_db:expire_at(State#state.db, Key, TS), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"EXPIREAT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXPIREAT' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

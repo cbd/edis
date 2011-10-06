@@ -31,7 +31,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3]).
+-export([del/2, exists/2, expire/3, expire_at/3]).
 
 %% =================================================================================================
 %% External functions
@@ -149,8 +149,11 @@ exists(Db, Key) ->
 
 -spec expire(atom(), binary(), pos_integer()) -> boolean().
 expire(Db, Key, Seconds) ->
-  make_call(Db, {expire, Key, Seconds}).
+  expire_at(Db, Key, edis_util:now() + Seconds).
 
+-spec expire_at(atom(), binary(), pos_integer()) -> boolean().
+expire_at(Db, Key, Timestamp) ->
+  make_call(Db, {expire_at, Key, Timestamp}).
 
 %% =================================================================================================
 %% Server functions
@@ -401,32 +404,33 @@ handle_call({exists, Key}, _From, State) ->
         {error, Reason} -> {error, Reason}
       end,
   {reply, Reply, State};
-handle_call({expire, Key, Seconds}, _From, State) when Seconds =< 0 -> %% It's a delete (it already expired)
+handle_call({expire_at, Key, Timestamp}, _From, State) ->
   Reply =
-      case exists_item(State#state.db, Key) of
-        true ->
-          case eleveldb:delete(State#state.db, Key, []) of
-            ok ->
+      case edis_util:now() of
+        Now when Timestamp =< Now -> %% It's a delete (it already expired)
+          case exists_item(State#state.db, Key) of
+            true ->
+              case eleveldb:delete(State#state.db, Key, []) of
+                ok ->
+                  {ok, true};
+                {error, Reason} ->
+                  {error, Reason}
+              end;
+            false ->
+              {ok, false}
+          end;
+        _ ->
+          case update(State#state.db, Key, any,
+                      fun(Item) ->
+                              {ok, Item#edis_item{expire = Timestamp}}
+                      end) of
+            {ok, ok} ->
               {ok, true};
+            {error, not_found} ->
+              {ok, false};
             {error, Reason} ->
               {error, Reason}
-          end;
-        false ->
-          {ok, false}
-      end,
-  {reply, Reply, State};
-handle_call({expire, Key, Seconds}, _From, State) ->
-  Reply =
-      case update(State#state.db, Key, any,
-                  fun(Item) ->
-                          {ok, Item#edis_item{expire = edis_util:now() + Seconds}}
-                  end) of
-        {ok, ok} ->
-          {ok, true};
-        {error, not_found} ->
-          {ok, false};
-        {error, Reason} ->
-          {error, Reason}
+          end
       end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->

@@ -16,13 +16,12 @@
 %% @doc Current timestamp
 -spec timestamp() -> float().
 timestamp() ->
-  calendar:datetime_to_gregorian_seconds(calendar:universal_time()) - ?EPOCH +
-    element(3, erlang:now()) / 1000000.
+  ?MODULE:now() + element(3, erlang:now()) / 1000000.
 
-%% @doc Now in seconds
+%% @doc UTC in *NIX seconds
 -spec now() -> pos_integer().
 now() ->
-  calendar:datetime_to_gregorian_seconds(calendar:universal_time()).
+  calendar:datetime_to_gregorian_seconds(calendar:universal_time()) - ?EPOCH.
 
 -spec upper(binary()) -> binary().
 upper(Bin) ->
