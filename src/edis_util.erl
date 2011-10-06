@@ -9,7 +9,7 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--export([timestamp/0, upper/1, lower/1, binary_to_integer/1, integer_to_binary/1]).
+-export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, integer_to_binary/1, make_pairs/1]).
 
 -define(EPOCH, 62167219200).
 
@@ -19,7 +19,11 @@ timestamp() ->
   calendar:datetime_to_gregorian_seconds(calendar:universal_time()) - ?EPOCH +
     element(3, erlang:now()) / 1000000.
 
-%% @private
+%% @doc Now in seconds
+-spec now() -> pos_integer().
+now() ->
+  calendar:datetime_to_gregorian_seconds(calendar:universal_time()).
+
 -spec upper(binary()) -> binary().
 upper(Bin) ->
   upper(Bin, <<>>).
@@ -58,3 +62,12 @@ binary_to_integer(Bin) ->
 -spec integer_to_binary(binary()) -> integer().
 integer_to_binary(Int) ->
   list_to_binary(integer_to_list(Int)).
+
+-spec make_pairs([any()]) -> [{any(), any()}].
+make_pairs(KVs) ->
+  make_pairs(KVs, []).
+
+make_pairs([], Acc) -> lists:reverse(Acc);
+make_pairs([_], Acc) -> lists:reverse(Acc);
+make_pairs([K, V | Rest], Acc) ->
+  make_pairs(Rest, [{K,V} | Acc]).

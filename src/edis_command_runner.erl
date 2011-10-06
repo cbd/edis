@@ -213,6 +213,92 @@ run_command(<<"MGET">>, [], State) ->
   tcp_err("wrong number of arguments for 'MGET' command", State);
 run_command(<<"MGET">>, Keys, State) ->
   tcp_multi_bulk(edis_db:get(State#state.db, Keys), State);
+run_command(<<"MSET">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+  ok = edis_db:set(State#state.db, edis_util:make_pairs(KVs)),
+  tcp_ok(State);
+run_command(<<"MSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MSET' command", State);
+run_command(<<"MSETNX">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+  try edis_db:set_nx(State#state.db, edis_util:make_pairs(KVs)) of
+    ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State)
+  end;
+run_command(<<"MSETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MSETNX' command", State);
+run_command(<<"SET">>, [Key, Value], State) ->
+  ok = edis_db:set(State#state.db, Key, Value),
+  tcp_ok(State);
+run_command(<<"SET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SET' command", State);
+run_command(<<"SETBIT">>, [Key, Offset, Bit], State) ->
+  try {edis_util:binary_to_integer(Offset), Bit} of
+    {O, Bit} when O >= 0, Bit == <<"0">> ->
+      tcp_number(edis_db:set_bit(State#state.db, Key, O, 0), State);
+    {O, Bit} when O >= 0, Bit == <<"1">> ->
+      tcp_number(edis_db:set_bit(State#state.db, Key, O, 1), State);
+    {O, _BadBit} when O >= 0 ->
+      tcp_err("bit is not an integer or out of range", State);
+    _ ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  catch
+    _:badarg ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  end;
+run_command(<<"SETBIT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETBIT' command", State);
+run_command(<<"SETEX">>, [Key, Seconds, Value], State) ->
+  try edis_util:binary_to_integer(Seconds) of
+    Secs when Secs =< 0 ->
+      tcp_err("invalid expire time in SETEX", State);
+    Secs ->
+      ok = edis_db:set_ex(State#state.db, Key, Secs, Value),
+      tcp_ok(State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"SETEX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETEX' command", State);
+run_command(<<"SETNX">>, [Key, Value], State) ->
+  try edis_db:set_nx(State#state.db, Key, Value) of
+    ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State)
+  end;
+run_command(<<"SETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETNX' command", State);
+run_command(<<"SETRANGE">>, [Key, Offset, Value], State) ->
+  try edis_util:binary_to_integer(Offset) of
+    Off when Off =< 0 ->
+      tcp_err("offset is out of range", State);
+    Off ->
+      tcp_number(edis_db:set_range(State#state.db, Key, Off, Value), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"SETRANGE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETRANGE' command", State);
+run_command(<<"STRLEN">>, [Key], State) ->
+  tcp_number(edis_db:str_len(State#state.db, Key), State);
+run_command(<<"STRLEN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'STRLEN' command", State);
+
+%% -- Keys -----------------------------------------------------------------------------------------
+run_command(<<"DEL">>, [], State) ->
+  tcp_err("wrong number of arguments for 'DEL' command", State);
+run_command(<<"DEL">>, Keys, State) ->
+  tcp_number(edis_db:del(State#state.db, Keys), State);
+run_command(<<"EXISTS">>, [Key], State) ->
+  case edis_db:exists(State#state.db, Key) of
+    true -> tcp_number(1, State);
+    false -> tcp_number(0, State)
+  end;
+run_command(<<"EXISTS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXISTS' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
