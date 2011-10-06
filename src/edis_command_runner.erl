@@ -287,6 +287,12 @@ run_command(<<"STRLEN">>, [Key], State) ->
 run_command(<<"STRLEN">>, _, State) ->
   tcp_err("wrong number of arguments for 'STRLEN' command", State);
 
+%% -- Keys -----------------------------------------------------------------------------------------
+run_command(<<"DEL">>, [], State) ->
+  tcp_err("wrong number of arguments for 'DEL' command", State);
+run_command(<<"DEL">>, Keys, State) ->
+  tcp_number(edis_db:del(State#state.db, Keys), State);
+
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
   run_command(<<"CONFIG ", (edis_util:upper(SubCommand))/binary>>, Rest, State);

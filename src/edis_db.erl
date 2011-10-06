@@ -31,6 +31,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
+-export([del/2]).
 
 %% =================================================================================================
 %% External functions
@@ -137,6 +138,10 @@ set_range(Db, Key, Offset, Value) ->
 -spec str_len(atom(), binary()) -> non_neg_integer().
 str_len(Db, Key) ->
   make_call(Db, {str_len, Key}).
+
+-spec del(atom(), binary()) -> non_neg_integer().
+del(Db, Keys) ->
+  make_call(Db, {del, Keys}).
 
 %% =================================================================================================
 %% Server functions
@@ -302,7 +307,7 @@ handle_call({set, KVs}, _From, State) ->
 handle_call({set_nx, KVs}, _From, State) ->
   case lists:any(
          fun({Key, _}) ->
-                 not_found =/= get_item(State#state.db, Key)
+                 exists(State#state.db, Key)
          end, KVs) of
     true ->
       {reply, {error, already_exists}, State};
@@ -370,6 +375,15 @@ handle_call({str_len, Key}, _From, State) ->
     {error, Reason} ->
       {reply, {error, Reason}, State}
   end;
+handle_call({del, Keys}, _From, State) ->
+  DeleteActions =
+      [{delete, Key} || Key <- Keys, exists(State#state.db, Key)],
+  case eleveldb:write(State#state.db, DeleteActions, []) of
+    ok ->
+      {reply, {ok, length(DeleteActions)}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -393,7 +407,12 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% Private functions
 %% =================================================================================================
 %% @private
-get_item(Db, Key) -> get_item(Db, any, Key).
+exists(Db, Key) ->
+  case eleveldb:get(Db, Key, []) of
+    {ok, _} -> true;
+    not_found -> false;
+    {error, Reason} -> {error, Reason}
+  end.
 
 %% @private
 get_item(Db, Type, Key) ->
