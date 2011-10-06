@@ -292,6 +292,13 @@ run_command(<<"DEL">>, [], State) ->
   tcp_err("wrong number of arguments for 'DEL' command", State);
 run_command(<<"DEL">>, Keys, State) ->
   tcp_number(edis_db:del(State#state.db, Keys), State);
+run_command(<<"EXISTS">>, [Key], State) ->
+  case edis_db:exists(State#state.db, Key) of
+    true -> tcp_number(1, State);
+    false -> tcp_number(0, State)
+  end;
+run_command(<<"EXISTS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXISTS' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
