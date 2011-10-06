@@ -136,15 +136,15 @@ run_command(<<"AUTH">>, _, State) ->
   tcp_err("wrong number of arguments for 'AUTH' command", State);
 run_command(_, _, State = #state{authenticated = false}) ->
   tcp_err("operation not permitted", State);
-run_command(<<"SELECT">>, [Index], State) ->
-  try {edis_util:binary_to_integer(Index), edis_config:get(databases)} of
-    {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
+run_command(<<"SELECT">>, [Db], State) ->
+  try {edis_util:binary_to_integer(Db), edis_config:get(databases)} of
+    {DbIndex, Dbs} when DbIndex < 0 orelse DbIndex >= Dbs ->
       tcp_err("invalid DB index", State);
-    {Db, _} ->
-      tcp_ok(State#state{db = edis_db:process(Db)})
+    {DbIndex, _} ->
+      tcp_ok(State#state{db = edis_db:process(DbIndex)})
   catch
     error:badarg ->
-      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
+      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
       tcp_ok(State#state{db = edis_db:process(0)})
   end;
 run_command(<<"SELECT">>, _, State) ->
@@ -320,6 +320,24 @@ run_command(<<"KEYS">>, [Pattern], State) ->
   tcp_multi_bulk(edis_db:keys(State#state.db, edis_util:glob_to_re(Pattern)), State);
 run_command(<<"KEYS">>, _, State) ->
   tcp_err("wrong number of arguments for 'KEYS' command", State);
+run_command(<<"MOVE">>, [Key, Db], State) ->
+  DbIndex =
+      try edis_util:binary_to_integer(Db)
+      catch
+        _:badarg ->
+          ?WARN("Using db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
+          0
+      end,
+  case {DbIndex, edis_config:get(databases), State#state.db, edis_db:process(DbIndex)} of
+    {DbIndex, Dbs, _, _} when DbIndex < 0 orelse DbIndex > Dbs ->
+      tcp_err("index out of range", State);
+    {_, _, CurrentDb, CurrentDb} ->
+      tcp_err("source and destinantion objects are the same", State);
+    {_, _, CurrentDb, DestDb} ->
+      tcp_boolean(edis_db:move(CurrentDb, Key, DestDb), State)
+  end;
+run_command(<<"MOVE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MOVE' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

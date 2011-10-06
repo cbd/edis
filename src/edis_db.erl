@@ -31,7 +31,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3, expire_at/3, keys/2]).
+-export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3]).
 
 %% =================================================================================================
 %% External functions
@@ -158,6 +158,10 @@ expire_at(Db, Key, Timestamp) ->
 -spec keys(atom(), binary()) -> [binary()].
 keys(Db, Pattern) ->
   make_call(Db, {keys, Pattern}).
+
+-spec move(atom(), binary(), atom()) -> boolean().
+move(Db, Key, NewDb) ->
+  make_call(Db, {move, Key, NewDb}).
 
 %% =================================================================================================
 %% Server functions
@@ -461,6 +465,37 @@ handle_call({keys, Pattern}, _From, State) ->
       {reply, {error, "Invalid pattern: " ++ Reason}, State};
     {error, Reason} ->
       {reply, {error, Reason}, State}
+  end;
+handle_call({move, Key, NewDb}, _From, State) ->
+  case get_item(State#state.db, string, Key) of
+    not_found ->
+      {reply, {ok, false}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State};
+    Item ->
+      try make_call(NewDb, {recv, Item}) of
+        ok ->
+          case eleveldb:delete(State#state.db, Key, []) of
+            ok ->
+              {reply, {ok, true}, State};
+            {error, Reason} ->
+              _ = make_call(NewDb, {del, [Key]}),
+              {reply, {error, Reason}, State}
+          end
+      catch
+        _:found ->
+          {reply, {ok, false}, State};
+        _:{error, Reason} ->
+          {reply, {error, Reason}, State}
+      end
+  end;
+handle_call({recv, Item}, _From, State) ->
+  case exists_item(State#state.db, Item#edis_item.key) of
+    true ->
+      {reply, {error, found}, State};
+    false ->
+      Reply = eleveldb:put(State#state.db, Item#edis_item.key, erlang:term_to_binary(Item), []),
+      {reply, Reply, State}
   end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
