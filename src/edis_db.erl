@@ -31,7 +31,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3, expire_at/3]).
+-export([del/2, exists/2, expire/3, expire_at/3, keys/2]).
 
 %% =================================================================================================
 %% External functions
@@ -154,6 +154,10 @@ expire(Db, Key, Seconds) ->
 -spec expire_at(atom(), binary(), pos_integer()) -> boolean().
 expire_at(Db, Key, Timestamp) ->
   make_call(Db, {expire_at, Key, Timestamp}).
+
+-spec keys(atom(), binary()) -> [binary()].
+keys(Db, Pattern) ->
+  make_call(Db, {keys, Pattern}).
 
 %% =================================================================================================
 %% Server functions
@@ -433,6 +437,31 @@ handle_call({expire_at, Key, Timestamp}, _From, State) ->
           end
       end,
   {reply, Reply, State};
+handle_call({keys, Pattern}, _From, State) ->
+  case re:compile(Pattern) of
+    {ok, Compiled} ->
+      Now = edis_util:now(),
+      Keys = eleveldb:fold(
+               State#state.db,
+               fun({Key, Bin}, Acc) ->
+                       case re:run(Key, Compiled) of
+                         nomatch ->
+                           Acc;
+                         _ ->
+                           case erlang:binary_to_term(Bin) of
+                             #edis_item{expire = Expire} when Expire >= Now ->
+                               [Key | Acc];
+                             _ ->
+                               Acc
+                           end
+                       end
+               end, [], [{fill_cache, false}]),
+      {reply, {ok, lists:reverse(Keys)}, State};
+    {error, {Reason, _Line}} when is_list(Reason) ->
+      {reply, {error, "Invalid pattern: " ++ Reason}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 

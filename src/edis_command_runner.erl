@@ -316,15 +316,16 @@ run_command(<<"EXPIREAT">>, [Key, Timestamp], State) ->
   end;
 run_command(<<"EXPIREAT">>, _, State) ->
   tcp_err("wrong number of arguments for 'EXPIREAT' command", State);
+run_command(<<"KEYS">>, [Pattern], State) ->
+  tcp_multi_bulk(edis_db:keys(State#state.db, edis_util:glob_to_re(Pattern)), State);
+run_command(<<"KEYS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'KEYS' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
   run_command(<<"CONFIG ", (edis_util:upper(SubCommand))/binary>>, Rest, State);
 run_command(<<"CONFIG GET">>, [Pattern], State) ->
-  Configs = edis_config:get(
-              binary:replace(
-                binary:replace(Pattern, <<"*">>, <<".*">>, [global]),
-                <<"?">>, <<".">>, [global])),
+  Configs = edis_config:get(edis_util:glob_to_re(Pattern)),
   Lines = lists:flatten(
             [[atom_to_binary(K, utf8),
               case V of

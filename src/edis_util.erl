@@ -9,7 +9,8 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, integer_to_binary/1, make_pairs/1]).
+-export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, integer_to_binary/1,
+         make_pairs/1, glob_to_re/1]).
 
 -define(EPOCH, 62167219200).
 
@@ -70,3 +71,13 @@ make_pairs([], Acc) -> lists:reverse(Acc);
 make_pairs([_], Acc) -> lists:reverse(Acc);
 make_pairs([K, V | Rest], Acc) ->
   make_pairs(Rest, [{K,V} | Acc]).
+
+-spec glob_to_re(binary()) -> binary().
+glob_to_re(Pattern) ->
+  binary:replace(
+    binary:replace(
+      binary:replace(
+        binary:replace(Pattern, <<"*">>, <<".*">>, [global]),
+        <<"?">>, <<".">>, [global]),
+      <<"(">>, <<"\\(">>, [global]),
+    <<")">>, <<"\\)">>, [global]).
