@@ -293,12 +293,19 @@ run_command(<<"DEL">>, [], State) ->
 run_command(<<"DEL">>, Keys, State) ->
   tcp_number(edis_db:del(State#state.db, Keys), State);
 run_command(<<"EXISTS">>, [Key], State) ->
-  case edis_db:exists(State#state.db, Key) of
-    true -> tcp_number(1, State);
-    false -> tcp_number(0, State)
-  end;
+  tcp_boolean(edis_db:exists(State#state.db, Key), State);
 run_command(<<"EXISTS">>, _, State) ->
   tcp_err("wrong number of arguments for 'EXISTS' command", State);
+run_command(<<"EXPIRE">>, [Key, Seconds], State) ->
+  try edis_util:binary_to_integer(Seconds) of
+    Secs ->
+      tcp_boolean(edis_db:expire(State#state.db, Key, Secs), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"EXPIRE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXPIRE' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
@@ -420,6 +427,11 @@ run_command(Command, Args, State)
 %% -- Errors ---------------------------------------------------------------------------------------
 run_command(Command, _Args, State) ->
   tcp_err(["unknown command '", Command, "'"], State).
+
+%% @private
+-spec tcp_boolean(boolean(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_boolean(true, State) -> tcp_number(1, State);
+tcp_boolean(false, State) -> tcp_number(0, State).
 
 %% @private
 -spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.

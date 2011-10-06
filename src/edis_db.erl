@@ -31,7 +31,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2]).
+-export([del/2, exists/2, expire/3]).
 
 %% =================================================================================================
 %% External functions
@@ -146,6 +146,11 @@ del(Db, Keys) ->
 -spec exists(atom(), binary()) -> boolean().
 exists(Db, Key) ->
   make_call(Db, {exists, Key}).
+
+-spec expire(atom(), binary(), pos_integer()) -> boolean().
+expire(Db, Key, Seconds) ->
+  make_call(Db, {expire, Key, Seconds}).
+
 
 %% =================================================================================================
 %% Server functions
@@ -396,6 +401,34 @@ handle_call({exists, Key}, _From, State) ->
         {error, Reason} -> {error, Reason}
       end,
   {reply, Reply, State};
+handle_call({expire, Key, Seconds}, _From, State) when Seconds =< 0 -> %% It's a delete (it already expired)
+  Reply =
+      case exists_item(State#state.db, Key) of
+        true ->
+          case eleveldb:delete(State#state.db, Key, []) of
+            ok ->
+              {ok, true};
+            {error, Reason} ->
+              {error, Reason}
+          end;
+        false ->
+          {ok, false}
+      end,
+  {reply, Reply, State};
+handle_call({expire, Key, Seconds}, _From, State) ->
+  Reply =
+      case update(State#state.db, Key, any,
+                  fun(Item) ->
+                          {ok, Item#edis_item{expire = edis_util:now() + Seconds}}
+                  end) of
+        {ok, ok} ->
+          {ok, true};
+        {error, not_found} ->
+          {ok, false};
+        {error, Reason} ->
+          {error, Reason}
+      end,
+  {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -447,6 +480,27 @@ get_item(Db, Type, Key) ->
       not_found;
     {error, Reason} ->
       {error, Reason}
+  end.
+
+%% @private
+update(Db, Key, Type, Fun) ->
+  try
+    {Res, NewItem} =
+      case get_item(Db, Type, Key) of
+        not_found ->
+          throw(not_found);
+        {error, Reason} ->
+          throw(Reason);
+        Item ->
+          Fun(Item)
+      end,
+    case eleveldb:put(Db, Key, erlang:term_to_binary(NewItem), []) of
+      ok -> {ok, Res};
+      {error, Reason2} -> {error, Reason2}
+    end
+  catch
+    _:Error ->
+      {error, Error}
   end.
 
 %% @private
