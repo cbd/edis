@@ -338,6 +338,25 @@ run_command(<<"MOVE">>, [Key, Db], State) ->
   end;
 run_command(<<"MOVE">>, _, State) ->
   tcp_err("wrong number of arguments for 'MOVE' command", State);
+run_command(<<"OBJECT">>, [SubCommand | Rest], State) ->
+  run_command(<<"OBJECT ", (edis_util:upper(SubCommand))/binary>>, Rest, State);
+run_command(<<"OBJECT REFCOUNT">>, [Key], State) ->
+  %%XXX: Not *really* implemented
+  case edis_db:exists(State#state.db, Key) of
+    true -> tcp_number(1, State);
+    false -> tcp_bulk(undefined, State)
+  end;
+run_command(<<"OBJECT ENCODING">>, [Key], State) ->
+  Reply =
+      case edis_db:encoding(State#state.db, Key) of
+        undefined -> undefined;
+        Encoding -> atom_to_binary(Encoding, utf8)
+      end,
+  tcp_bulk(Reply, State);
+run_command(<<"OBJECT IDLETIME">>, [Key], State) ->
+  tcp_number(edis_db:idle_time(State#state.db, Key), State);
+run_command(<<"OBJECT", _Rest/binary>>, _, State) ->
+  tcp_err("Syntax error. Try OBJECT (refcount|encoding|idletime)", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
@@ -483,7 +502,9 @@ tcp_bulk(Message, State) ->
   end.
 
 %% @private
--spec tcp_number(integer(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_number(undefined | integer(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_number(undefined, State) ->
+  tcp_bulk(undefined, State);
 tcp_number(Number, State) ->
   tcp_send([":", integer_to_list(Number)], State).
 

@@ -17,10 +17,14 @@
 
 -include("edis.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
+-define(ACCESS_DUMP_INTERVAL, 10000).
 
--record(state, {index     :: non_neg_integer(),
-                db        :: eleveldb:db_ref(),
-                last_save :: float()}).
+-type encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
+-export_type([encoding/0]).
+
+-record(state, {index               :: non_neg_integer(),
+                db                  :: eleveldb:db_ref(),
+                last_save           :: float()}).
 -opaque state() :: #state{}.
 
 %% Administrative functions
@@ -31,7 +35,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3]).
+-export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2]).
 
 %% =================================================================================================
 %% External functions
@@ -163,12 +167,21 @@ keys(Db, Pattern) ->
 move(Db, Key, NewDb) ->
   make_call(Db, {move, Key, NewDb}).
 
+-spec encoding(atom(), binary()) -> undefined | encoding().
+encoding(Db, Key) ->
+  make_call(Db, {encoding, Key}).
+
+-spec idle_time(atom(), binary()) -> undefined | non_neg_integer().
+idle_time(Db, Key) ->
+  make_call(Db, {idle_time, Key}).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
 %% @hidden
 -spec init(non_neg_integer()) -> {ok, state()} | {stop, any()}.
 init(Index) ->
+  {ok, _Ref} = timer:send_interval(?ACCESS_DUMP_INTERVAL, access_dump),
   case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
     {ok, Ref} ->
       {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp()}};
@@ -205,10 +218,18 @@ handle_call(flush, _From, State) ->
       {reply, {error, Reason}, State}
   end;
 handle_call(size, _From, State) ->
-  %%TODO: Is there any way to improve this?
-  Size = eleveldb:fold_keys(
-           State#state.db, fun(_, Acc) -> Acc + 1 end, 0,
-           [{verify_checksums, false}]),
+  %%TODO: We need to 
+  Now = edis_util:now(),
+  Size = eleveldb:fold(
+           State#state.db,
+           fun({_Key, Bin}, Acc) ->
+                   case erlang:binary_to_term(Bin) of
+                     #edis_item{expire = Expire} when Expire >= Now ->
+                       Acc + 1;
+                     _ ->
+                       Acc
+                   end
+           end, 0, [{fill_cache, false}]),
   {reply, {ok, Size}, State};
 handle_call({append, Key, Value}, _From, State) ->
   Reply =
