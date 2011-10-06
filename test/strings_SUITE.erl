@@ -4,7 +4,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
-	[set].
+	[set,get].
 %% 	append,decr,decrby,get,getbit,
 %% 	 getrange,getset,incr,incrby,mget,
 %% 	 mset,msetnx,setbit,setex,
@@ -29,6 +29,24 @@ set(Config) ->
 	{error,<<"ERR wrong number of arguments for 'set' command">>}  = erldis_client:sr_scall(Client, [<<"set">>,<<"name">>,<<"inaka">>,<<"labs">>]),
 	{error,<<"ERR wrong number of arguments for 'set' command">>}  = erldis_client:sr_scall(Client, [<<"set">>,<<"name">>]),
 	{error,<<"ERR wrong number of arguments for 'set' command">>}  = erldis_client:sr_scall(Client, [<<"set">>]).
+
+get(Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ok = erldis_client:sr_scall(Client, [<<"get">>,<<"name">>]),
+	nil = erldis_client:sr_scall(Client, [<<"get">>,<<"lastname">>]),
+	{error,<<"ERR wrong number of arguments for 'get' command">>} = erldis_client:sr_scall(Client, [<<"get">>]),
+	{error,<<"ERR wrong number of arguments for 'get' command">>} = erldis_client:sr_scall(Client, [<<"get">>,<<"name">>,<<"andLastName">>]),
+	
+	%% TODO
+	%% try to get a set
+	%% try to get a hash
+	%% try to get a sorted set
+	
+	%% try to get a list
+	erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,<<"element">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client, [<<"get">>,<<"list">>]).
+	
+	
 
 
 	
