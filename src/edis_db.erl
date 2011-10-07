@@ -17,7 +17,6 @@
 
 -include("edis.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
--define(ACCESS_DUMP_INTERVAL, 10000).
 
 -type item_type() :: string | hash | list | set | zset.
 -type item_encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
@@ -25,6 +24,8 @@
 
 -record(state, {index               :: non_neg_integer(),
                 db                  :: eleveldb:db_ref(),
+                start_time          :: pos_integer(),
+                accesses            :: dict(),
                 last_save           :: float()}).
 -opaque state() :: #state{}.
 
@@ -182,10 +183,10 @@ idle_time(Db, Key) ->
 %% @hidden
 -spec init(non_neg_integer()) -> {ok, state()} | {stop, any()}.
 init(Index) ->
-  {ok, _Ref} = timer:send_interval(?ACCESS_DUMP_INTERVAL, access_dump),
   case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
     {ok, Ref} ->
-      {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp()}};
+      {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp(),
+                  start_time = edis_util:now(), accesses = dict:new()}};
     {error, Reason} ->
       ?THROW("Couldn't start level db #~p:~b\t~p~n", [Index, Reason]),
       {stop, Reason}
@@ -239,7 +240,7 @@ handle_call({append, Key, Value}, _From, State) ->
                    NewV = <<OldV/binary, Value/binary>>,
                    {erlang:size(NewV), Item#edis_item{value = NewV}}
            end, <<>>),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({decr, Key, Decrement}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
@@ -253,77 +254,68 @@ handle_call({decr, Key, Decrement}, _From, State) ->
                        throw(bad_item_type)
                    end
            end, <<"0">>),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({get, Keys}, _From, State) ->
   Reply =
     lists:foldr(
       fun(Key, {ok, AccValues}) ->
               case get_item(State#state.db, string, Key) of
-                #edis_item{type = string, value = Value} ->
-                  {ok, [Value | AccValues]};
-                not_found ->
-                  {ok, [undefined | AccValues]};
-                {error, bad_item_type} ->
-                  {ok, [undefined | AccValues]};
-                {error, Reason} ->
-                  {error, Reason}
+                #edis_item{type = string, value = Value} -> {ok, [Value | AccValues]};
+                not_found -> {ok, [undefined | AccValues]};
+                {error, bad_item_type} -> {ok, [undefined | AccValues]};
+                {error, Reason} -> {error, Reason}
               end;
-         (_, AccErr) ->
-              AccErr
+         (_, AccErr) -> AccErr
       end, {ok, []}, Keys),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Keys, State)};
 handle_call({get_bit, Key, Offset}, _From, State) ->
-  case get_item(State#state.db, string, Key) of
-    #edis_item{value = <<_:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>} ->
-      {reply, {ok, Bit}, State};
-    #edis_item{} -> %% Value is shorter than offset
-      {reply, {ok, 0}, State};
-    not_found ->
-      {reply, {ok, 0}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
-handle_call({get_range, Key, Start, End}, _From, State) ->
-  try
+  Reply =
     case get_item(State#state.db, string, Key) of
-      #edis_item{value = Value} ->
-        L = erlang:size(Value),
-        StartPos =
-          case Start of
-            Start when Start >= L -> throw(empty);
-            Start when Start >= 0 -> Start;
-            Start when Start < (-1)*L -> 0;
-            Start -> L + Start
-          end,
-        EndPos =
-          case End of
-            End when End >= 0, End >= L -> L - 1;
-            End when End >= 0 -> End;
-            End when End < (-1)*L -> 0;
-            End -> L + End
-          end,
-        case EndPos - StartPos + 1 of
-          Len when Len =< 0 ->
-            {reply, {ok, <<>>}, State};
-          Len ->
-            {reply, {ok, binary:part(Value, StartPos, Len)}, State}
-        end;
-      not_found ->
-        {reply, {ok, <<>>}, State};
-      {error, Reason} ->
-        {reply, {error, Reason}, State}
-    end
-  catch
-    _:empty ->
-      {reply, {ok, <<>>}, State}
-  end;
+      #edis_item{value =
+                   <<_:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>} -> {ok, Bit};
+      #edis_item{} -> {ok, 0}; %% Value is shorter than offset
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({get_range, Key, Start, End}, _From, State) ->
+  Reply =
+    try
+      case get_item(State#state.db, string, Key) of
+        #edis_item{value = Value} ->
+          L = erlang:size(Value),
+          StartPos =
+            case Start of
+              Start when Start >= L -> throw(empty);
+              Start when Start >= 0 -> Start;
+              Start when Start < (-1)*L -> 0;
+              Start -> L + Start
+            end,
+          EndPos =
+            case End of
+              End when End >= 0, End >= L -> L - 1;
+              End when End >= 0 -> End;
+              End when End < (-1)*L -> 0;
+              End -> L + End
+            end,
+          case EndPos - StartPos + 1 of
+            Len when Len =< 0 -> {ok, <<>>};
+            Len -> {ok, binary:part(Value, StartPos, Len)}
+          end;
+        not_found -> {ok, <<>>};
+        {error, Reason} -> {error, Reason}
+      end
+    catch
+      _:empty -> {ok, <<>>}
+    end,
+  {reply, Reply, stamp(Key, State)};
 handle_call({get_and_set, Key, Value}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
                    {OldV, Item#edis_item{value = Value}}
            end, undefined),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({incr, Key, Increment}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
@@ -337,7 +329,7 @@ handle_call({incr, Key, Increment}, _From, State) ->
                        throw(bad_item_type)
                    end
            end, <<"0">>),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({set, KVs}, _From, State) ->
   Reply =
     eleveldb:write(State#state.db,
@@ -346,24 +338,24 @@ handle_call({set, KVs}, _From, State) ->
                        #edis_item{key = Key, encoding = raw,
                                   type = string, value = Value})} || {Key, Value} <- KVs],
                     []),
-  {reply, Reply, State};
+  {reply, Reply, stamp([K || {K, _} <- KVs], State)};
 handle_call({set_nx, KVs}, _From, State) ->
-  case lists:any(
-         fun({Key, _}) ->
-                 exists_item(State#state.db, Key)
-         end, KVs) of
-    true ->
-      {reply, {error, already_exists}, State};
-    false ->
-      Reply =
+  Reply =
+    case lists:any(
+           fun({Key, _}) ->
+                   exists_item(State#state.db, Key)
+           end, KVs) of
+      true ->
+        {reply, {error, already_exists}, State};
+      false ->
         eleveldb:write(State#state.db,
                        [{put, Key,
                          erlang:term_to_binary(
                            #edis_item{key = Key, encoding = raw,
                                       type = string, value = Value})} || {Key, Value} <- KVs],
-                       []),
-      {reply, Reply, State}
-  end;
+                       [])
+    end,
+  {reply, Reply, stamp([K || {K, _} <- KVs], State)};
 handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
@@ -380,7 +372,7 @@ handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
                                                 1:1/unit:1,
                                                 0:BitsAfter/unit:1>>}}
            end, <<>>),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
   Reply =
     eleveldb:put(
@@ -389,13 +381,12 @@ handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
         #edis_item{key = Key, type = string, encoding = raw,
                    expire = edis_util:now() + Seconds,
                    value = Value}), []),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({set_range, Key, Offset, Value}, _From, State) ->
-  case erlang:size(Value) of
-    0 ->
-      {reply, {ok, 0}, State}; %% Copying redis behaviour even when documentation said different
-    Length ->
-      Reply =
+  Reply =
+    case erlang:size(Value) of
+      0 -> {ok, 0}; %% Copying redis behaviour even when documentation said different
+      Length ->
         update(State#state.db, Key, string, raw,
                fun(Item = #edis_item{value = <<Prefix:Offset/binary, _:Length/binary, Suffix/binary>>}) ->
                        NewV = <<Prefix/binary, Value/binary, Suffix/binary>>,
@@ -407,27 +398,26 @@ handle_call({set_range, Key, Offset, Value}, _From, State) ->
                        Pad = Offset - erlang:size(Prefix),
                        NewV = <<Prefix/binary, 0:Pad/unit:8, Value/binary>>,
                        {erlang:size(NewV), Item#edis_item{value = NewV}}
-               end, <<>>),
-      {reply, Reply, State}
-  end;
+               end, <<>>)
+    end,
+  {reply, Reply, stamp(Key, State)};
 handle_call({str_len, Key}, _From, State) ->
-  case get_item(State#state.db, string, Key) of
-    #edis_item{value = Value} ->
-      {reply, {ok, erlang:size(Value)}, State};
-    not_found ->
-      {reply, {ok, 0}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    case get_item(State#state.db, string, Key) of
+      #edis_item{value = Value} -> {ok, erlang:size(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
 handle_call({del, Keys}, _From, State) ->
   DeleteActions =
       [{delete, Key} || Key <- Keys, exists_item(State#state.db, Key)],
-  case eleveldb:write(State#state.db, DeleteActions, []) of
-    ok ->
-      {reply, {ok, length(DeleteActions)}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    case eleveldb:write(State#state.db, DeleteActions, []) of
+      ok -> {ok, length(DeleteActions)};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Keys, State)};
 handle_call({exists, Key}, _From, State) ->
   Reply =
       case exists_item(State#state.db, Key) of
@@ -435,7 +425,7 @@ handle_call({exists, Key}, _From, State) ->
         false -> {ok, false};
         {error, Reason} -> {error, Reason}
       end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({expire_at, Key, Timestamp}, _From, State) ->
   Reply =
       case edis_util:now() of
@@ -464,72 +454,86 @@ handle_call({expire_at, Key, Timestamp}, _From, State) ->
               {error, Reason}
           end
       end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({keys, Pattern}, _From, State) ->
-  case re:compile(Pattern) of
-    {ok, Compiled} ->
-      Now = edis_util:now(),
-      Keys = eleveldb:fold(
-               State#state.db,
-               fun({Key, Bin}, Acc) ->
-                       case re:run(Key, Compiled) of
-                         nomatch ->
-                           Acc;
-                         _ ->
-                           case erlang:binary_to_term(Bin) of
-                             #edis_item{expire = Expire} when Expire >= Now ->
-                               [Key | Acc];
-                             _ ->
-                               Acc
-                           end
-                       end
-               end, [], [{fill_cache, false}]),
-      {reply, {ok, lists:reverse(Keys)}, State};
-    {error, {Reason, _Line}} when is_list(Reason) ->
-      {reply, {error, "Invalid pattern: " ++ Reason}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    case re:compile(Pattern) of
+      {ok, Compiled} ->
+        Now = edis_util:now(),
+        Keys = eleveldb:fold(
+                 State#state.db,
+                 fun({Key, Bin}, Acc) ->
+                         case re:run(Key, Compiled) of
+                           nomatch ->
+                             Acc;
+                           _ ->
+                             case erlang:binary_to_term(Bin) of
+                               #edis_item{expire = Expire} when Expire >= Now ->
+                                 [Key | Acc];
+                               _ ->
+                                 Acc
+                             end
+                         end
+                 end, [], [{fill_cache, false}]),
+        {ok, lists:reverse(Keys)};
+      {error, {Reason, _Line}} when is_list(Reason) ->
+        {error, "Invalid pattern: " ++ Reason};
+      {error, Reason} ->
+        {error, Reason}
+    end,
+  {reply, Reply, State};
 handle_call({move, Key, NewDb}, _From, State) ->
-  case get_item(State#state.db, string, Key) of
-    not_found ->
-      {reply, {ok, false}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State};
-    Item ->
-      try make_call(NewDb, {recv, Item}) of
-        ok ->
-          case eleveldb:delete(State#state.db, Key, []) of
-            ok ->
-              {reply, {ok, true}, State};
-            {error, Reason} ->
-              _ = make_call(NewDb, {del, [Key]}),
-              {reply, {error, Reason}, State}
-          end
-      catch
-        _:found ->
-          {reply, {ok, false}, State};
-        _:{error, Reason} ->
-          {reply, {error, Reason}, State}
-      end
-  end;
+  Reply =
+    case get_item(State#state.db, string, Key) of
+      not_found ->
+        {ok, false};
+      {error, Reason} ->
+        {error, Reason};
+      Item ->
+        try make_call(NewDb, {recv, Item}) of
+          ok ->
+            case eleveldb:delete(State#state.db, Key, []) of
+              ok ->
+                {ok, true};
+              {error, Reason} ->
+                _ = make_call(NewDb, {del, [Key]}),
+                {error, Reason}
+            end
+        catch
+          _:found -> {ok, false};
+          _:{error, Reason} -> {error, Reason}
+        end
+    end,
+  {reply, Reply, stamp(Key, State)};
 handle_call({recv, Item}, _From, State) ->
-  case exists_item(State#state.db, Item#edis_item.key) of
-    true ->
-      {reply, {error, found}, State};
-    false ->
-      Reply = eleveldb:put(State#state.db, Item#edis_item.key, erlang:term_to_binary(Item), []),
-      {reply, Reply, State}
-  end;
+  Reply =
+    case exists_item(State#state.db, Item#edis_item.key) of
+      true -> {error, found};
+      false -> eleveldb:put(State#state.db, Item#edis_item.key, erlang:term_to_binary(Item), [])
+    end,
+  {reply, Reply, stamp(Item#edis_item.key, State)};
 handle_call({encoding, Key}, _From, State) ->
-  case get_item(State#state.db, any, Key) of
-    #edis_item{encoding = Encoding} ->
-      {reply, {ok, Encoding}, State};
-    not_found ->
-      {reply, {ok, undefined}, State};
-    {error, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
+  Reply =
+    case get_item(State#state.db, any, Key) of
+      #edis_item{encoding = Encoding} -> {ok, Encoding};
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, State};
+handle_call({idle_time, Key}, _From, State) ->
+  Reply =
+    case exists_item(State#state.db, Key) of
+      true ->
+        Offset =
+          case dict:find(Key, State#state.accesses) of
+            {ok, O} -> O;
+            error -> 0
+          end,
+        {ok, edis_util:now() - Offset - State#state.start_time};
+      false -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -552,6 +556,15 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% =================================================================================================
 %% Private functions
 %% =================================================================================================
+%% @private
+stamp([], State) -> State;
+stamp([Key|Keys], State) ->
+  stamp(Keys, stamp(Key, State));
+stamp(Key, State) ->
+  State#state{accesses =
+                dict:store(Key, edis_util:now() -
+                             State#state.start_time, State#state.accesses)}.
+
 %% @private
 exists_item(Db, Key) ->
   case eleveldb:get(Db, Key, []) of
