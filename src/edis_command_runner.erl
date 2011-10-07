@@ -357,6 +357,10 @@ run_command(<<"OBJECT IDLETIME">>, [Key], State) ->
   tcp_number(edis_db:idle_time(State#state.db, Key), State);
 run_command(<<"OBJECT", _Rest/binary>>, _, State) ->
   tcp_err("Syntax error. Try OBJECT (refcount|encoding|idletime)", State);
+run_command(<<"PERSIST">>, [Key], State) ->
+  tcp_boolean(edis_db:persist(State#state.db, Key), State);
+run_command(<<"PERSIST">>, _, State) ->
+  tcp_err("wrong number of arguments for 'PERSIST' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

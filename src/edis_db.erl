@@ -37,7 +37,7 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2]).
+-export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2]).
 
 %% =================================================================================================
 %% External functions
@@ -176,6 +176,10 @@ encoding(Db, Key) ->
 -spec idle_time(atom(), binary()) -> undefined | non_neg_integer().
 idle_time(Db, Key) ->
   make_call(Db, {idle_time, Key}).
+
+-spec persist(atom(), binary()) -> boolean().
+persist(Db, Key) ->
+  make_call(Db, {persist, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -534,6 +538,20 @@ handle_call({idle_time, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, State};
+handle_call({persist, Key}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, any,
+                fun(Item) ->
+                        {ok, Item#edis_item{expire = infinity}}
+                end) of
+      {ok, ok} ->
+        {ok, true};
+      {error, not_found} ->
+        {ok, false};
+      {error, Reason} ->
+        {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
