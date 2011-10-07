@@ -6,6 +6,7 @@
                        args = []    :: [term()]}).
 
 -record(edis_item, {key               :: binary(),
+                    type              :: edis_db:item_type(),
+                    encoding          :: edis_db:item_encoding(),
                     value             :: term(),
-                    type              :: string | hash | list | set | zset,
                     expire = infinity :: infinity | pos_integer()}).

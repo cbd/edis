@@ -19,8 +19,9 @@
 -define(DEFAULT_TIMEOUT, 5000).
 -define(ACCESS_DUMP_INTERVAL, 10000).
 
--type encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
--export_type([encoding/0]).
+-type item_type() :: string | hash | list | set | zset.
+-type item_encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
+-export_type([item_encoding/0, item_type/0]).
 
 -record(state, {index               :: non_neg_integer(),
                 db                  :: eleveldb:db_ref(),
@@ -167,7 +168,7 @@ keys(Db, Pattern) ->
 move(Db, Key, NewDb) ->
   make_call(Db, {move, Key, NewDb}).
 
--spec encoding(atom(), binary()) -> undefined | encoding().
+-spec encoding(atom(), binary()) -> undefined | item_encoding().
 encoding(Db, Key) ->
   make_call(Db, {encoding, Key}).
 
@@ -233,7 +234,7 @@ handle_call(size, _From, State) ->
   {reply, {ok, Size}, State};
 handle_call({append, Key, Value}, _From, State) ->
   Reply =
-    update(State#state.db, Key, string,
+    update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
                    NewV = <<OldV/binary, Value/binary>>,
                    {erlang:size(NewV), Item#edis_item{value = NewV}}
@@ -241,7 +242,7 @@ handle_call({append, Key, Value}, _From, State) ->
   {reply, Reply, State};
 handle_call({decr, Key, Decrement}, _From, State) ->
   Reply =
-    update(State#state.db, Key, string,
+    update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
                    try edis_util:binary_to_integer(OldV) of
                      OldInt ->
@@ -318,14 +319,14 @@ handle_call({get_range, Key, Start, End}, _From, State) ->
   end;
 handle_call({get_and_set, Key, Value}, _From, State) ->
   Reply =
-    update(State#state.db, Key, string,
+    update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
                    {OldV, Item#edis_item{value = Value}}
            end, undefined),
   {reply, Reply, State};
 handle_call({incr, Key, Increment}, _From, State) ->
   Reply =
-    update(State#state.db, Key, string,
+    update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
                    try edis_util:binary_to_integer(OldV) of
                      OldInt ->
@@ -342,7 +343,8 @@ handle_call({set, KVs}, _From, State) ->
     eleveldb:write(State#state.db,
                    [{put, Key,
                      erlang:term_to_binary(
-                       #edis_item{key = Key, type = string, value = Value})} || {Key, Value} <- KVs],
+                       #edis_item{key = Key, encoding = raw,
+                                  type = string, value = Value})} || {Key, Value} <- KVs],
                     []),
   {reply, Reply, State};
 handle_call({set_nx, KVs}, _From, State) ->
@@ -357,13 +359,14 @@ handle_call({set_nx, KVs}, _From, State) ->
         eleveldb:write(State#state.db,
                        [{put, Key,
                          erlang:term_to_binary(
-                           #edis_item{key = Key, type = string, value = Value})} || {Key, Value} <- KVs],
+                           #edis_item{key = Key, encoding = raw,
+                                      type = string, value = Value})} || {Key, Value} <- KVs],
                        []),
       {reply, Reply, State}
   end;
 handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
   Reply =
-    update(State#state.db, Key, string,
+    update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = <<Prefix:Offset/unit:1, OldBit:1/unit:1, _Rest/bitstring>>}) ->
                    {OldBit,
                     Item#edis_item{value = <<Prefix:Offset/unit:1, Bit:1/unit:1, _Rest/bitstring>>}};
@@ -383,7 +386,7 @@ handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
     eleveldb:put(
       State#state.db, Key,
       erlang:term_to_binary(
-        #edis_item{key = Key, type = string,
+        #edis_item{key = Key, type = string, encoding = raw,
                    expire = edis_util:now() + Seconds,
                    value = Value}), []),
   {reply, Reply, State};
@@ -393,7 +396,7 @@ handle_call({set_range, Key, Offset, Value}, _From, State) ->
       {reply, {ok, 0}, State}; %% Copying redis behaviour even when documentation said different
     Length ->
       Reply =
-        update(State#state.db, Key, string,
+        update(State#state.db, Key, string, raw,
                fun(Item = #edis_item{value = <<Prefix:Offset/binary, _:Length/binary, Suffix/binary>>}) ->
                        NewV = <<Prefix/binary, Value/binary, Suffix/binary>>,
                        {erlang:size(NewV), Item#edis_item{value = NewV}};
@@ -518,6 +521,15 @@ handle_call({recv, Item}, _From, State) ->
       Reply = eleveldb:put(State#state.db, Item#edis_item.key, erlang:term_to_binary(Item), []),
       {reply, Reply, State}
   end;
+handle_call({encoding, Key}, _From, State) ->
+  case get_item(State#state.db, any, Key) of
+    #edis_item{encoding = Encoding} ->
+      {reply, {ok, Encoding}, State};
+    not_found ->
+      {reply, {ok, undefined}, State};
+    {error, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -593,12 +605,12 @@ update(Db, Key, Type, Fun) ->
   end.
 
 %% @private
-update(Db, Key, Type, Fun, Default) ->
+update(Db, Key, Type, Encoding, Fun, Default) ->
   try
     {Res, NewItem} =
       case get_item(Db, Type, Key) of
         not_found ->
-          Fun(#edis_item{key = Key, type = Type, value = Default});
+          Fun(#edis_item{key = Key, type = Type, encoding = Encoding, value = Default});
         {error, Reason} ->
           throw(Reason);
         Item ->
