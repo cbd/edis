@@ -361,6 +361,10 @@ run_command(<<"PERSIST">>, [Key], State) ->
   tcp_boolean(edis_db:persist(State#state.db, Key), State);
 run_command(<<"PERSIST">>, _, State) ->
   tcp_err("wrong number of arguments for 'PERSIST' command", State);
+run_command(<<"RANDOMKEY">>, [], State) ->
+  tcp_bulk(edis_db:random_key(State#state.db), State);
+run_command(<<"RANDOMKEY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RANDOMKEY' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

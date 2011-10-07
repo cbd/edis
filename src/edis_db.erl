@@ -17,6 +17,7 @@
 
 -include("edis.hrl").
 -define(DEFAULT_TIMEOUT, 5000).
+-define(RANDOM_THRESHOLD, 500).
 
 -type item_type() :: string | hash | list | set | zset.
 -type item_encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
@@ -37,7 +38,8 @@
 -export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2]).
+-export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
+         random_key/1]).
 
 %% =================================================================================================
 %% External functions
@@ -181,12 +183,17 @@ idle_time(Db, Key) ->
 persist(Db, Key) ->
   make_call(Db, {persist, Key}).
 
+-spec random_key(atom()) -> undefined | binary().
+random_key(Db) ->
+  make_call(Db, random_key).
+
 %% =================================================================================================
 %% Server functions
 %% =================================================================================================
 %% @hidden
 -spec init(non_neg_integer()) -> {ok, state()} | {stop, any()}.
 init(Index) ->
+  _ = random:seed(erlang:now()),
   case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
     {ok, Ref} ->
       {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp(),
@@ -552,6 +559,17 @@ handle_call({persist, Key}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call(random_key, _From, State) ->
+  Reply =
+    case eleveldb:is_empty(State#state.db) of
+      true -> undefined;
+      false ->
+        %%TODO: Make it really random... not just on the first xx tops
+        %%      BUT we need to keep it O(1)
+        RandomIndex = random:uniform(?RANDOM_THRESHOLD),
+        key_at(State#state.db, RandomIndex)
+    end,
+  {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -654,6 +672,42 @@ update(Db, Key, Type, Encoding, Fun, Default) ->
   catch
     _:Error ->
       {error, Error}
+  end.
+
+%% @private
+key_at(Db, 0) ->
+  try
+    Now = edis_util:now(),
+    eleveldb:fold(
+      Db, fun({_Key, Bin}, Acc) ->
+                  case erlang:binary_to_term(Bin) of
+                    #edis_item{key = Key, expire = Expire} when Expire >= Now ->
+                      throw({ok, Key});
+                    _ ->
+                      Acc
+                  end
+      end, {ok, undefined}, [{fill_cache, false}])
+  catch
+    _:{ok, Key} -> {ok, Key}
+  end;
+key_at(Db, Index) when Index > 0 ->
+  try
+    Now = edis_util:now(),
+    NextIndex =
+      eleveldb:fold(
+        Db, fun({_Key, Bin}, 0) ->
+                    case erlang:binary_to_term(Bin) of
+                      #edis_item{key = Key, expire = Expire} when Expire >= Now ->
+                        throw({ok, Key});
+                      _ ->
+                        0
+                    end;
+               (_, AccIndex) ->
+                    AccIndex - 1
+        end, Index, [{fill_cache, false}]),
+    key_at(Db, NextIndex)
+  catch
+    _:{ok, Key} -> {ok, Key}
   end.
 
 %% @private
