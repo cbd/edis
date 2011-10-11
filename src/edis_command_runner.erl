@@ -77,6 +77,9 @@ handle_cast({err, Message}, State) ->
 handle_cast({run, Cmd, Args}, State) ->
   try run_command(Cmd, Args, State)
   catch
+    _:not_integer ->
+      ?ERROR("The value affected by ~s was not a integer on db #~p~n", [Cmd, State#state.db]),
+      tcp_err("value is not an integer or out of range", State);
     _:bad_item_type ->
       ?ERROR("Bad type running ~s on db #~p~n", [Cmd, State#state.db]),
       tcp_err("Operation against a key holding the wrong kind of value", State);

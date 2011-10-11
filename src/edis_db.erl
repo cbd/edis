@@ -278,7 +278,7 @@ handle_call({decr, Key, Decrement}, _From, State) ->
                        {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
                    catch
                      _:badarg ->
-                       throw(bad_item_type)
+                       throw(not_integer)
                    end
            end, <<"0">>),
   {reply, Reply, stamp(Key, State)};
@@ -353,7 +353,7 @@ handle_call({incr, Key, Increment}, _From, State) ->
                        {Res, Item#edis_item{value = edis_util:integer_to_binary(Res)}}
                    catch
                      _:badarg ->
-                       throw(bad_item_type)
+                       throw(not_integer)
                    end
            end, <<"0">>),
   {reply, Reply, stamp(Key, State)};
