@@ -40,6 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
+-export([hset/3, hset/4]).
 
 %% =================================================================================================
 %% External functions
@@ -202,6 +203,14 @@ ttl(Db, Key) ->
 -spec type(atom(), binary()) -> item_type().
 type(Db, Key) ->
   make_call(Db, {type, Key}).
+
+-spec hset(atom(), binary(), binary()) -> inserted | updated.
+hset(Db, Key, FVs) ->
+  make_call(Db, {hset, Key, FVs}).
+
+-spec hset(atom(), binary(), binary(), binary()) -> inserted | updated.
+hset(Db, Key, Field, Value) ->
+  hset(Db, Key, [{Field, Value}]).
 
 %% =================================================================================================
 %% Server functions
@@ -640,6 +649,26 @@ handle_call({type, Key}, _From, State) ->
       Item ->
         {ok, Item#edis_item.type}
     end,
+  {reply, Reply, State};
+handle_call({hset, Key, FVs}, _From, State) ->
+  Reply =
+    update(
+      State#state.db, Key, hash, hashtable,
+      fun(Item) ->
+              lists:foldl(
+                fun({Field, Value}, {AccStatus, AccItem}) ->
+                        case dict:is_key(Field, Item#edis_item.value) of
+                          true ->
+                            {AccStatus,
+                             Item#edis_item{value =
+                                              dict:store(Field, Value, AccItem#edis_item.value)}};
+                          false ->
+                            {inserted,
+                             Item#edis_item{value =
+                                              dict:store(Field, Value, AccItem#edis_item.value)}}
+                        end
+                end, {updated, Item}, FVs)
+      end, dict:new()),
   {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

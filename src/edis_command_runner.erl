@@ -412,6 +412,22 @@ run_command(<<"TYPE">>, [Key], State) ->
 run_command(<<"TYPE">>, _, State) ->
   tcp_err("wrong number of arguments for 'TYPE' command", State);
 
+%% -- Hashes ---------------------------------------------------------------------------------------
+run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
+  _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
+  tcp_ok(State);
+run_command(<<"HMSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HMSET' command", State);
+run_command(<<"HSET">>, [Key, Field, Value], State) ->
+  case edis_db:hset(State#state.db, Key, Field, Value) of
+    inserted ->
+      tcp_number(1, State);
+    updated ->
+      tcp_number(0, State)
+  end;
+run_command(<<"HSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HSET' command", State);
+
 
 
 %% -- Server ---------------------------------------------------------------------------------------
