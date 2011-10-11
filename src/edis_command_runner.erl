@@ -433,6 +433,15 @@ run_command(<<"HEXISTS">>, [Key, Field], State) ->
   end;
 run_command(<<"HEXISTS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HEXISTS' command", State);
+run_command(<<"HGET">>, [Key, Field], State) ->
+  try edis_db:hget(State#state.db, Key, Field) of
+    Value -> tcp_bulk(Value, State)
+  catch
+    _:not_found ->
+      tcp_bulk(undefined, State)
+  end;
+run_command(<<"HGET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HGET' command", State);
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);
