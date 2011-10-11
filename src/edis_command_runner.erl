@@ -418,40 +418,31 @@ run_command(<<"HDEL">>, [], State) ->
 run_command(<<"HDEL">>, [_Key], State) ->
   tcp_err("wrong number of arguments for 'HDEL' command", State);
 run_command(<<"HDEL">>, [Key | Fields], State) ->
-  try edis_db:hdel(State#state.db, Key, Fields) of
-    Deleted -> tcp_number(Deleted, State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
+  tcp_number(edis_db:hdel(State#state.db, Key, Fields), State);
 run_command(<<"HEXISTS">>, [Key, Field], State) ->
-  try edis_db:hexists(State#state.db, Key, Field) of
-    Exists -> tcp_boolean(Exists, State)
-  catch
-    _:not_found ->
-      tcp_boolean(false, State)
-  end;
+  tcp_boolean(edis_db:hexists(State#state.db, Key, Field), State);
 run_command(<<"HEXISTS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HEXISTS' command", State);
 run_command(<<"HGET">>, [Key, Field], State) ->
-  try edis_db:hget(State#state.db, Key, Field) of
-    Value -> tcp_bulk(Value, State)
-  catch
-    _:not_found ->
-      tcp_bulk(undefined, State)
-  end;
+  tcp_bulk(edis_db:hget(State#state.db, Key, Field), State);
 run_command(<<"HGET">>, _, State) ->
   tcp_err("wrong number of arguments for 'HGET' command", State);
 run_command(<<"HGETALL">>, [Key], State) ->
-  try edis_db:hget_all(State#state.db, Key) of
-    FVs ->
-      tcp_multi_bulk(lists:flatmap(fun tuple_to_list/1, FVs), State)
-  catch
-    _:not_found ->
-      tcp_multi_bulk([], State)
-  end;
+  tcp_multi_bulk(lists:flatmap(fun tuple_to_list/1, edis_db:hget_all(State#state.db, Key)), State);
 run_command(<<"HGETALL">>, _, State) ->
   tcp_err("wrong number of arguments for 'HGET' command", State);
+run_command(<<"HINCRBY">>, [Key, Field, Increment], State) ->
+  try 
+    tcp_number(edis_db:hincr(State#state.db, Key, Field,
+                             edis_util:binary_to_integer(Increment)), State)
+  catch
+    _:not_integer ->
+      tcp_err("hash value is not an integer", State);
+    _:badarg ->
+      throw(not_integer)
+  end;
+run_command(<<"HINCRBY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HINCRBY' command", State);
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);

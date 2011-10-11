@@ -40,7 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
--export([hdel/3, hexists/3, hget/3, hget_all/2, hset/3, hset/4]).
+-export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hset/3, hset/4]).
 
 %% =================================================================================================
 %% External functions
@@ -227,6 +227,10 @@ hset(Db, Key, FVs) ->
 -spec hset(atom(), binary(), binary(), binary()) -> inserted | updated.
 hset(Db, Key, Field, Value) ->
   hset(Db, Key, [{Field, Value}]).
+
+-spec hincr(atom(), binary(), binary(), integer()) -> inserted | updated.
+hincr(Db, Key, Field, Increment) ->
+  make_call(Db, {hincr, Key, Field, Increment}).
 
 %% =================================================================================================
 %% Server functions
@@ -666,6 +670,80 @@ handle_call({type, Key}, _From, State) ->
         {ok, Item#edis_item.type}
     end,
   {reply, Reply, State};
+handle_call({hdel, Key, Fields}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, hash,
+                fun(Item) ->
+                        NewDict = lists:foldl(fun dict:erase/2, Item#edis_item.value, Fields),
+                        {{dict:size(Item#edis_item.value) - dict:size(NewDict),
+                          dict:size(NewDict)},
+                         Item#edis_item{value = NewDict}}
+                end) of
+      {ok, {Deleted, 0}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Deleted};
+      {ok, {Deleted, _}} ->
+        {ok, Deleted};
+      {error, not_found} ->
+        {ok, 0};
+      {error, Reason} ->
+        {error, Reason}
+    end,
+  {reply, Reply, State};
+handle_call({hexists, Key, Field}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, false};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hget, Key, Field}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, case dict:find(Field, Item#edis_item.value) of
+                     {ok, Value} -> Value;
+                     error -> undefined
+                   end}
+    end,
+  {reply, Reply, State};
+handle_call({hget_all, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:to_list(Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hincr, Key, Field, Increment}, _From, State) ->
+  Reply =
+    update(
+      State#state.db, Key, hash, hashtable,
+      fun(Item) ->
+              case dict:find(Field, Item#edis_item.value) of
+                error ->
+                  {Increment,
+                   Item#edis_item{value =
+                                    dict:store(Field,
+                                               edis_util:integer_to_binary(Increment),
+                                               Item#edis_item.value)}};
+                {ok, OldValue} ->
+                  try edis_util:binary_to_integer(OldValue) of
+                    OldInt ->
+                      {OldInt + Increment,
+                       Item#edis_item{value =
+                                        dict:store(Field,
+                                                   edis_util:integer_to_binary(OldInt + Increment),
+                                                   Item#edis_item.value)}}
+                  catch
+                    _:badarg ->
+                      throw(not_integer)
+                  end
+              end
+      end, dict:new()),
+  {reply, Reply, State};
 handle_call({hset, Key, FVs}, _From, State) ->
   Reply =
     update(
@@ -685,51 +763,6 @@ handle_call({hset, Key, FVs}, _From, State) ->
                         end
                 end, {updated, Item}, FVs)
       end, dict:new()),
-  {reply, Reply, State};
-handle_call({hdel, Key, Fields}, _From, State) ->
-  Reply =
-    case update(State#state.db, Key, hash,
-                fun(Item) ->
-                        NewDict = lists:foldl(fun dict:erase/2, Item#edis_item.value, Fields),
-                        {{dict:size(Item#edis_item.value) - dict:size(NewDict),
-                          dict:size(NewDict)},
-                         Item#edis_item{value = NewDict}}
-                end) of
-      {ok, {Deleted, 0}} ->
-        _ = eleveldb:delete(State#state.db, Key, []),
-        {ok, Deleted};
-      {ok, {Deleted, _}} ->
-        {ok, Deleted};
-      {error, Reason} ->
-        {error, Reason}
-    end,
-  {reply, Reply, State};
-handle_call({hexists, Key, Field}, _From, State) ->
-  Reply =
-    case get_item(State#state.db, hash, Key) of
-      not_found -> {error, not_found};
-      {error, Reason} -> {error, Reason};
-      Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
-    end,
-  {reply, Reply, State};
-handle_call({hget, Key, Field}, _From, State) ->
-  Reply =
-    case get_item(State#state.db, hash, Key) of
-      not_found -> {error, not_found};
-      {error, Reason} -> {error, Reason};
-      Item -> {ok, case dict:find(Field, Item#edis_item.value) of
-                     {ok, Value} -> Value;
-                     error -> undefined
-                   end}
-    end,
-  {reply, Reply, State};
-handle_call({hget_all, Key}, _From, State) ->
-  Reply =
-    case get_item(State#state.db, hash, Key) of
-      not_found -> {error, not_found};
-      {error, Reason} -> {error, Reason};
-      Item -> {ok, dict:to_list(Item#edis_item.value)}
-    end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
