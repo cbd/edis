@@ -39,7 +39,7 @@
 -export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
-         random_key/1, rename/3, rename_nx/3]).
+         random_key/1, rename/3, rename_nx/3, ttl/2]).
 
 %% =================================================================================================
 %% External functions
@@ -194,6 +194,10 @@ rename(Db, Key, NewKey) ->
 -spec rename_nx(atom(), binary(), binary()) -> ok.
 rename_nx(Db, Key, NewKey) ->
   make_call(Db, {rename_nx, Key, NewKey}).
+
+-spec ttl(atom(), binary()) -> undefined | pos_integer().
+ttl(Db, Key) ->
+  make_call(Db, {ttl, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -611,6 +615,17 @@ handle_call({rename_nx, Key, NewKey}, _From, State) ->
                              erlang:term_to_binary(Item#edis_item{key = NewKey})}],
                            [])
         end
+    end,
+  {reply, Reply, State};
+handle_call({ttl, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, any, Key) of
+      not_found ->
+        {error, not_found};
+      #edis_item{expire = infinity} ->
+        {ok, undefined};
+      Item ->
+        {ok, Item#edis_item.expire - edis_util:now()}
     end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->

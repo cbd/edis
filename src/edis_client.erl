@@ -95,7 +95,7 @@ command_start({data, <<"*", N/binary>>}, State) -> %% Unified Request Protocol
   {next_state, arg_size, State#state{missing_args = NArgs, command_name = undefined, args = []}};
 command_start({data, OldCmd}, State) ->
   [Command|Args] = binary:split(OldCmd, [<<" ">>, <<"\r\n">>], [global,trim]),
-  ?DEBUG("Old protocol command - ~p args~n",[Command, length(Args)]),
+  ?DEBUG("Old protocol command ~p (~p args)~n",[Command, length(Args)]),
   case edis_command_runner:last_arg(edis_util:upper(Command)) of
     inlined ->
       ok = edis_command_runner:run(State#state.command_runner, edis_util:upper(Command), Args),

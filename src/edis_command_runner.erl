@@ -389,6 +389,18 @@ run_command(<<"RENAMENX">>, [Key, NewKey], State) ->
   end;
 run_command(<<"RENAMENX">>, _, State) ->
   tcp_err("wrong number of arguments for 'RENAME' command", State);
+run_command(<<"TTL">>, [Key], State) ->
+  try edis_db:ttl(State#state.db, Key) of
+    undefined -> tcp_number(-1, State);
+    Secs -> tcp_number(Secs, State)
+  catch
+    _:not_found ->
+      tcp_number(-1, State)
+  end;
+run_command(<<"TTL">>, _, State) ->
+  tcp_err("wrong number of arguments for 'TTL' command", State);
+
+
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
