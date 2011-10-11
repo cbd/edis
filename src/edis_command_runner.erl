@@ -365,6 +365,17 @@ run_command(<<"RANDOMKEY">>, [], State) ->
   tcp_bulk(edis_db:random_key(State#state.db), State);
 run_command(<<"RANDOMKEY">>, _, State) ->
   tcp_err("wrong number of arguments for 'RANDOMKEY' command", State);
+run_command(<<"RENAME">>, [Key, Key], State) ->
+  tcp_err("source and destination objects are the same", State);
+run_command(<<"RENAME">>, [Key, NewKey], State) ->
+  try edis_db:rename(State#state.db, Key, NewKey) of
+    ok -> tcp_ok(State)
+  catch
+    _:not_found ->
+      tcp_err("no such key", State)
+  end;
+run_command(<<"RENAME">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RENAME' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
