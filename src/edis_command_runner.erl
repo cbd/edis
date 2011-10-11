@@ -413,6 +413,17 @@ run_command(<<"TYPE">>, _, State) ->
   tcp_err("wrong number of arguments for 'TYPE' command", State);
 
 %% -- Hashes ---------------------------------------------------------------------------------------
+run_command(<<"HDEL">>, [], State) ->
+  tcp_err("wrong number of arguments for 'HDEL' command", State);
+run_command(<<"HDEL">>, [_Key], State) ->
+  tcp_err("wrong number of arguments for 'HDEL' command", State);
+run_command(<<"HDEL">>, [Key | Fields], State) ->
+  try edis_db:hdel(State#state.db, Key, Fields) of
+    Deleted -> tcp_number(Deleted, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);

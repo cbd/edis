@@ -40,7 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
--export([hset/3, hset/4]).
+-export([hdel/3, hset/3, hset/4]).
 
 %% =================================================================================================
 %% External functions
@@ -203,6 +203,10 @@ ttl(Db, Key) ->
 -spec type(atom(), binary()) -> item_type().
 type(Db, Key) ->
   make_call(Db, {type, Key}).
+
+-spec hdel(atom(), binary(), [binary()]) -> non_neg_integer().
+hdel(Db, Key, Fields) ->
+  make_call(Db, {hdel, Key, Fields}).
 
 -spec hset(atom(), binary(), binary()) -> inserted | updated.
 hset(Db, Key, FVs) ->
@@ -669,6 +673,24 @@ handle_call({hset, Key, FVs}, _From, State) ->
                         end
                 end, {updated, Item}, FVs)
       end, dict:new()),
+  {reply, Reply, State};
+handle_call({hdel, Key, Fields}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, hash,
+                fun(Item) ->
+                        NewDict = lists:foldl(fun dict:erase/2, Item#edis_item.value, Fields),
+                        {{dict:size(Item#edis_item.value) - dict:size(NewDict),
+                          dict:size(NewDict)},
+                         Item#edis_item{value = NewDict}}
+                end) of
+      {ok, {Deleted, 0}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Deleted};
+      {ok, {Deleted, _}} ->
+        {ok, Deleted};
+      {error, Reason} ->
+        {error, Reason}
+    end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
