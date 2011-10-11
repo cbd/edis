@@ -77,6 +77,9 @@ handle_cast({err, Message}, State) ->
 handle_cast({run, Cmd, Args}, State) ->
   try run_command(Cmd, Args, State)
   catch
+    _:not_integer ->
+      ?ERROR("The value affected by ~s was not a integer on db #~p~n", [Cmd, State#state.db]),
+      tcp_err("value is not an integer or out of range", State);
     _:bad_item_type ->
       ?ERROR("Bad type running ~s on db #~p~n", [Cmd, State#state.db]),
       tcp_err("Operation against a key holding the wrong kind of value", State);
@@ -220,10 +223,10 @@ run_command(<<"MSET">>, _, State) ->
   tcp_err("wrong number of arguments for 'MSET' command", State);
 run_command(<<"MSETNX">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
   try edis_db:set_nx(State#state.db, edis_util:make_pairs(KVs)) of
-    ok -> tcp_number(1, State)
+    ok -> tcp_boolean(true, State)
   catch
     _:already_exists ->
-      tcp_number(0, State)
+      tcp_boolean(false, State)
   end;
 run_command(<<"MSETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'MSETNX' command", State);
@@ -263,10 +266,10 @@ run_command(<<"SETEX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETEX' command", State);
 run_command(<<"SETNX">>, [Key, Value], State) ->
   try edis_db:set_nx(State#state.db, Key, Value) of
-    ok -> tcp_number(1, State)
+    ok -> tcp_boolean(true, State)
   catch
     _:already_exists ->
-      tcp_number(0, State)
+      tcp_boolean(false, State)
   end;
 run_command(<<"SETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETNX' command", State);
@@ -365,6 +368,51 @@ run_command(<<"RANDOMKEY">>, [], State) ->
   tcp_bulk(edis_db:random_key(State#state.db), State);
 run_command(<<"RANDOMKEY">>, _, State) ->
   tcp_err("wrong number of arguments for 'RANDOMKEY' command", State);
+run_command(<<"RENAME">>, [Key, Key], State) ->
+  tcp_err("source and destination objects are the same", State);
+run_command(<<"RENAME">>, [Key, NewKey], State) ->
+  try edis_db:rename(State#state.db, Key, NewKey) of
+    ok -> tcp_ok(State)
+  catch
+    _:not_found ->
+      tcp_err("no such key", State)
+  end;
+run_command(<<"RENAME">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RENAME' command", State);
+run_command(<<"RENAMENX">>, [Key, Key], State) ->
+  tcp_err("source and destination objects are the same", State);
+run_command(<<"RENAMENX">>, [Key, NewKey], State) ->
+  try edis_db:rename_nx(State#state.db, Key, NewKey) of
+      ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State);
+    _:not_found ->
+      tcp_err("no such key", State)
+  end;
+run_command(<<"RENAMENX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RENAME' command", State);
+run_command(<<"TTL">>, [Key], State) ->
+  try edis_db:ttl(State#state.db, Key) of
+    undefined -> tcp_number(-1, State);
+    Secs -> tcp_number(Secs, State)
+  catch
+    _:not_found ->
+      tcp_number(-1, State)
+  end;
+run_command(<<"TTL">>, _, State) ->
+  tcp_err("wrong number of arguments for 'TTL' command", State);
+run_command(<<"TYPE">>, [Key], State) ->
+  try edis_db:type(State#state.db, Key) of
+    Type -> tcp_ok(atom_to_binary(Type, utf8), State)
+  catch
+    _:not_found ->
+      tcp_ok(<<"none">>, State)
+  end;
+run_command(<<"TYPE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'TYPE' command", State);
+
+
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

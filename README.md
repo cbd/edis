@@ -14,4 +14,4 @@ Just run `$ make run` and open connections with your favourite redis client.
 * _OBJECT REFCOUNT_ allways returns 1 for existing keys and (nil) otherwise
 
 ### Unsupported Commands
-_SYNC_, _SLOWLOG_, _SLAVEOF_, _DEBUG *_
+_SYNC_, _SLOWLOG_, _SLAVEOF_, _DEBUG *_, _SORT_ (yet)
