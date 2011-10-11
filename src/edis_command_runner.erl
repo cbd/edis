@@ -424,11 +424,20 @@ run_command(<<"HDEL">>, [Key | Fields], State) ->
     _:not_found ->
       tcp_number(0, State)
   end;
+run_command(<<"HEXISTS">>, [Key, Field], State) ->
+  try edis_db:hexists(State#state.db, Key, Field) of
+    Exists -> tcp_boolean(Exists, State)
+  catch
+    _:not_found ->
+      tcp_boolean(false, State)
+  end;
+run_command(<<"HEXISTS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HEXISTS' command", State);
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);
 run_command(<<"HMSET">>, _, State) ->
-  tcp_err("wrong number of arguments for 'HMSET' command", State);
+  tcp_err("wrong number of arguments for HMSET", State);
 run_command(<<"HSET">>, [Key, Field, Value], State) ->
   case edis_db:hset(State#state.db, Key, Field, Value) of
     inserted ->

@@ -40,7 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
--export([hdel/3, hset/3, hset/4]).
+-export([hdel/3, hexists/3, hset/3, hset/4]).
 
 %% =================================================================================================
 %% External functions
@@ -207,6 +207,10 @@ type(Db, Key) ->
 -spec hdel(atom(), binary(), [binary()]) -> non_neg_integer().
 hdel(Db, Key, Fields) ->
   make_call(Db, {hdel, Key, Fields}).
+
+-spec hexists(atom(), binary(), binary()) -> boolean().
+hexists(Db, Key, Field) ->
+  make_call(Db, {hexists, Key, Field}).
 
 -spec hset(atom(), binary(), binary()) -> inserted | updated.
 hset(Db, Key, FVs) ->
@@ -690,6 +694,14 @@ handle_call({hdel, Key, Fields}, _From, State) ->
         {ok, Deleted};
       {error, Reason} ->
         {error, Reason}
+    end,
+  {reply, Reply, State};
+handle_call({hexists, Key, Field}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {error, not_found};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
     end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->
