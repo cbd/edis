@@ -442,6 +442,16 @@ run_command(<<"HGET">>, [Key, Field], State) ->
   end;
 run_command(<<"HGET">>, _, State) ->
   tcp_err("wrong number of arguments for 'HGET' command", State);
+run_command(<<"HGETALL">>, [Key], State) ->
+  try edis_db:hget_all(State#state.db, Key) of
+    FVs ->
+      tcp_multi_bulk(lists:flatmap(fun tuple_to_list/1, FVs), State)
+  catch
+    _:not_found ->
+      tcp_multi_bulk([], State)
+  end;
+run_command(<<"HGETALL">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HGET' command", State);
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);
@@ -585,6 +595,7 @@ tcp_boolean(false, State) -> tcp_number(0, State).
 %% @private
 -spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_multi_bulk(Lines, State) ->
+  ?INFO("Lines:~n~p~n", [Lines]),
   lists:foldl(
     fun(Line, {noreply, AccState}) ->
             tcp_bulk(Line, AccState);
