@@ -399,6 +399,15 @@ run_command(<<"TTL">>, [Key], State) ->
   end;
 run_command(<<"TTL">>, _, State) ->
   tcp_err("wrong number of arguments for 'TTL' command", State);
+run_command(<<"TYPE">>, [Key], State) ->
+  try edis_db:type(State#state.db, Key) of
+    Type -> tcp_ok(atom_to_binary(Type, utf8), State)
+  catch
+    _:not_found ->
+      tcp_ok(<<"none">>, State)
+  end;
+run_command(<<"TYPE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'TYPE' command", State);
 
 
 
