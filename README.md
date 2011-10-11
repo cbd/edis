@@ -10,6 +10,8 @@ Just run `$ make run` and open connections with your favourite redis client.
 
 ### Missing Features
 * Dynamic node configuration (i.e. the _SLAVEOF_ command is not implemented)
+* Encoding optimization (i.e. all objects are encoded as binary representations of erlang terms, so for instance "123" will never be stored as an int)
+* _OBJECT REFCOUNT_ allways returns 1 for existing keys and (nil) otherwise
 
 ### Unsupported Commands
 _SYNC_, _SLOWLOG_, _SLAVEOF_, _DEBUG *_

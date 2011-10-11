@@ -136,15 +136,15 @@ run_command(<<"AUTH">>, _, State) ->
   tcp_err("wrong number of arguments for 'AUTH' command", State);
 run_command(_, _, State = #state{authenticated = false}) ->
   tcp_err("operation not permitted", State);
-run_command(<<"SELECT">>, [Index], State) ->
-  try {edis_util:binary_to_integer(Index), edis_config:get(databases)} of
-    {Db, Dbs} when Db < 0 orelse Db >= Dbs ->
+run_command(<<"SELECT">>, [Db], State) ->
+  try {edis_util:binary_to_integer(Db), edis_config:get(databases)} of
+    {DbIndex, Dbs} when DbIndex < 0 orelse DbIndex >= Dbs ->
       tcp_err("invalid DB index", State);
-    {Db, _} ->
-      tcp_ok(State#state{db = edis_db:process(Db)})
+    {DbIndex, _} ->
+      tcp_ok(State#state{db = edis_db:process(DbIndex)})
   catch
     error:badarg ->
-      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Index]),
+      ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
       tcp_ok(State#state{db = edis_db:process(0)})
   end;
 run_command(<<"SELECT">>, _, State) ->
@@ -213,15 +213,164 @@ run_command(<<"MGET">>, [], State) ->
   tcp_err("wrong number of arguments for 'MGET' command", State);
 run_command(<<"MGET">>, Keys, State) ->
   tcp_multi_bulk(edis_db:get(State#state.db, Keys), State);
+run_command(<<"MSET">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+  ok = edis_db:set(State#state.db, edis_util:make_pairs(KVs)),
+  tcp_ok(State);
+run_command(<<"MSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MSET' command", State);
+run_command(<<"MSETNX">>, KVs, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+  try edis_db:set_nx(State#state.db, edis_util:make_pairs(KVs)) of
+    ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State)
+  end;
+run_command(<<"MSETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MSETNX' command", State);
+run_command(<<"SET">>, [Key, Value], State) ->
+  ok = edis_db:set(State#state.db, Key, Value),
+  tcp_ok(State);
+run_command(<<"SET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SET' command", State);
+run_command(<<"SETBIT">>, [Key, Offset, Bit], State) ->
+  try {edis_util:binary_to_integer(Offset), Bit} of
+    {O, Bit} when O >= 0, Bit == <<"0">> ->
+      tcp_number(edis_db:set_bit(State#state.db, Key, O, 0), State);
+    {O, Bit} when O >= 0, Bit == <<"1">> ->
+      tcp_number(edis_db:set_bit(State#state.db, Key, O, 1), State);
+    {O, _BadBit} when O >= 0 ->
+      tcp_err("bit is not an integer or out of range", State);
+    _ ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  catch
+    _:badarg ->
+      tcp_err("bit offset is not an integer or out of range", State)
+  end;
+run_command(<<"SETBIT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETBIT' command", State);
+run_command(<<"SETEX">>, [Key, Seconds, Value], State) ->
+  try edis_util:binary_to_integer(Seconds) of
+    Secs when Secs =< 0 ->
+      tcp_err("invalid expire time in SETEX", State);
+    Secs ->
+      ok = edis_db:set_ex(State#state.db, Key, Secs, Value),
+      tcp_ok(State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"SETEX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETEX' command", State);
+run_command(<<"SETNX">>, [Key, Value], State) ->
+  try edis_db:set_nx(State#state.db, Key, Value) of
+    ok -> tcp_number(1, State)
+  catch
+    _:already_exists ->
+      tcp_number(0, State)
+  end;
+run_command(<<"SETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETNX' command", State);
+run_command(<<"SETRANGE">>, [Key, Offset, Value], State) ->
+  try edis_util:binary_to_integer(Offset) of
+    Off when Off =< 0 ->
+      tcp_err("offset is out of range", State);
+    Off ->
+      tcp_number(edis_db:set_range(State#state.db, Key, Off, Value), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"SETRANGE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SETRANGE' command", State);
+run_command(<<"STRLEN">>, [Key], State) ->
+  tcp_number(edis_db:str_len(State#state.db, Key), State);
+run_command(<<"STRLEN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'STRLEN' command", State);
+
+%% -- Keys -----------------------------------------------------------------------------------------
+run_command(<<"DEL">>, [], State) ->
+  tcp_err("wrong number of arguments for 'DEL' command", State);
+run_command(<<"DEL">>, Keys, State) ->
+  tcp_number(edis_db:del(State#state.db, Keys), State);
+run_command(<<"EXISTS">>, [Key], State) ->
+  tcp_boolean(edis_db:exists(State#state.db, Key), State);
+run_command(<<"EXISTS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXISTS' command", State);
+run_command(<<"EXPIRE">>, [Key, Seconds], State) ->
+  try edis_util:binary_to_integer(Seconds) of
+    Secs ->
+      tcp_boolean(edis_db:expire(State#state.db, Key, Secs), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"EXPIRE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXPIRE' command", State);
+run_command(<<"EXPIREAT">>, [Key, Timestamp], State) ->
+  try edis_util:binary_to_integer(Timestamp) of
+    TS ->
+      tcp_boolean(edis_db:expire_at(State#state.db, Key, TS), State)
+  catch
+    _:badarg ->
+      tcp_err("value is not an integer or out of range", State)
+  end;
+run_command(<<"EXPIREAT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'EXPIREAT' command", State);
+run_command(<<"KEYS">>, [Pattern], State) ->
+  tcp_multi_bulk(edis_db:keys(State#state.db, edis_util:glob_to_re(Pattern)), State);
+run_command(<<"KEYS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'KEYS' command", State);
+run_command(<<"MOVE">>, [Key, Db], State) ->
+  DbIndex =
+      try edis_util:binary_to_integer(Db)
+      catch
+        _:badarg ->
+          ?WARN("Using db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
+          0
+      end,
+  case {DbIndex, edis_config:get(databases), State#state.db, edis_db:process(DbIndex)} of
+    {DbIndex, Dbs, _, _} when DbIndex < 0 orelse DbIndex > Dbs ->
+      tcp_err("index out of range", State);
+    {_, _, CurrentDb, CurrentDb} ->
+      tcp_err("source and destinantion objects are the same", State);
+    {_, _, CurrentDb, DestDb} ->
+      tcp_boolean(edis_db:move(CurrentDb, Key, DestDb), State)
+  end;
+run_command(<<"MOVE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'MOVE' command", State);
+run_command(<<"OBJECT">>, [SubCommand | Rest], State) ->
+  run_command(<<"OBJECT ", (edis_util:upper(SubCommand))/binary>>, Rest, State);
+run_command(<<"OBJECT REFCOUNT">>, [Key], State) ->
+  %%XXX: Not *really* implemented
+  case edis_db:exists(State#state.db, Key) of
+    true -> tcp_number(1, State);
+    false -> tcp_bulk(undefined, State)
+  end;
+run_command(<<"OBJECT ENCODING">>, [Key], State) ->
+  Reply =
+      case edis_db:encoding(State#state.db, Key) of
+        undefined -> undefined;
+        Encoding -> atom_to_binary(Encoding, utf8)
+      end,
+  tcp_bulk(Reply, State);
+run_command(<<"OBJECT IDLETIME">>, [Key], State) ->
+  tcp_number(edis_db:idle_time(State#state.db, Key), State);
+run_command(<<"OBJECT", _Rest/binary>>, _, State) ->
+  tcp_err("Syntax error. Try OBJECT (refcount|encoding|idletime)", State);
+run_command(<<"PERSIST">>, [Key], State) ->
+  tcp_boolean(edis_db:persist(State#state.db, Key), State);
+run_command(<<"PERSIST">>, _, State) ->
+  tcp_err("wrong number of arguments for 'PERSIST' command", State);
+run_command(<<"RANDOMKEY">>, [], State) ->
+  tcp_bulk(edis_db:random_key(State#state.db), State);
+run_command(<<"RANDOMKEY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RANDOMKEY' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
   run_command(<<"CONFIG ", (edis_util:upper(SubCommand))/binary>>, Rest, State);
 run_command(<<"CONFIG GET">>, [Pattern], State) ->
-  Configs = edis_config:get(
-              binary:replace(
-                binary:replace(Pattern, <<"*">>, <<".*">>, [global]),
-                <<"?">>, <<".">>, [global])),
+  Configs = edis_config:get(edis_util:glob_to_re(Pattern)),
   Lines = lists:flatten(
             [[atom_to_binary(K, utf8),
               case V of
@@ -336,6 +485,11 @@ run_command(Command, _Args, State) ->
   tcp_err(["unknown command '", Command, "'"], State).
 
 %% @private
+-spec tcp_boolean(boolean(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_boolean(true, State) -> tcp_number(1, State);
+tcp_boolean(false, State) -> tcp_number(0, State).
+
+%% @private
 -spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_multi_bulk(Lines, State) ->
   lists:foldl(
@@ -356,7 +510,9 @@ tcp_bulk(Message, State) ->
   end.
 
 %% @private
--spec tcp_number(integer(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_number(undefined | integer(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_number(undefined, State) ->
+  tcp_bulk(undefined, State);
 tcp_number(Number, State) ->
   tcp_send([":", integer_to_list(Number)], State).
 
