@@ -41,7 +41,7 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -251,6 +251,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec lrem(atom(), binary(), integer(), binary()) -> ok.
+lrem(Db, Key, Count, Value) ->
+  make_call(Db, {lrem, Key, Count, Value}).
 
 -spec lset(atom(), binary(), integer(), binary()) -> ok.
 lset(Db, Key, Index, Value) ->
@@ -849,6 +853,26 @@ handle_call({hvals, Key}, _From, State) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
     end,
+  {reply, Reply, State};
+handle_call({lrem, Key, Count, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   NewV =
+                     case Count of
+                       0 ->
+                         lists:filter(fun(Val) ->
+                                              Val =/= Value
+                                      end, Item#edis_item.value);
+                       Count when Count >= 0 ->
+                         Item#edis_item.value -- lists:duplicate(Count, Value);
+                       Count ->
+                         lists:reverse(
+                           lists:reverse(Item#edis_item.value) --
+                             lists:duplicate((-1)*Count, Value))
+                     end,
+                   {length(Item#edis_item.value) - length(NewV), Item#edis_item{value = NewV}}
+           end),
   {reply, Reply, State};
 handle_call({lset, Key, Index, Value}, _From, State) ->
   Reply =

@@ -464,12 +464,32 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LREM">>, [Key, Count, Value], State) ->
+  C =
+    try edis_util:binary_to_integer(Count) of
+      N -> N
+    catch
+      _:not_integer ->
+        ?WARN("Using count 0 because we received '~s'. This behaviour was copied from redis-server~n", [Count]),
+        0
+    end,
+  try edis_db:lrem(State#state.db, Key, C, Value) of
+    Removed ->
+      tcp_number(Removed, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"LREM">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LREM' command", State);
 run_command(<<"LSET">>, [Key, Index, Value], State) ->
   I =
     try edis_util:binary_to_integer(Index) of
       N -> N
     catch
-      _:not_integer -> 0
+      _:not_integer ->
+        ?WARN("Using index 0 because we received '~s'. This behaviour was copied from redis-server~n", [Index]),
+        0
     end,
   try edis_db:lset(State#state.db, Key, I, Value) of
     ok ->
