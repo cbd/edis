@@ -464,6 +464,24 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LSET">>, [Key, Index, Value], State) ->
+  I =
+    try edis_util:binary_to_integer(Index) of
+      N -> N
+    catch
+      _:not_integer -> 0
+    end,
+  try edis_db:lset(State#state.db, Key, I, Value) of
+    ok ->
+      tcp_ok(State)
+  catch
+    _:not_found ->
+      tcp_err("no such key", State);
+    _:out_of_range ->
+      tcp_err("index out of range", State)
+  end;
+run_command(<<"LSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LSET' command", State);
 run_command(<<"LTRIM">>, [Key, Start, Stop], State) ->
   try edis_db:ltrim(State#state.db, Key,
                      edis_util:binary_to_integer(Start),
