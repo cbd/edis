@@ -40,7 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
--export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hset/3, hset/4]).
+-export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4]).
 
 %% =================================================================================================
 %% External functions
@@ -224,9 +224,13 @@ hget_all(Db, Key) ->
 hincr(Db, Key, Field, Increment) ->
   make_call(Db, {hincr, Key, Field, Increment}).
 
--spec hkeys(atom(), binary()) -> undefined | binary().
+-spec hkeys(atom(), binary()) -> [binary()].
 hkeys(Db, Key) ->
   make_call(Db, {hkeys, Key}).
+
+-spec hlen(atom(), binary()) -> non_neg_integer().
+hlen(Db, Key) ->
+  make_call(Db, {hlen, Key}).
 
 -spec hset(atom(), binary(), binary()) -> inserted | updated.
 hset(Db, Key, FVs) ->
@@ -754,6 +758,14 @@ handle_call({hkeys, Key}, _From, State) ->
       not_found -> {ok, []};
       {error, Reason} -> {error, Reason};
       Item -> {ok, dict:fetch_keys(Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hlen, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:size(Item#edis_item.value)}
     end,
   {reply, Reply, State};
 handle_call({hset, Key, FVs}, _From, State) ->

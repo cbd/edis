@@ -447,6 +447,10 @@ run_command(<<"HKEYS">>, [Key], State) ->
   tcp_multi_bulk(edis_db:hkeys(State#state.db, Key), State);
 run_command(<<"HKEYS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HKEYS' command", State);
+run_command(<<"HLEN">>, [Key], State) ->
+  tcp_number(edis_db:hlen(State#state.db, Key), State);
+run_command(<<"HLEN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HLEN' command", State);
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);
