@@ -40,7 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
--export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4]).
+-export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 
 %% =================================================================================================
 %% External functions
@@ -246,6 +246,10 @@ hset(Db, Key, Field, Value) ->
 -spec hset_nx(atom(), binary(), binary(), binary()) -> ok.
 hset_nx(Db, Key, Field, Value) ->
   make_call(Db, {hset_nx, Key, Field, Value}).
+
+-spec hvals(atom(), binary()) -> [binary()].
+hvals(Db, Key) ->
+  make_call(Db, {hvals, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -813,6 +817,16 @@ handle_call({hset_nx, Key, Field, Value}, _From, State) ->
                   {ok, Item#edis_item{value = dict:store(Field, Value, Item#edis_item.value)}}
                 end
       end, dict:new()),
+  {reply, Reply, State};
+handle_call({hvals, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:fold(fun(_,Value,Acc) ->
+                                     [Value|Acc]
+                             end, [], Item#edis_item.value)}
+    end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

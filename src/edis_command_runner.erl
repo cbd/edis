@@ -478,6 +478,10 @@ run_command(<<"HSETNX">>, [Key, Field, Value], State) ->
   end;
 run_command(<<"HSETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'HSETNX' command", State);
+run_command(<<"HVALS">>, [Key], State) ->
+  tcp_multi_bulk(edis_db:hvals(State#state.db, Key), State);
+run_command(<<"HVALS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 
 
