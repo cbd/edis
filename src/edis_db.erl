@@ -41,8 +41,8 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3,
-         rpush/3, rpush_x/3]).
+-export([linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4, rpop/2,
+         rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -252,6 +252,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec linsert(atom(), binary(), before|'after', binary(), binary()) -> -1 | non_neg_integer().
+linsert(Db, Key, Position, Pivot, Value) ->
+  make_call(Db, {linsert, Key, Position, Pivot, Value}).
 
 -spec llen(atom(), binary()) -> non_neg_integer().
 llen(Db, Key) ->
@@ -874,6 +878,24 @@ handle_call({hvals, Key}, _From, State) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
     end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({linsert, Key, Position, Pivot, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   case {lists:splitwith(fun(Val) ->
+                                                Val =/= Pivot
+                                        end, Item#edis_item.value), Position} of
+                     {{_, []}, _} -> %% Value was not found
+                       {-1, Item};
+                     {{Before, After}, before} ->
+                       {length(Item#edis_item.value) + 1,
+                        Item#edis_item{value = lists:append(Before, [Value|After])}};
+                     {{Before, [Pivot|After]}, 'after'} ->
+                       {length(Item#edis_item.value) + 1,
+                        Item#edis_item{value = lists:append(Before, [Pivot, Value|After])}}
+                   end
+           end),
   {reply, Reply, stamp(Key, State)};
 handle_call({llen, Key}, _From, State) ->
   Reply =

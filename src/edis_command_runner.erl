@@ -464,6 +464,22 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LINSERT">>, [Key, Position, Pivot, Value], State) ->
+  try
+    case edis_util:upper(Position) of
+      <<"BEFORE">> ->
+        tcp_number(edis_db:linsert(State#state.db, Key, before, Pivot, Value), State);
+      <<"AFTER">> ->
+        tcp_number(edis_db:linsert(State#state.db, Key, 'after', Pivot, Value), State);
+      _ ->
+        tcp_err("syntax error", State)
+    end
+  catch
+    _:not_found ->
+      tcp_number(-1, State)
+  end;
+run_command(<<"LINSERT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LINSERT' command", State);
 run_command(<<"LLEN">>, [Key], State) ->
   tcp_number(edis_db:llen(State#state.db, Key), State);
 run_command(<<"LLEN">>, _, State) ->
