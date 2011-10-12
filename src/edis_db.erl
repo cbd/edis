@@ -41,7 +41,7 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3,
+-export([llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3,
          rpush/3, rpush_x/3]).
 
 %% =================================================================================================
@@ -252,6 +252,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec llen(atom(), binary()) -> non_neg_integer().
+llen(Db, Key) ->
+  make_call(Db, {llen, Key}).
 
 -spec lpop(atom(), binary()) -> binary().
 lpop(Db, Key) ->
@@ -869,6 +873,14 @@ handle_call({hvals, Key}, _From, State) ->
       Item -> {ok, dict:fold(fun(_,Value,Acc) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({llen, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, list, Key) of
+      #edis_item{value = Value} -> {ok, length(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
 handle_call({lpop, Key}, _From, State) ->

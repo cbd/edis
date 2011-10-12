@@ -464,6 +464,10 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LLEN">>, [Key], State) ->
+  tcp_number(edis_db:llen(State#state.db, Key), State);
+run_command(<<"LLEN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LLEN' command", State);
 run_command(<<"LPOP">>, [Key], State) ->
   try edis_db:lpop(State#state.db, Key) of
     Value -> tcp_bulk(Value, State)
