@@ -275,7 +275,7 @@ run_command(<<"SETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETNX' command", State);
 run_command(<<"SETRANGE">>, [Key, Offset, Value], State) ->
   try edis_util:binary_to_integer(Offset) of
-    Off when Off =< 0 ->
+    Off when Off < 0 ->
       tcp_err("offset is out of range", State);
     Off ->
       tcp_number(edis_db:set_range(State#state.db, Key, Off, Value), State)
@@ -484,6 +484,15 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"RPOPLPUSH">>, [Source, Destination], State) ->
+  try edis_db:rpop_lpush(State#state.db, Source, Destination) of
+    Value -> tcp_bulk(Value, State)
+  catch
+    _:not_found ->
+      tcp_bulk(undefined, State)
+  end;
+run_command(<<"RPOPLPUSH">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RPOPLPUSH' command", State);
 run_command(<<"RPUSH">>, [Key, Value], State) ->
   tcp_number(edis_db:rpush(State#state.db, Key, Value), State);
 run_command(<<"RPUSH">>, _, State) ->

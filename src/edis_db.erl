@@ -41,7 +41,7 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([rpush/3, rpush_x/3]).
+-export([rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -251,6 +251,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec rpop_lpush(atom(), binary(), binary()) -> pos_integer().
+rpop_lpush(Db, Key, Value) ->
+  make_call(Db, {rpop_lpush, Key, Value}).
 
 -spec rpush(atom(), binary(), binary()) -> pos_integer().
 rpush(Db, Key, Value) ->
@@ -835,6 +839,47 @@ handle_call({hvals, Key}, _From, State) ->
       Item -> {ok, dict:fold(fun(_,Value,Acc) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({rpop_lpush, Key, Key}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   case lists:reverse(Item#edis_item.value) of
+                     [Value|Rest] ->
+                       {Value,
+                        Item#edis_item{value = [Value | lists:reverse(Rest)]}};
+                     _ ->
+                       throw(not_found)
+                   end
+           end),
+  {reply, Reply, State};
+handle_call({rpop_lpush, Source, Destination}, _From, State) ->
+  Reply =
+    case update(State#state.db, Source, list,
+                fun(Item) ->
+                        case lists:reverse(Item#edis_item.value) of
+                          [Value] ->
+                            {{delete, Value}, Item#edis_item{value = []}};
+                          [Value|Rest] ->
+                            {{keep, Value}, Item#edis_item{value = lists:reverse(Rest)}};
+                          [] ->
+                            throw(not_found)
+                        end
+                end) of
+      {ok, {delete, Value}} ->
+        _ = eleveldb:delete(State#state.db, Source, []),
+        update(State#state.db, Destination, list, linkedlist,
+                fun(Item) ->
+                        {Value, Item#edis_item{value = [Value | Item#edis_item.value]}}
+                end, []);
+      {ok, {keep, Value}} ->
+        update(State#state.db, Destination, list, linkedlist,
+                fun(Item) ->
+                        {Value, Item#edis_item{value = [Value | Item#edis_item.value]}}
+                end, []);
+      {error, Reason} ->
+        {error, Reason}
     end,
   {reply, Reply, State};
 handle_call({rpush, Key, Value}, _From, State) ->
