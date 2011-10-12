@@ -464,6 +464,26 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LRANGE">>, [Key, Start, Stop], State) ->
+  Sta =
+    try edis_util:binary_to_integer(Start) of
+      SN -> SN
+    catch
+      _:not_integer ->
+        ?WARN("Using count 0 because we received '~s'. This behaviour was copied from redis-server~n", [Start]),
+        0
+    end,
+  Sto =
+    try edis_util:binary_to_integer(Stop) of
+      TN -> TN
+    catch
+      _:not_integer ->
+        ?WARN("Using count 0 because we received '~s'. This behaviour was copied from redis-server~n", [Stop]),
+        0
+    end,
+  tcp_multi_bulk(edis_db:lrange(State#state.db, Key, Sta, Sto), State);
+run_command(<<"LRANGE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LRANGE' command", State);
 run_command(<<"LREM">>, [Key, Count, Value], State) ->
   C =
     try edis_util:binary_to_integer(Count) of
