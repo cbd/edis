@@ -469,6 +469,15 @@ run_command(<<"HSET">>, [Key, Field, Value], State) ->
   end;
 run_command(<<"HSET">>, _, State) ->
   tcp_err("wrong number of arguments for 'HSET' command", State);
+run_command(<<"HSETNX">>, [Key, Field, Value], State) ->
+  try edis_db:hset_nx(State#state.db, Key, Field, Value) of
+    ok -> tcp_boolean(true, State)
+  catch
+    _:already_exists ->
+      tcp_boolean(false, State)
+  end;
+run_command(<<"HSETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HSETNX' command", State);
 
 
 
