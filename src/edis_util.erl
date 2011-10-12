@@ -57,7 +57,11 @@ lower(<<C, Rest/binary>>, Acc) ->
 
 -spec binary_to_integer(binary()) -> integer().
 binary_to_integer(Bin) ->
-  list_to_integer(binary_to_list(Bin)).
+  try list_to_integer(binary_to_list(Bin))
+  catch
+    _:badarg ->
+      throw(not_integer)
+  end.
 
 -spec integer_to_binary(binary()) -> integer().
 integer_to_binary(Int) ->

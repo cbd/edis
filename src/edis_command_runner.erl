@@ -146,7 +146,7 @@ run_command(<<"SELECT">>, [Db], State) ->
     {DbIndex, _} ->
       tcp_ok(State#state{db = edis_db:process(DbIndex)})
   catch
-    error:badarg ->
+    error:not_integer ->
       ?WARN("Switching to db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
       tcp_ok(State#state{db = edis_db:process(0)})
   end;
@@ -187,7 +187,7 @@ run_command(<<"GETBIT">>, [Key, Offset], State) ->
     _ ->
       tcp_err("bit offset is not an integer or out of range", State)
   catch
-    _:badarg ->
+    _:not_integer ->
       tcp_err("bit offset is not an integer or out of range", State)
   end;
 run_command(<<"GETBIT">>, _, State) ->
@@ -246,21 +246,18 @@ run_command(<<"SETBIT">>, [Key, Offset, Bit], State) ->
     _ ->
       tcp_err("bit offset is not an integer or out of range", State)
   catch
-    _:badarg ->
+    _:not_integer ->
       tcp_err("bit offset is not an integer or out of range", State)
   end;
 run_command(<<"SETBIT">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETBIT' command", State);
 run_command(<<"SETEX">>, [Key, Seconds, Value], State) ->
-  try edis_util:binary_to_integer(Seconds) of
+  case edis_util:binary_to_integer(Seconds) of
     Secs when Secs =< 0 ->
       tcp_err("invalid expire time in SETEX", State);
     Secs ->
       ok = edis_db:set_ex(State#state.db, Key, Secs, Value),
       tcp_ok(State)
-  catch
-    _:badarg ->
-      tcp_err("value is not an integer or out of range", State)
   end;
 run_command(<<"SETEX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETEX' command", State);
@@ -274,14 +271,11 @@ run_command(<<"SETNX">>, [Key, Value], State) ->
 run_command(<<"SETNX">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETNX' command", State);
 run_command(<<"SETRANGE">>, [Key, Offset, Value], State) ->
-  try edis_util:binary_to_integer(Offset) of
+  case edis_util:binary_to_integer(Offset) of
     Off when Off < 0 ->
       tcp_err("offset is out of range", State);
     Off ->
       tcp_number(edis_db:set_range(State#state.db, Key, Off, Value), State)
-  catch
-    _:badarg ->
-      tcp_err("value is not an integer or out of range", State)
   end;
 run_command(<<"SETRANGE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SETRANGE' command", State);
@@ -300,23 +294,11 @@ run_command(<<"EXISTS">>, [Key], State) ->
 run_command(<<"EXISTS">>, _, State) ->
   tcp_err("wrong number of arguments for 'EXISTS' command", State);
 run_command(<<"EXPIRE">>, [Key, Seconds], State) ->
-  try edis_util:binary_to_integer(Seconds) of
-    Secs ->
-      tcp_boolean(edis_db:expire(State#state.db, Key, Secs), State)
-  catch
-    _:badarg ->
-      tcp_err("value is not an integer or out of range", State)
-  end;
+  tcp_boolean(edis_db:expire(State#state.db, Key, edis_util:binary_to_integer(Seconds)), State);
 run_command(<<"EXPIRE">>, _, State) ->
   tcp_err("wrong number of arguments for 'EXPIRE' command", State);
 run_command(<<"EXPIREAT">>, [Key, Timestamp], State) ->
-  try edis_util:binary_to_integer(Timestamp) of
-    TS ->
-      tcp_boolean(edis_db:expire_at(State#state.db, Key, TS), State)
-  catch
-    _:badarg ->
-      tcp_err("value is not an integer or out of range", State)
-  end;
+  tcp_boolean(edis_db:expire_at(State#state.db, Key, edis_util:binary_to_integer(Timestamp)), State);
 run_command(<<"EXPIREAT">>, _, State) ->
   tcp_err("wrong number of arguments for 'EXPIREAT' command", State);
 run_command(<<"KEYS">>, [Pattern], State) ->
@@ -327,7 +309,7 @@ run_command(<<"MOVE">>, [Key, Db], State) ->
   DbIndex =
       try edis_util:binary_to_integer(Db)
       catch
-        _:badarg ->
+        _:not_integer ->
           ?WARN("Using db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
           0
       end,
@@ -432,14 +414,12 @@ run_command(<<"HGETALL">>, [Key], State) ->
 run_command(<<"HGETALL">>, _, State) ->
   tcp_err("wrong number of arguments for 'HGET' command", State);
 run_command(<<"HINCRBY">>, [Key, Field, Increment], State) ->
+  Inc = edis_util:binary_to_integer(Increment),
   try 
-    tcp_number(edis_db:hincr(State#state.db, Key, Field,
-                             edis_util:binary_to_integer(Increment)), State)
+    tcp_number(edis_db:hincr(State#state.db, Key, Field, Inc), State)
   catch
     _:not_integer ->
-      tcp_err("hash value is not an integer", State);
-    _:badarg ->
-      throw(not_integer)
+      tcp_err("hash value is not an integer", State)
   end;
 run_command(<<"HINCRBY">>, _, State) ->
   tcp_err("wrong number of arguments for 'HINCRBY' command", State);
@@ -484,6 +464,18 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LTRIM">>, [Key, Start, Stop], State) ->
+  try edis_db:ltrim(State#state.db, Key,
+                     edis_util:binary_to_integer(Start),
+                     edis_util:binary_to_integer(Stop)) of
+    ok ->
+      tcp_ok(State)
+  catch
+    _:not_found ->
+      tcp_ok(State)
+  end;
+run_command(<<"LTRIM">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LTRIM' command", State);
 run_command(<<"RPOP">>, [Key], State) ->
   try edis_db:rpop(State#state.db, Key) of
     Value -> tcp_bulk(Value, State)

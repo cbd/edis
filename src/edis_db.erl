@@ -41,7 +41,7 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -251,6 +251,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec ltrim(atom(), binary(), integer(), integer()) -> binary().
+ltrim(Db, Key, Start, Stop) ->
+  make_call(Db, {ltrim, Key, Start, Stop}).
 
 -spec rpop(atom(), binary()) -> binary().
 rpop(Db, Key) ->
@@ -840,6 +844,39 @@ handle_call({hvals, Key}, _From, State) ->
       Item -> {ok, dict:fold(fun(_,Value,Acc) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({ltrim, Key, Start, Stop}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, list,
+                fun(Item) ->
+                        L = erlang:length(Item#edis_item.value),
+                        StartPos =
+                          case Start of
+                            Start when Start >= L -> throw(empty);
+                            Start when Start >= 0 -> Start + 1;
+                            Start when Start < (-1)*L -> 1;
+                            Start -> L + 1 + Start
+                          end,
+                        StopPos =
+                          case Stop of
+                            Stop when Stop >= 0, Stop >= L -> L;
+                            Stop when Stop >= 0 -> Stop + 1;
+                            Stop when Stop < (-1)*L -> 0;
+                            Stop -> L + 1 + Stop
+                          end,
+                        case StopPos - StartPos + 1 of
+                          Len when Len =< 0 -> throw(empty);
+                          Len ->
+                            {ok, Item#edis_item{value =
+                                                  lists:sublist(Item#edis_item.value, StartPos, Len)}}
+                        end
+                end) of
+      {ok, ok} -> ok;
+      {error, empty} ->
+        eleveldb:delete(State#state.db, Key, []);
+      {error, Reason} ->
+        {error, Reason}
     end,
   {reply, Reply, State};
 handle_call({rpop, Key}, _From, State) ->
