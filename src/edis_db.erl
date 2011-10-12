@@ -212,9 +212,12 @@ hdel(Db, Key, Fields) ->
 hexists(Db, Key, Field) ->
   make_call(Db, {hexists, Key, Field}).
 
--spec hget(atom(), binary(), binary()) -> undefined | binary().
+-spec hget(atom(), binary(), binary() | [binary()]) -> undefined | binary() | [undefined | binary()].
+hget(Db, Key, Fields) when is_list(Fields) ->
+  make_call(Db, {hget, Key, Fields});
 hget(Db, Key, Field) ->
-  make_call(Db, {hget, Key, Field}).
+  [Res] = make_call(Db, {hget, Key, [Field]}),
+  Res.
 
 -spec hget_all(atom(), binary()) -> [{binary(), binary()}].
 hget_all(Db, Key) ->
@@ -706,15 +709,21 @@ handle_call({hexists, Key, Field}, _From, State) ->
       Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
     end,
   {reply, Reply, State};
-handle_call({hget, Key, Field}, _From, State) ->
+handle_call({hget, Key, Fields}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason};
-      Item -> {ok, case dict:find(Field, Item#edis_item.value) of
-                     {ok, Value} -> Value;
-                     error -> undefined
-                   end}
+      Item ->
+        Results =
+          lists:map(
+            fun(Field) ->
+                    case dict:find(Field, Item#edis_item.value) of
+                      {ok, Value} -> Value;
+                      error -> undefined
+                    end
+            end, Fields),
+        {ok, Results}
     end,
   {reply, Reply, State};
 handle_call({hget_all, Key}, _From, State) ->
