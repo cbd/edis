@@ -464,6 +464,19 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LPUSH">>, [Key, Value], State) ->
+  tcp_number(edis_db:lpush(State#state.db, Key, Value), State);
+run_command(<<"LPUSH">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LPUSH' command", State);
+run_command(<<"LPUSHX">>, [Key, Value], State) ->
+  try edis_db:lpush_x(State#state.db, Key, Value) of
+    NewLen -> tcp_number(NewLen, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"LPUSHX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LPUSHX' command", State);
 run_command(<<"LRANGE">>, [Key, Start, Stop], State) ->
   Sta =
     try edis_util:binary_to_integer(Start) of
