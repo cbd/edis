@@ -46,7 +46,10 @@ auth(Config) ->
 	{error,<<"ERR operation not permitted">>} = erldis_client:sr_scall(NewClient, <<"ping">>),
 	
 	[ok] = erldis_client:scall(NewClient, [<<"auth">>, Pwd]),
-	pong = erldis_client:sr_scall(NewClient, <<"ping">>).
+	pong = erldis_client:sr_scall(NewClient, <<"ping">>),
+	pong = erldis_client:sr_scall(NewClient, <<"ping">>),
+	
+	[ok] = erldis_client:scall(NewClient, [<<"config">>,<<"set">>,<<"requirepass">>]).
 
 quit(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
