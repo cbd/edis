@@ -412,6 +412,77 @@ run_command(<<"TYPE">>, [Key], State) ->
 run_command(<<"TYPE">>, _, State) ->
   tcp_err("wrong number of arguments for 'TYPE' command", State);
 
+%% -- Hashes ---------------------------------------------------------------------------------------
+run_command(<<"HDEL">>, [], State) ->
+  tcp_err("wrong number of arguments for 'HDEL' command", State);
+run_command(<<"HDEL">>, [_Key], State) ->
+  tcp_err("wrong number of arguments for 'HDEL' command", State);
+run_command(<<"HDEL">>, [Key | Fields], State) ->
+  tcp_number(edis_db:hdel(State#state.db, Key, Fields), State);
+run_command(<<"HEXISTS">>, [Key, Field], State) ->
+  tcp_boolean(edis_db:hexists(State#state.db, Key, Field), State);
+run_command(<<"HEXISTS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HEXISTS' command", State);
+run_command(<<"HGET">>, [Key, Field], State) ->
+  tcp_bulk(edis_db:hget(State#state.db, Key, Field), State);
+run_command(<<"HGET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HGET' command", State);
+run_command(<<"HGETALL">>, [Key], State) ->
+  tcp_multi_bulk(lists:flatmap(fun tuple_to_list/1, edis_db:hget_all(State#state.db, Key)), State);
+run_command(<<"HGETALL">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HGET' command", State);
+run_command(<<"HINCRBY">>, [Key, Field, Increment], State) ->
+  try 
+    tcp_number(edis_db:hincr(State#state.db, Key, Field,
+                             edis_util:binary_to_integer(Increment)), State)
+  catch
+    _:not_integer ->
+      tcp_err("hash value is not an integer", State);
+    _:badarg ->
+      throw(not_integer)
+  end;
+run_command(<<"HINCRBY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HINCRBY' command", State);
+run_command(<<"HKEYS">>, [Key], State) ->
+  tcp_multi_bulk(edis_db:hkeys(State#state.db, Key), State);
+run_command(<<"HKEYS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HKEYS' command", State);
+run_command(<<"HLEN">>, [Key], State) ->
+  tcp_number(edis_db:hlen(State#state.db, Key), State);
+run_command(<<"HLEN">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HLEN' command", State);
+run_command(<<"HMGET">>, [Key | Fields], State) when Fields =/= [] ->
+  tcp_multi_bulk(edis_db:hget(State#state.db, Key, Fields), State);
+run_command(<<"HMGET">>, _, State) ->
+  tcp_err("wrong number of arguments for HMGET", State);
+run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
+  _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
+  tcp_ok(State);
+run_command(<<"HMSET">>, _, State) ->
+  tcp_err("wrong number of arguments for HMSET", State);
+run_command(<<"HSET">>, [Key, Field, Value], State) ->
+  case edis_db:hset(State#state.db, Key, Field, Value) of
+    inserted ->
+      tcp_number(1, State);
+    updated ->
+      tcp_number(0, State)
+  end;
+run_command(<<"HSET">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HSET' command", State);
+run_command(<<"HSETNX">>, [Key, Field, Value], State) ->
+  try edis_db:hset_nx(State#state.db, Key, Field, Value) of
+    ok -> tcp_boolean(true, State)
+  catch
+    _:already_exists ->
+      tcp_boolean(false, State)
+  end;
+run_command(<<"HSETNX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HSETNX' command", State);
+run_command(<<"HVALS">>, [Key], State) ->
+  tcp_multi_bulk(edis_db:hvals(State#state.db, Key), State);
+run_command(<<"HVALS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HVALS' command", State);
+
 
 
 %% -- Server ---------------------------------------------------------------------------------------

@@ -40,6 +40,7 @@
          set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
+-export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 
 %% =================================================================================================
 %% External functions
@@ -202,6 +203,53 @@ ttl(Db, Key) ->
 -spec type(atom(), binary()) -> item_type().
 type(Db, Key) ->
   make_call(Db, {type, Key}).
+
+-spec hdel(atom(), binary(), [binary()]) -> non_neg_integer().
+hdel(Db, Key, Fields) ->
+  make_call(Db, {hdel, Key, Fields}).
+
+-spec hexists(atom(), binary(), binary()) -> boolean().
+hexists(Db, Key, Field) ->
+  make_call(Db, {hexists, Key, Field}).
+
+-spec hget(atom(), binary(), binary() | [binary()]) -> undefined | binary() | [undefined | binary()].
+hget(Db, Key, Fields) when is_list(Fields) ->
+  make_call(Db, {hget, Key, Fields});
+hget(Db, Key, Field) ->
+  [Res] = make_call(Db, {hget, Key, [Field]}),
+  Res.
+
+-spec hget_all(atom(), binary()) -> [{binary(), binary()}].
+hget_all(Db, Key) ->
+  make_call(Db, {hget_all, Key}).
+
+-spec hincr(atom(), binary(), binary(), integer()) -> inserted | updated.
+hincr(Db, Key, Field, Increment) ->
+  make_call(Db, {hincr, Key, Field, Increment}).
+
+-spec hkeys(atom(), binary()) -> [binary()].
+hkeys(Db, Key) ->
+  make_call(Db, {hkeys, Key}).
+
+-spec hlen(atom(), binary()) -> non_neg_integer().
+hlen(Db, Key) ->
+  make_call(Db, {hlen, Key}).
+
+-spec hset(atom(), binary(), [{binary(), binary()}]) -> inserted | updated.
+hset(Db, Key, FVs) ->
+  make_call(Db, {hset, Key, FVs}).
+
+-spec hset(atom(), binary(), binary(), binary()) -> inserted | updated.
+hset(Db, Key, Field, Value) ->
+  hset(Db, Key, [{Field, Value}]).
+
+-spec hset_nx(atom(), binary(), binary(), binary()) -> ok.
+hset_nx(Db, Key, Field, Value) ->
+  make_call(Db, {hset_nx, Key, Field, Value}).
+
+-spec hvals(atom(), binary()) -> [binary()].
+hvals(Db, Key) ->
+  make_call(Db, {hvals, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -639,6 +687,145 @@ handle_call({type, Key}, _From, State) ->
         {error, not_found};
       Item ->
         {ok, Item#edis_item.type}
+    end,
+  {reply, Reply, State};
+handle_call({hdel, Key, Fields}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, hash,
+                fun(Item) ->
+                        NewDict = lists:foldl(fun dict:erase/2, Item#edis_item.value, Fields),
+                        {{dict:size(Item#edis_item.value) - dict:size(NewDict),
+                          dict:size(NewDict)},
+                         Item#edis_item{value = NewDict}}
+                end) of
+      {ok, {Deleted, 0}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Deleted};
+      {ok, {Deleted, _}} ->
+        {ok, Deleted};
+      {error, not_found} ->
+        {ok, 0};
+      {error, Reason} ->
+        {error, Reason}
+    end,
+  {reply, Reply, State};
+handle_call({hexists, Key, Field}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, false};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hget, Key, Fields}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason};
+      Item ->
+        Results =
+          lists:map(
+            fun(Field) ->
+                    case dict:find(Field, Item#edis_item.value) of
+                      {ok, Value} -> Value;
+                      error -> undefined
+                    end
+            end, Fields),
+        {ok, Results}
+    end,
+  {reply, Reply, State};
+handle_call({hget_all, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:to_list(Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hincr, Key, Field, Increment}, _From, State) ->
+  Reply =
+    update(
+      State#state.db, Key, hash, hashtable,
+      fun(Item) ->
+              case dict:find(Field, Item#edis_item.value) of
+                error ->
+                  {Increment,
+                   Item#edis_item{value =
+                                    dict:store(Field,
+                                               edis_util:integer_to_binary(Increment),
+                                               Item#edis_item.value)}};
+                {ok, OldValue} ->
+                  try edis_util:binary_to_integer(OldValue) of
+                    OldInt ->
+                      {OldInt + Increment,
+                       Item#edis_item{value =
+                                        dict:store(Field,
+                                                   edis_util:integer_to_binary(OldInt + Increment),
+                                                   Item#edis_item.value)}}
+                  catch
+                    _:badarg ->
+                      throw(not_integer)
+                  end
+              end
+      end, dict:new()),
+  {reply, Reply, State};
+handle_call({hkeys, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:fetch_keys(Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hlen, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:size(Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({hset, Key, FVs}, _From, State) ->
+  Reply =
+    update(
+      State#state.db, Key, hash, hashtable,
+      fun(Item) ->
+              lists:foldl(
+                fun({Field, Value}, {AccStatus, AccItem}) ->
+                        case dict:is_key(Field, Item#edis_item.value) of
+                          true ->
+                            {AccStatus,
+                             Item#edis_item{value =
+                                              dict:store(Field, Value, AccItem#edis_item.value)}};
+                          false ->
+                            {inserted,
+                             Item#edis_item{value =
+                                              dict:store(Field, Value, AccItem#edis_item.value)}}
+                        end
+                end, {updated, Item}, FVs)
+      end, dict:new()),
+  {reply, Reply, State};
+handle_call({hset_nx, Key, Field, Value}, _From, State) ->
+  Reply =
+    update(
+      State#state.db, Key, hash, hashtable,
+      fun(Item) ->
+              case dict:is_key(Field, Item#edis_item.value) of
+                true ->
+                  throw(already_exists);
+                false ->
+                  {ok, Item#edis_item{value = dict:store(Field, Value, Item#edis_item.value)}}
+                end
+      end, dict:new()),
+  {reply, Reply, State};
+handle_call({hvals, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason};
+      Item -> {ok, dict:fold(fun(_,Value,Acc) ->
+                                     [Value|Acc]
+                             end, [], Item#edis_item.value)}
     end,
   {reply, Reply, State};
 handle_call(X, _From, State) ->
