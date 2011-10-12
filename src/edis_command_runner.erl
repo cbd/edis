@@ -443,6 +443,10 @@ run_command(<<"HINCRBY">>, [Key, Field, Increment], State) ->
   end;
 run_command(<<"HINCRBY">>, _, State) ->
   tcp_err("wrong number of arguments for 'HINCRBY' command", State);
+run_command(<<"HKEYS">>, [Key], State) ->
+  tcp_multi_bulk(edis_db:hkeys(State#state.db, Key), State);
+run_command(<<"HKEYS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'HKEYS' command", State);
 run_command(<<"HMSET">>, [Key | FVs], State) when FVs =/= [], length(FVs) rem 2 =:= 0 ->
   _ = edis_db:hset(State#state.db, Key, edis_util:make_pairs(FVs)),
   tcp_ok(State);
@@ -586,7 +590,6 @@ tcp_boolean(false, State) -> tcp_number(0, State).
 %% @private
 -spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_multi_bulk(Lines, State) ->
-  ?INFO("Lines:~n~p~n", [Lines]),
   lists:foldl(
     fun(Line, {noreply, AccState}) ->
             tcp_bulk(Line, AccState);
