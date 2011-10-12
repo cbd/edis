@@ -23,7 +23,7 @@ run: all
 	${ERL} -s edis
 
 test: all
-	${ERL} -config test.config -noshell -sname edis_test_server -s edis &
+	${ERL} -config test.config -noshell -sname edis_test_server -s edis -run elog debug & 
 	rebar skip_deps=true ct ; \
 	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
 
