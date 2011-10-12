@@ -483,6 +483,21 @@ run_command(<<"HVALS">>, [Key], State) ->
 run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
+%% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"RPUSH">>, [Key, Value], State) ->
+  tcp_number(edis_db:rpush(State#state.db, Key, Value), State);
+run_command(<<"RPUSH">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RPUSH' command", State);
+run_command(<<"RPUSHX">>, [Key, Value], State) ->
+  try edis_db:rpush_x(State#state.db, Key, Value) of
+    NewLen -> tcp_number(NewLen, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"RPUSHX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RPUSHX' command", State);
+
 
 
 %% -- Server ---------------------------------------------------------------------------------------

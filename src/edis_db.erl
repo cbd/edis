@@ -41,6 +41,7 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
+-export([rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -250,6 +251,14 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec rpush(atom(), binary(), binary()) -> pos_integer().
+rpush(Db, Key, Value) ->
+  make_call(Db, {rpush, Key, Value}).
+
+-spec rpush_x(atom(), binary(), binary()) -> pos_integer().
+rpush_x(Db, Key, Value) ->
+  make_call(Db, {rpush_x, Key, Value}).
 
 %% =================================================================================================
 %% Server functions
@@ -828,6 +837,29 @@ handle_call({hvals, Key}, _From, State) ->
                              end, [], Item#edis_item.value)}
     end,
   {reply, Reply, State};
+handle_call({rpush, Key, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list, linkedlist,
+           fun(Item) ->
+                   {length(Item#edis_item.value) + 1,
+                    Item#edis_item{value =
+                                     lists:reverse(
+                                       [Value|
+                                          lists:reverse(Item#edis_item.value)])}}
+           end, []),
+  {reply, Reply, State};
+handle_call({rpush_x, Key, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   {length(Item#edis_item.value) + 1,
+                    Item#edis_item{value =
+                                     lists:reverse(
+                                       [Value|
+                                          lists:reverse(Item#edis_item.value)])}}
+           end),
+  {reply, Reply, State};
+
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
