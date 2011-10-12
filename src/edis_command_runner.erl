@@ -484,6 +484,15 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"RPOP">>, [Key], State) ->
+  try edis_db:rpop(State#state.db, Key) of
+    Value -> tcp_bulk(Value, State)
+  catch
+    _:not_found ->
+      tcp_bulk(undefined, State)
+  end;
+run_command(<<"RPOP">>, _, State) ->
+  tcp_err("wrong number of arguments for 'RPOP' command", State);
 run_command(<<"RPOPLPUSH">>, [Source, Destination], State) ->
   try edis_db:rpop_lpush(State#state.db, Source, Destination) of
     Value -> tcp_bulk(Value, State)

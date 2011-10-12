@@ -41,7 +41,7 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -252,7 +252,11 @@ hset_nx(Db, Key, Field, Value) ->
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
 
--spec rpop_lpush(atom(), binary(), binary()) -> pos_integer().
+-spec rpop(atom(), binary()) -> binary().
+rpop(Db, Key) ->
+  make_call(Db, {rpop, Key}).
+
+-spec rpop_lpush(atom(), binary(), binary()) -> binary().
 rpop_lpush(Db, Key, Value) ->
   make_call(Db, {rpop_lpush, Key, Value}).
 
@@ -471,23 +475,20 @@ handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
                    value = Value}), []),
   {reply, Reply, stamp(Key, State)};
 handle_call({set_range, Key, Offset, Value}, _From, State) ->
+  Length = erlang:size(Value),
   Reply =
-    case erlang:size(Value) of
-      0 -> {ok, 0}; %% Copying redis behaviour even when documentation said different
-      Length ->
-        update(State#state.db, Key, string, raw,
-               fun(Item = #edis_item{value = <<Prefix:Offset/binary, _:Length/binary, Suffix/binary>>}) ->
-                       NewV = <<Prefix/binary, Value/binary, Suffix/binary>>,
-                       {erlang:size(NewV), Item#edis_item{value = NewV}};
-                  (Item = #edis_item{value = <<Prefix:Offset/binary, _/binary>>}) ->
-                       NewV = <<Prefix/binary, Value/binary>>,
-                       {erlang:size(NewV), Item#edis_item{value = NewV}};
-                  (Item = #edis_item{value = Prefix}) ->
-                       Pad = Offset - erlang:size(Prefix),
-                       NewV = <<Prefix/binary, 0:Pad/unit:8, Value/binary>>,
-                       {erlang:size(NewV), Item#edis_item{value = NewV}}
-               end, <<>>)
-    end,
+    update(State#state.db, Key, string, raw,
+           fun(Item = #edis_item{value = <<Prefix:Offset/binary, _:Length/binary, Suffix/binary>>}) ->
+                   NewV = <<Prefix/binary, Value/binary, Suffix/binary>>,
+                   {erlang:size(NewV), Item#edis_item{value = NewV}};
+              (Item = #edis_item{value = <<Prefix:Offset/binary, _/binary>>}) ->
+                   NewV = <<Prefix/binary, Value/binary>>,
+                   {erlang:size(NewV), Item#edis_item{value = NewV}};
+              (Item = #edis_item{value = Prefix}) ->
+                   Pad = Offset - erlang:size(Prefix),
+                   NewV = <<Prefix/binary, 0:Pad/unit:8, Value/binary>>,
+                   {erlang:size(NewV), Item#edis_item{value = NewV}}
+           end, <<>>),
   {reply, Reply, stamp(Key, State)};
 handle_call({str_len, Key}, _From, State) ->
   Reply =
@@ -839,6 +840,28 @@ handle_call({hvals, Key}, _From, State) ->
       Item -> {ok, dict:fold(fun(_,Value,Acc) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
+    end,
+  {reply, Reply, State};
+handle_call({rpop, Key}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, list,
+                fun(Item) ->
+                        case lists:reverse(Item#edis_item.value) of
+                          [Value] ->
+                            {{delete, Value}, Item#edis_item{value = []}};
+                          [Value|Rest] ->
+                            {{keep, Value}, Item#edis_item{value = lists:reverse(Rest)}};
+                          [] ->
+                            throw(not_found)
+                        end
+                end) of
+      {ok, {delete, Value}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Value};
+      {ok, {keep, Value}} ->
+        {ok, Value};
+      {error, Reason} ->
+        {error, Reason}
     end,
   {reply, Reply, State};
 handle_call({rpop_lpush, Key, Key}, _From, State) ->
