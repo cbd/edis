@@ -28,11 +28,12 @@ ping(Config) ->
 
 select(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
-	ok = erldis_client:sr_scall(Client, [<<"select">>, 15]),
-	{error,<<"ERR invalid DB index">>} = erldis_client:sr_scall(Client, [<<"select">>, 16]),
-	{error,<<"ERR wrong number of arguments for 'SELECT' command">>} = erldis_client:sr_scall(Client, [<<"select">>, 4, 3]),
-	{error,<<"ERR invalid DB index">>} = erldis_client:sr_scall(Client, [<<"select">>, -1]),
-	ok = erldis_client:sr_scall(Client, [<<"select">>, a]).
+	ok = erldis_client:sr_scall(Client, [<<"select">>, <<"15">>]),
+	ok = erldis_client:sr_scall(Client, [<<"select">>, <<"a">>]),
+	
+	{error,<<"ERR invalid DB index">>} = erldis_client:sr_scall(Client, [<<"select">>, <<"16">>]),
+	{error,<<"ERR wrong number of arguments for 'SELECT' command">>} = erldis_client:sr_scall(Client, [<<"select">>, <<"4">>, <<"3">>]),
+	{error,<<"ERR invalid DB index">>} = erldis_client:sr_scall(Client, [<<"select">>, <<"-1">>]).
 
 auth(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
