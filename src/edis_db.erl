@@ -27,6 +27,7 @@
                 db                  :: eleveldb:db_ref(),
                 start_time          :: pos_integer(),
                 accesses            :: dict(),
+                blocked_list_ops    :: dict(),
                 last_save           :: float()}).
 -opaque state() :: #state{}.
 
@@ -42,7 +43,7 @@
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4,
-         rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
+         rpop/2, rpop_lpush/3, brpop_lpush/4, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -301,6 +302,18 @@ rpop(Db, Key) ->
 rpop_lpush(Db, Key, Value) ->
   make_call(Db, {rpop_lpush, Key, Value}).
 
+-spec brpop_lpush(atom(), binary(), binary(), infinity | non_neg_integer()) -> binary().
+brpop_lpush(Db, Key, Value, Timeout) ->
+  make_call(Db, {brpop_lpush, Key, Value,
+                 case Timeout of
+                   infinity -> infinity;
+                   Timeout -> edis_util:now() + Timeout
+                 end},
+            case Timeout of
+              infinity -> infinity;
+              Timeout -> Timeout * 1000
+            end).
+
 -spec rpush(atom(), binary(), binary()) -> pos_integer().
 rpush(Db, Key, Value) ->
   make_call(Db, {rpush, Key, Value}).
@@ -319,7 +332,8 @@ init(Index) ->
   case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
     {ok, Ref} ->
       {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp(),
-                  start_time = edis_util:now(), accesses = dict:new()}};
+                  start_time = edis_util:now(), accesses = dict:new(),
+                  blocked_list_ops = orddict:new()}};
     {error, Reason} ->
       ?THROW("Couldn't start level db #~p:~b\t~p~n", [Index, Reason]),
       {stop, Reason}
@@ -883,6 +897,14 @@ handle_call({hvals, Key}, _From, State) ->
                              end, [], Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({brpop_lpush, Source, Destination, Timeout}, From, State) ->
+  Req = {rpop_lpush, Source, Destination},
+  case handle_call(Req, From, State) of
+    {reply, {error, not_found}, NewState} ->
+      {noreply, block_list_op(Source, Req, From, Timeout, NewState)};
+    OtherReply ->
+      OtherReply
+  end;
 handle_call({lindex, Key, Index}, _From, State) ->
   Reply =
     case get_item(State#state.db, list, Key) of
@@ -950,14 +972,16 @@ handle_call({lpop, Key}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({lpush, Key, Value}, _From, State) ->
+handle_call({lpush, Key, Value}, From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
            fun(Item) ->
                    {length(Item#edis_item.value) + 1,
                     Item#edis_item{value = [Value | Item#edis_item.value]}}
            end, []),
-  {reply, Reply, stamp(Key, State)};
+  gen_server:reply(From, Reply),
+  NewState = check_blocked_list_ops(Key, State),
+  {noreply, stamp(Key, NewState)};
 handle_call({lpush_x, Key, Value}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
@@ -1200,6 +1224,63 @@ stamp(Key, State) ->
                              State#state.start_time, State#state.accesses)}.
 
 %% @private
+block_list_op(Key, Req, From, Timeout, State) ->
+  CurrentList =
+      case orddict:find(Key, State#state.blocked_list_ops) of
+        error -> [];
+        {ok, L} -> L
+      end,
+  State#state{blocked_list_ops =
+                  orddict:store(Key,
+                                lists:reverse([{Timeout, Req, From}|
+                                                   lists:reverse(CurrentList)]),
+                                State#state.blocked_list_ops)}.
+
+check_blocked_list_ops(Key, State) ->
+  Now = edis_util:now(),
+  case orddict:find(Key, State#state.blocked_list_ops) of
+    error -> State;
+    {ok, [{Timeout, Req, From = {To, _Tag}}]} when Timeout > Now ->
+      case rpc:pinfo(To) of
+        undefined -> %% Caller disconnected
+          State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)};
+        _ ->
+          case handle_call(Req, From, State) of
+            {reply, {error, not_found}, NewState} -> %% still have to wait
+              NewState;
+            {reply, Reply, NewState} ->
+              gen_server:reply(From, Reply),
+              NewState#state{blocked_list_ops = orddict:erase(Key, NewState#state.blocked_list_ops)}
+          end
+      end;
+    {ok, [{Timeout, Req, From = {To, _Tag}} | Rest]} when Timeout > Now ->
+      case rpc:pinfo(To) of
+        undefined -> %% Caller disconnected
+          check_blocked_list_ops(
+            Key, State#state{blocked_list_ops =
+                                 orddict:store(Key, Rest, State#state.blocked_list_ops)});
+        _ ->
+          case handle_call(Req, From, State) of
+            {reply, {error, not_found}, NewState} -> %% still have to wait
+              NewState;
+            {reply, Reply, NewState} ->
+              gen_server:reply(From, Reply),
+              check_blocked_list_ops(
+                Key, NewState#state{blocked_list_ops =
+                                        orddict:store(Key, Rest, NewState#state.blocked_list_ops)})
+          end
+      end;
+    {ok, [_TimedOut]} ->
+      State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)};
+    {ok, [_TimedOut|Rest]} ->
+      check_blocked_list_ops(
+            Key, State#state{blocked_list_ops =
+                                 orddict:store(Key, Rest, State#state.blocked_list_ops)});
+    {ok, []} ->
+      State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)}
+  end.
+
+%% @private
 exists_item(Db, Key) ->
   case eleveldb:get(Db, Key, []) of
     {ok, _} -> true;
@@ -1316,10 +1397,13 @@ make_call(Process, Request) ->
 make_call(Process, Request, Timeout) ->
   ?DEBUG("CALL for ~p: ~p~n", [Process, Request]),
   ok = edis_db_monitor:notify(Process, Request),
-  case gen_server:call(Process, Request, Timeout) of
+  try gen_server:call(Process, Request, Timeout) of
     ok -> ok;
     {ok, Reply} -> Reply;
     {error, Error} ->
       ?THROW("Error trying ~p on ~p:~n\t~p~n", [Request, Process, Error]),
       throw(Error)
+  catch
+    _:{timeout, _} ->
+      throw(timeout)
   end.

@@ -102,7 +102,9 @@ handle_info(#edis_command{} = Command, State) ->
 handle_info({gen_event_EXIT, _Handler, Reason}, State) ->
   ?INFO("Monitor deactivated. Reason: ~p~n", [Reason]),
   {noreply, State, hibernate};
-handle_info(_, State) -> {noreply, State, hibernate}.
+handle_info(Info, State) ->
+  ?INFO("Unexpected info: ~p~n", [Info]),
+  {noreply, State, hibernate}.
 
 %% @hidden
 -spec terminate(term(), state()) -> ok.
@@ -458,6 +460,24 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"BRPOPLPUSH">>, [Source, Destination, Timeout], State) ->
+  try
+    case edis_util:binary_to_integer(Timeout) of
+      T when T < 0 ->
+        tcp_err("timeout is negative", State);
+      0 ->
+        tcp_bulk(edis_db:brpop_lpush(State#state.db, Source, Destination, infinity), State);
+      T ->
+        tcp_bulk(edis_db:brpop_lpush(State#state.db, Source, Destination, T), State)
+    end
+  catch
+    _:timeout ->
+      tcp_bulk(undefined, State);
+    _:not_integer ->
+      tcp_err("timeout is not an integer or out of range", State)
+  end;
+run_command(<<"BRPOPLPUSH">>, _, State) ->
+  tcp_err("wrong number of arguments for 'BRPOPLPUSH' command", State);
 run_command(<<"LINDEX">>, [Key, Index], State) ->
   tcp_bulk(edis_db:lindex(State#state.db, Key, edis_util:binary_to_integer(Index, 0)), State);
 run_command(<<"LINDEX">>, _, State) ->
