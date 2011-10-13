@@ -42,8 +42,8 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4,
-         lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
+         lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -253,6 +253,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec blpop(atom(), [binary()], infinity | non_neg_integer()) -> {binary(), binary()}.
+blpop(Db, Keys, Timeout) ->
+  make_call(Db, {blpop, Keys, timeout_to_seconds(Timeout)}, timeout_to_ms(Timeout)).
 
 -spec brpop(atom(), [binary()], infinity | non_neg_integer()) -> {binary(), binary()}.
 brpop(Db, Keys, Timeout) ->
@@ -894,6 +898,29 @@ handle_call({hvals, Key}, _From, State) ->
                              end, [], Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({blpop, Keys, Timeout}, From, State) ->
+  Reqs = [{blpop_internal, Key, []} || Key <- Keys],
+  case first_that_works(Reqs, From, State) of
+    {reply, {error, not_found}, NewState} ->
+      {noreply,
+       lists:foldl(
+         fun(Key, AccState) ->
+                 block_list_op(Key, {blpop_internal, Key, Keys}, From, Timeout, AccState)
+         end, NewState, Keys)};
+    OtherReply ->
+      OtherReply
+  end;
+handle_call({blpop_internal, Key, Keys}, From, State) ->
+  case handle_call({lpop, Key}, From, State) of
+    {reply, {ok, Value}, NewState} ->
+      {reply, {ok, {Key, Value}},
+       lists:foldl(
+         fun(K, AccState) ->
+                 unblock_list_ops(K, From, AccState)
+         end, NewState, Keys)};
+    OtherReply ->
+      OtherReply
+  end;
 handle_call({brpop, Keys, Timeout}, From, State) ->
   Reqs = [{brpop_internal, Key, []} || Key <- Keys],
   case first_that_works(Reqs, From, State) of
