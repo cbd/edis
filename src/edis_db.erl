@@ -41,8 +41,8 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4, rpop/2,
-         rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4,
+         rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -252,6 +252,10 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec lindex(atom(), binary(), integer()) -> undefined | binary().
+lindex(Db, Key, Index) ->
+  make_call(Db, {lindex, Key, Index}).
 
 -spec linsert(atom(), binary(), before|'after', binary(), binary()) -> -1 | non_neg_integer().
 linsert(Db, Key, Position, Pivot, Value) ->
@@ -877,6 +881,25 @@ handle_call({hvals, Key}, _From, State) ->
       Item -> {ok, dict:fold(fun(_,Value,Acc) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({lindex, Key, Index}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, list, Key) of
+      #edis_item{value = Value} ->
+        try
+          case Index of
+            Index when Index >= 0 ->
+              {ok, lists:nth(Index + 1, Value)};
+            Index ->
+              {ok, lists:nth((-1)*Index, Value)}
+          end
+        catch
+          _:function_clause ->
+            {ok, undefined}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
 handle_call({linsert, Key, Position, Pivot, Value}, _From, State) ->

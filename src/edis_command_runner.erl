@@ -306,13 +306,7 @@ run_command(<<"KEYS">>, [Pattern], State) ->
 run_command(<<"KEYS">>, _, State) ->
   tcp_err("wrong number of arguments for 'KEYS' command", State);
 run_command(<<"MOVE">>, [Key, Db], State) ->
-  DbIndex =
-      try edis_util:binary_to_integer(Db)
-      catch
-        _:not_integer ->
-          ?WARN("Using db 0 because we received '~s' as the db index. This behaviour was copied from redis-server~n", [Db]),
-          0
-      end,
+  DbIndex = edis_util:binary_to_integer(Db, 0),
   case {DbIndex, edis_config:get(databases), State#state.db, edis_db:process(DbIndex)} of
     {DbIndex, Dbs, _, _} when DbIndex < 0 orelse DbIndex > Dbs ->
       tcp_err("index out of range", State);
@@ -464,6 +458,10 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"LINDEX">>, [Key, Index], State) ->
+  tcp_bulk(edis_db:lindex(State#state.db, Key, edis_util:binary_to_integer(Index, 0)), State);
+run_command(<<"LINDEX">>, _, State) ->
+  tcp_err("wrong number of arguments for 'LINDEX' command", State);
 run_command(<<"LINSERT">>, [Key, Position, Pivot, Value], State) ->
   try
     case edis_util:upper(Position) of
@@ -507,35 +505,13 @@ run_command(<<"LPUSHX">>, [Key, Value], State) ->
 run_command(<<"LPUSHX">>, _, State) ->
   tcp_err("wrong number of arguments for 'LPUSHX' command", State);
 run_command(<<"LRANGE">>, [Key, Start, Stop], State) ->
-  Sta =
-    try edis_util:binary_to_integer(Start) of
-      SN -> SN
-    catch
-      _:not_integer ->
-        ?WARN("Using count 0 because we received '~s'. This behaviour was copied from redis-server~n", [Start]),
-        0
-    end,
-  Sto =
-    try edis_util:binary_to_integer(Stop) of
-      TN -> TN
-    catch
-      _:not_integer ->
-        ?WARN("Using count 0 because we received '~s'. This behaviour was copied from redis-server~n", [Stop]),
-        0
-    end,
-  tcp_multi_bulk(edis_db:lrange(State#state.db, Key, Sta, Sto), State);
+  tcp_multi_bulk(edis_db:lrange(State#state.db, Key,
+                                edis_util:binary_to_integer(Start, 0),
+                                edis_util:binary_to_integer(Stop, 0)), State);
 run_command(<<"LRANGE">>, _, State) ->
   tcp_err("wrong number of arguments for 'LRANGE' command", State);
 run_command(<<"LREM">>, [Key, Count, Value], State) ->
-  C =
-    try edis_util:binary_to_integer(Count) of
-      N -> N
-    catch
-      _:not_integer ->
-        ?WARN("Using count 0 because we received '~s'. This behaviour was copied from redis-server~n", [Count]),
-        0
-    end,
-  try edis_db:lrem(State#state.db, Key, C, Value) of
+  try edis_db:lrem(State#state.db, Key, edis_util:binary_to_integer(Count, 0), Value) of
     Removed ->
       tcp_number(Removed, State)
   catch
@@ -545,15 +521,7 @@ run_command(<<"LREM">>, [Key, Count, Value], State) ->
 run_command(<<"LREM">>, _, State) ->
   tcp_err("wrong number of arguments for 'LREM' command", State);
 run_command(<<"LSET">>, [Key, Index, Value], State) ->
-  I =
-    try edis_util:binary_to_integer(Index) of
-      N -> N
-    catch
-      _:not_integer ->
-        ?WARN("Using index 0 because we received '~s'. This behaviour was copied from redis-server~n", [Index]),
-        0
-    end,
-  try edis_db:lset(State#state.db, Key, I, Value) of
+  try edis_db:lset(State#state.db, Key, edis_util:binary_to_integer(Index, 0), Value) of
     ok ->
       tcp_ok(State)
   catch

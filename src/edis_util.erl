@@ -9,8 +9,10 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, integer_to_binary/1,
-         make_pairs/1, glob_to_re/1]).
+-export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
+         integer_to_binary/1, make_pairs/1, glob_to_re/1]).
+
+-include("elog.hrl").
 
 -define(EPOCH, 62167219200).
 
@@ -61,6 +63,15 @@ binary_to_integer(Bin) ->
   catch
     _:badarg ->
       throw(not_integer)
+  end.
+
+-spec binary_to_integer(binary(), integer()) -> integer().
+binary_to_integer(Bin, Default) ->
+  try list_to_integer(binary_to_list(Bin))
+  catch
+    _:badarg ->
+      ?WARN("Using ~p because we received '~s'. This behaviour was copied from redis-server~n", [Default, Bin]),
+      Default
   end.
 
 -spec integer_to_binary(binary()) -> integer().
