@@ -460,6 +460,29 @@ run_command(<<"HVALS">>, _, State) ->
   tcp_err("wrong number of arguments for 'HVALS' command", State);
 
 %% -- Lists ----------------------------------------------------------------------------------------
+run_command(<<"BRPOP">>, [], State) ->
+  tcp_err("wrong number of arguments for 'BRPOP' command", State);
+run_command(<<"BRPOP">>, [_], State) ->
+  tcp_err("wrong number of arguments for 'BRPOP' command", State);
+run_command(<<"BRPOP">>, Args, State) ->
+  [Timeout | Keys] = lists:reverse(Args),
+  try
+    case edis_util:binary_to_integer(Timeout) of
+      T when T < 0 ->
+        tcp_err("timeout is negative", State);
+      0 ->
+        {Key, Value} = edis_db:brpop(State#state.db, lists:reverse(Keys), infinity),
+        tcp_multi_bulk([Key, Value], State);
+      T ->
+        {Key, Value} = edis_db:brpop(State#state.db, lists:reverse(Keys), T),
+        tcp_multi_bulk([Key, Value], State)
+    end
+  catch
+    _:timeout ->
+      tcp_bulk(undefined, State);
+    _:not_integer ->
+      tcp_err("timeout is not an integer or out of range", State)
+  end;
 run_command(<<"BRPOPLPUSH">>, [Source, Destination, Timeout], State) ->
   try
     case edis_util:binary_to_integer(Timeout) of

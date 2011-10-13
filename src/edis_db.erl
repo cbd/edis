@@ -42,8 +42,8 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4,
-         rpop/2, rpop_lpush/3, brpop_lpush/4, rpush/3, rpush_x/3]).
+-export([brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4,
+         lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -254,6 +254,15 @@ hset_nx(Db, Key, Field, Value) ->
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
 
+-spec brpop(atom(), [binary()], infinity | non_neg_integer()) -> {binary(), binary()}.
+brpop(Db, Keys, Timeout) ->
+  make_call(Db, {brpop, Keys, timeout_to_seconds(Timeout)}, timeout_to_ms(Timeout)).
+
+-spec brpop_lpush(atom(), binary(), binary(), infinity | non_neg_integer()) -> binary().
+brpop_lpush(Db, Source, Destination, Timeout) ->
+  make_call(Db, {brpop_lpush, Source, Destination, timeout_to_seconds(Timeout)},
+            timeout_to_ms(Timeout)).
+
 -spec lindex(atom(), binary(), integer()) -> undefined | binary().
 lindex(Db, Key, Index) ->
   make_call(Db, {lindex, Key, Index}).
@@ -301,18 +310,6 @@ rpop(Db, Key) ->
 -spec rpop_lpush(atom(), binary(), binary()) -> binary().
 rpop_lpush(Db, Key, Value) ->
   make_call(Db, {rpop_lpush, Key, Value}).
-
--spec brpop_lpush(atom(), binary(), binary(), infinity | non_neg_integer()) -> binary().
-brpop_lpush(Db, Key, Value, Timeout) ->
-  make_call(Db, {brpop_lpush, Key, Value,
-                 case Timeout of
-                   infinity -> infinity;
-                   Timeout -> edis_util:now() + Timeout
-                 end},
-            case Timeout of
-              infinity -> infinity;
-              Timeout -> Timeout * 1000
-            end).
 
 -spec rpush(atom(), binary(), binary()) -> pos_integer().
 rpush(Db, Key, Value) ->
@@ -897,6 +894,29 @@ handle_call({hvals, Key}, _From, State) ->
                              end, [], Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({brpop, Keys, Timeout}, From, State) ->
+  Reqs = [{brpop_internal, Key, []} || Key <- Keys],
+  case first_that_works(Reqs, From, State) of
+    {reply, {error, not_found}, NewState} ->
+      {noreply,
+       lists:foldl(
+         fun(Key, AccState) ->
+                 block_list_op(Key, {brpop_internal, Key, Keys}, From, Timeout, AccState)
+         end, NewState, Keys)};
+    OtherReply ->
+      OtherReply
+  end;
+handle_call({brpop_internal, Key, Keys}, From, State) ->
+  case handle_call({rpop, Key}, From, State) of
+    {reply, {ok, Value}, NewState} ->
+      {reply, {ok, {Key, Value}},
+       lists:foldl(
+         fun(K, AccState) ->
+                 unblock_list_ops(K, From, AccState)
+         end, NewState, Keys)};
+    OtherReply ->
+      OtherReply
+  end;
 handle_call({brpop_lpush, Source, Destination, Timeout}, From, State) ->
   Req = {rpop_lpush, Source, Destination},
   case handle_call(Req, From, State) of
@@ -1236,6 +1256,22 @@ block_list_op(Key, Req, From, Timeout, State) ->
                                                    lists:reverse(CurrentList)]),
                                 State#state.blocked_list_ops)}.
 
+%% @private
+unblock_list_ops(Key, From, State) ->
+  case orddict:find(Key, State#state.blocked_list_ops) of
+    error -> State;
+    {ok, List} ->
+      State#state{blocked_list_ops =
+                      orddict:store(
+                        Key,
+                        lists:filter(
+                          fun({_, _, OpFrom}) ->
+                                  OpFrom =/= From
+                          end, List),
+                        State#state.blocked_list_ops)
+                      }
+  end.
+
 check_blocked_list_ops(Key, State) ->
   Now = edis_util:now(),
   case orddict:find(Key, State#state.blocked_list_ops) of
@@ -1278,6 +1314,16 @@ check_blocked_list_ops(Key, State) ->
                                  orddict:store(Key, Rest, State#state.blocked_list_ops)});
     {ok, []} ->
       State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)}
+  end.
+
+first_that_works([], _From, State) ->
+  {reply, {error, not_found}, State};
+first_that_works([Req|Reqs], From, State) ->
+  case handle_call(Req, From, State) of
+    {reply, {error, not_found}, NewState} ->
+      first_that_works(Reqs, From, NewState);
+    OtherReply ->
+      OtherReply
   end.
 
 %% @private
@@ -1407,3 +1453,9 @@ make_call(Process, Request, Timeout) ->
     _:{timeout, _} ->
       throw(timeout)
   end.
+
+timeout_to_seconds(infinity) -> infinity;
+timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
+
+timeout_to_ms(infinity) -> infinity;
+timeout_to_ms(Timeout) -> Timeout * 1000.
