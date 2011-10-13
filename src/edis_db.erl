@@ -41,7 +41,8 @@
 -export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
          random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3, lrange/4, lrem/4, lset/4, ltrim/4,
+         rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 
 %% =================================================================================================
 %% External functions
@@ -251,6 +252,46 @@ hset_nx(Db, Key, Field, Value) ->
 -spec hvals(atom(), binary()) -> [binary()].
 hvals(Db, Key) ->
   make_call(Db, {hvals, Key}).
+
+-spec lindex(atom(), binary(), integer()) -> undefined | binary().
+lindex(Db, Key, Index) ->
+  make_call(Db, {lindex, Key, Index}).
+
+-spec linsert(atom(), binary(), before|'after', binary(), binary()) -> -1 | non_neg_integer().
+linsert(Db, Key, Position, Pivot, Value) ->
+  make_call(Db, {linsert, Key, Position, Pivot, Value}).
+
+-spec llen(atom(), binary()) -> non_neg_integer().
+llen(Db, Key) ->
+  make_call(Db, {llen, Key}).
+
+-spec lpop(atom(), binary()) -> binary().
+lpop(Db, Key) ->
+  make_call(Db, {lpop, Key}).
+
+-spec lpush(atom(), binary(), binary()) -> pos_integer().
+lpush(Db, Key, Value) ->
+  make_call(Db, {lpush, Key, Value}).
+
+-spec lpush_x(atom(), binary(), binary()) -> pos_integer().
+lpush_x(Db, Key, Value) ->
+  make_call(Db, {lpush_x, Key, Value}).
+
+-spec lrange(atom(), binary(), integer(), integer()) -> ok.
+lrange(Db, Key, Start, Stop) ->
+  make_call(Db, {lrange, Key, Start, Stop}).
+
+-spec lrem(atom(), binary(), integer(), binary()) -> ok.
+lrem(Db, Key, Count, Value) ->
+  make_call(Db, {lrem, Key, Count, Value}).
+
+-spec lset(atom(), binary(), integer(), binary()) -> ok.
+lset(Db, Key, Index, Value) ->
+  make_call(Db, {lset, Key, Index, Value}).
+
+-spec ltrim(atom(), binary(), integer(), integer()) -> ok.
+ltrim(Db, Key, Start, Stop) ->
+  make_call(Db, {ltrim, Key, Start, Stop}).
 
 -spec rpop(atom(), binary()) -> binary().
 rpop(Db, Key) ->
@@ -662,7 +703,7 @@ handle_call({rename, Key, NewKey}, _From, State) ->
                          erlang:term_to_binary(Item#edis_item{key = NewKey})}],
                        [])
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({rename_nx, Key, NewKey}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
@@ -682,7 +723,7 @@ handle_call({rename_nx, Key, NewKey}, _From, State) ->
                            [])
         end
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({ttl, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
@@ -693,7 +734,7 @@ handle_call({ttl, Key}, _From, State) ->
       Item ->
         {ok, Item#edis_item.expire - edis_util:now()}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({type, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
@@ -702,7 +743,7 @@ handle_call({type, Key}, _From, State) ->
       Item ->
         {ok, Item#edis_item.type}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hdel, Key, Fields}, _From, State) ->
   Reply =
     case update(State#state.db, Key, hash,
@@ -722,7 +763,7 @@ handle_call({hdel, Key, Fields}, _From, State) ->
       {error, Reason} ->
         {error, Reason}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hexists, Key, Field}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
@@ -730,7 +771,7 @@ handle_call({hexists, Key, Field}, _From, State) ->
       {error, Reason} -> {error, Reason};
       Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hget, Key, Fields}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
@@ -747,7 +788,7 @@ handle_call({hget, Key, Fields}, _From, State) ->
             end, Fields),
         {ok, Results}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hget_all, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
@@ -755,7 +796,7 @@ handle_call({hget_all, Key}, _From, State) ->
       {error, Reason} -> {error, Reason};
       Item -> {ok, dict:to_list(Item#edis_item.value)}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hincr, Key, Field, Increment}, _From, State) ->
   Reply =
     update(
@@ -782,7 +823,7 @@ handle_call({hincr, Key, Field, Increment}, _From, State) ->
                   end
               end
       end, dict:new()),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hkeys, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
@@ -790,7 +831,7 @@ handle_call({hkeys, Key}, _From, State) ->
       {error, Reason} -> {error, Reason};
       Item -> {ok, dict:fetch_keys(Item#edis_item.value)}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hlen, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
@@ -798,7 +839,7 @@ handle_call({hlen, Key}, _From, State) ->
       {error, Reason} -> {error, Reason};
       Item -> {ok, dict:size(Item#edis_item.value)}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hset, Key, FVs}, _From, State) ->
   Reply =
     update(
@@ -818,7 +859,7 @@ handle_call({hset, Key, FVs}, _From, State) ->
                         end
                 end, {updated, Item}, FVs)
       end, dict:new()),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hset_nx, Key, Field, Value}, _From, State) ->
   Reply =
     update(
@@ -831,7 +872,7 @@ handle_call({hset_nx, Key, Field, Value}, _From, State) ->
                   {ok, Item#edis_item{value = dict:store(Field, Value, Item#edis_item.value)}}
                 end
       end, dict:new()),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({hvals, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
@@ -841,7 +882,205 @@ handle_call({hvals, Key}, _From, State) ->
                                      [Value|Acc]
                              end, [], Item#edis_item.value)}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
+handle_call({lindex, Key, Index}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, list, Key) of
+      #edis_item{value = Value} ->
+        try
+          case Index of
+            Index when Index >= 0 ->
+              {ok, lists:nth(Index + 1, Value)};
+            Index ->
+              {ok, lists:nth((-1)*Index, Value)}
+          end
+        catch
+          _:function_clause ->
+            {ok, undefined}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({linsert, Key, Position, Pivot, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   case {lists:splitwith(fun(Val) ->
+                                                Val =/= Pivot
+                                        end, Item#edis_item.value), Position} of
+                     {{_, []}, _} -> %% Value was not found
+                       {-1, Item};
+                     {{Before, After}, before} ->
+                       {length(Item#edis_item.value) + 1,
+                        Item#edis_item{value = lists:append(Before, [Value|After])}};
+                     {{Before, [Pivot|After]}, 'after'} ->
+                       {length(Item#edis_item.value) + 1,
+                        Item#edis_item{value = lists:append(Before, [Pivot, Value|After])}}
+                   end
+           end),
+  {reply, Reply, stamp(Key, State)};
+handle_call({llen, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, list, Key) of
+      #edis_item{value = Value} -> {ok, length(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({lpop, Key}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, list,
+                fun(Item) ->
+                        case Item#edis_item.value of
+                          [Value] ->
+                            {{delete, Value}, Item#edis_item{value = []}};
+                          [Value|Rest] ->
+                            {{keep, Value}, Item#edis_item{value = Rest}};
+                          [] ->
+                            throw(not_found)
+                        end
+                end) of
+      {ok, {delete, Value}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Value};
+      {ok, {keep, Value}} ->
+        {ok, Value};
+      {error, Reason} ->
+        {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({lpush, Key, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list, linkedlist,
+           fun(Item) ->
+                   {length(Item#edis_item.value) + 1,
+                    Item#edis_item{value = [Value | Item#edis_item.value]}}
+           end, []),
+  {reply, Reply, stamp(Key, State)};
+handle_call({lpush_x, Key, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   {length(Item#edis_item.value) + 1,
+                    Item#edis_item{value = [Value | Item#edis_item.value]}}
+           end),
+  {reply, Reply, stamp(Key, State)};
+handle_call({lrange, Key, Start, Stop}, _From, State) ->
+  Reply =
+    try
+      case get_item(State#state.db, list, Key) of
+        #edis_item{value = Value} ->
+          L = erlang:length(Value),
+          StartPos =
+            case Start of
+              Start when Start >= L -> throw(empty);
+              Start when Start >= 0 -> Start + 1;
+              Start when Start < (-1)*L -> 1;
+              Start -> L + 1 + Start
+            end,
+          StopPos =
+            case Stop of
+              Stop when Stop >= 0, Stop >= L -> L;
+              Stop when Stop >= 0 -> Stop + 1;
+              Stop when Stop < (-1)*L -> 0;
+              Stop -> L + 1 + Stop
+            end,
+          case StopPos - StartPos + 1 of
+            Len when Len =< 0 -> {ok, []};
+            Len -> {ok, lists:sublist(Value, StartPos, Len)}
+          end;
+        not_found -> {ok, []};
+        {error, Reason} -> {error, Reason}
+      end
+    catch
+      _:empty -> {ok, []}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({lrem, Key, Count, Value}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, list,
+           fun(Item) ->
+                   NewV =
+                     case Count of
+                       0 ->
+                         lists:filter(fun(Val) ->
+                                              Val =/= Value
+                                      end, Item#edis_item.value);
+                       Count when Count >= 0 ->
+                         Item#edis_item.value -- lists:duplicate(Count, Value);
+                       Count ->
+                         lists:reverse(
+                           lists:reverse(Item#edis_item.value) --
+                             lists:duplicate((-1)*Count, Value))
+                     end,
+                   {length(Item#edis_item.value) - length(NewV), Item#edis_item{value = NewV}}
+           end),
+  {reply, Reply, stamp(Key, State)};
+handle_call({lset, Key, Index, Value}, _From, State) ->
+  Reply =
+    case
+      update(State#state.db, Key, list,
+             fun(Item) ->
+                     case Index of
+                       0 ->
+                         {ok, Item#edis_item{value = [Value | erlang:tl(Item#edis_item.value)]}};
+                       -1 ->
+                         [_|Rest] = lists:reverse(Item#edis_item.value),
+                         {ok, Item#edis_item{value = lists:reverse([Value|Rest])}};
+                       Index when Index >= 0 ->
+                         case lists:split(Index, Item#edis_item.value) of
+                           {Before, [_|After]} ->
+                             {ok, Item#edis_item{value = lists:append(Before, [Value|After])}};
+                           {_, []} ->
+                             throw(badarg)
+                         end;
+                       Index ->
+                         {RAfter, RBefore} =
+                           lists:split((-1)*Index, lists:reverse(Item#edis_item.value)),
+                         [_|After] = lists:reverse(RAfter),
+                         {ok, Item#edis_item{value =
+                                               lists:append(lists:reverse(RBefore), [Value|After])}}
+                     end
+             end) of
+      {ok, ok} -> ok;
+      {error, badarg} -> {error, out_of_range};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({ltrim, Key, Start, Stop}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, list,
+                fun(Item) ->
+                        L = erlang:length(Item#edis_item.value),
+                        StartPos =
+                          case Start of
+                            Start when Start >= L -> throw(empty);
+                            Start when Start >= 0 -> Start + 1;
+                            Start when Start < (-1)*L -> 1;
+                            Start -> L + 1 + Start
+                          end,
+                        StopPos =
+                          case Stop of
+                            Stop when Stop >= 0, Stop >= L -> L;
+                            Stop when Stop >= 0 -> Stop + 1;
+                            Stop when Stop < (-1)*L -> 0;
+                            Stop -> L + 1 + Stop
+                          end,
+                        case StopPos - StartPos + 1 of
+                          Len when Len =< 0 -> throw(empty);
+                          Len ->
+                            {ok, Item#edis_item{value =
+                                                  lists:sublist(Item#edis_item.value, StartPos, Len)}}
+                        end
+                end) of
+      {ok, ok} -> ok;
+      {error, empty} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        ok;
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
 handle_call({rpop, Key}, _From, State) ->
   Reply =
     case update(State#state.db, Key, list,
@@ -863,7 +1102,7 @@ handle_call({rpop, Key}, _From, State) ->
       {error, Reason} ->
         {error, Reason}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({rpop_lpush, Key, Key}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
@@ -876,7 +1115,7 @@ handle_call({rpop_lpush, Key, Key}, _From, State) ->
                        throw(not_found)
                    end
            end),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({rpop_lpush, Source, Destination}, _From, State) ->
   Reply =
     case update(State#state.db, Source, list,
@@ -904,7 +1143,7 @@ handle_call({rpop_lpush, Source, Destination}, _From, State) ->
       {error, Reason} ->
         {error, Reason}
     end,
-  {reply, Reply, State};
+  {reply, Reply, stamp([Destination, Source], State)};
 handle_call({rpush, Key, Value}, _From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
@@ -915,7 +1154,7 @@ handle_call({rpush, Key, Value}, _From, State) ->
                                        [Value|
                                           lists:reverse(Item#edis_item.value)])}}
            end, []),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 handle_call({rpush_x, Key, Value}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
@@ -926,7 +1165,7 @@ handle_call({rpush_x, Key, Value}, _From, State) ->
                                        [Value|
                                           lists:reverse(Item#edis_item.value)])}}
            end),
-  {reply, Reply, State};
+  {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
@@ -951,6 +1190,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% Private functions
 %% =================================================================================================
 %% @private
+stamp(undefined, State) -> State;
 stamp([], State) -> State;
 stamp([Key|Keys], State) ->
   stamp(Keys, stamp(Key, State));
