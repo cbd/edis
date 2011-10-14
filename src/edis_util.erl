@@ -10,7 +10,7 @@
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
-         integer_to_binary/1, make_pairs/1, glob_to_re/1]).
+         integer_to_binary/1, make_pairs/1, glob_to_re/1,random_binary/0]).
 
 -include("elog.hrl").
 
@@ -96,3 +96,12 @@ glob_to_re(Pattern) ->
         <<"?">>, <<".">>, [global]),
       <<"(">>, <<"\\(">>, [global]),
     <<")">>, <<"\\)">>, [global]).
+
+-spec random_binary() -> binary().
+random_binary() ->
+  Now = {_, _, Micro} = erlang:now(),
+  Nowish = calendar:now_to_universal_time(Now),
+  Nowsecs = calendar:datetime_to_gregorian_seconds(Nowish),
+  Then = calendar:datetime_to_gregorian_seconds({{1970, 1, 1}, {0, 0, 0}}),
+  Prefix = io_lib:format("~14.16.0b", [(Nowsecs - Then) * 1000000 + Micro]),
+  list_to_binary(Prefix ++ integer_to_list(Micro) ++ base64:encode(crypto:rand_bytes(9))).
