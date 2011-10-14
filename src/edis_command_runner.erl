@@ -677,6 +677,14 @@ run_command(<<"SMEMBERS">>, [Key], State) ->
   tcp_multi_bulk(edis_db:smembers(State#state.db, Key), State);
 run_command(<<"SMEMBERS">>, _, State) ->
   tcp_err("wrong number of arguments for 'SMEMBERS' command", State);
+run_command(<<"SMOVE">>, [Source, Destination, Member], State) ->
+  try edis_db:smove(State#state.db, Source, Destination, Member) of
+    Moved -> tcp_boolean(Moved, State)
+  catch
+    _:not_found -> tcp_boolean(false, State)
+  end;
+run_command(<<"SMOVE">>, [], State) ->
+  tcp_err("wrong number of arguments for 'SMOVE' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------

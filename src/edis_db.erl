@@ -44,7 +44,8 @@
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
--export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2]).
+-export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
+         smove/4]).
 
 %% =================================================================================================
 %% External functions
@@ -220,8 +221,10 @@ hexists(Db, Key, Field) ->
 hget(Db, Key, Fields) when is_list(Fields) ->
   make_call(Db, {hget, Key, Fields});
 hget(Db, Key, Field) ->
-  [Res] = make_call(Db, {hget, Key, [Field]}),
-  Res.
+  case make_call(Db, {hget, Key, [Field]}) of
+    [Res] -> Res;
+    undefined -> undefined
+  end.
 
 -spec hget_all(atom(), binary()) -> [{binary(), binary()}].
 hget_all(Db, Key) ->
@@ -355,6 +358,10 @@ sismember(Db, Key, Member) ->
 -spec smembers(atom(), binary()) -> [binary()].
 smembers(Db, Key) ->
   make_call(Db, {smembers, Key}).
+
+-spec smove(atom(), binary(), binary(), binary()) -> non_neg_integer().
+smove(Db, Source, Destination, Key) ->
+  make_call(Db, {smove, Source, Destination, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -1377,6 +1384,23 @@ handle_call({smembers, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({smove, Source, Destination, Member}, _From, State) ->
+  Reply =
+    case update(State#state.db, Source, set,
+                fun(Item) ->
+                        {gb_sets:is_element(Member, Item#edis_item.value),
+                         Item#edis_item{value = gb_sets:del_element(Member, Item#edis_item.value)}}
+                end) of
+      {ok, true} ->
+        update(State#state.db, Destination, set, hashtable,
+               fun(Item) ->
+                       {true, Item#edis_item{value =
+                                               gb_sets:add_element(Member, Item#edis_item.value)}}
+               end, gb_sets:empty());
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp([Source, Destination], State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
