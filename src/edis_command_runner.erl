@@ -673,6 +673,10 @@ run_command(<<"SISMEMBER">>, [Key, Member], State) ->
   tcp_boolean(edis_db:sismember(State#state.db, Key, Member), State);
 run_command(<<"SISMEMBER">>, [], State) ->
   tcp_err("wrong number of arguments for 'SISMEMBER' command", State);
+run_command(<<"SMEMBERS">>, [Key], State) ->
+  tcp_multi_bulk(edis_db:smembers(State#state.db, Key), State);
+run_command(<<"SMEMBERS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SMEMBERS' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
