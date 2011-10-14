@@ -142,7 +142,7 @@ run_command(<<"AUTH">>, _, State) ->
 run_command(_, _, State = #state{authenticated = false}) ->
   tcp_err("operation not permitted", State);
 run_command(<<"SELECT">>, [Db], State) ->
-  try {edis_util:binary_to_integer(Db), edis_config:get(databases)} of
+  try {edis_util:binary_to_integer(Db, 0), edis_config:get(databases)} of
     {DbIndex, Dbs} when DbIndex < 0 orelse DbIndex >= Dbs ->
       tcp_err("invalid DB index", State);
     {DbIndex, _} ->

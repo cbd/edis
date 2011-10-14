@@ -494,7 +494,7 @@ handle_call({set_nx, KVs}, _From, State) ->
                    exists_item(State#state.db, Key)
            end, KVs) of
       true ->
-        {reply, {error, already_exists}, State};
+        {error, already_exists};
       false ->
         eleveldb:write(State#state.db,
                        [{put, Key,
