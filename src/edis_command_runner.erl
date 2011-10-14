@@ -704,6 +704,14 @@ run_command(<<"SREM">>, [Key, Member | Members], State) ->
   end;
 run_command(<<"SREM">>, _, State) ->
   tcp_err("wrong number of arguments for 'SREM' command", State);
+run_command(<<"SUNION">>, [Key|Keys], State) ->
+  tcp_multi_bulk(edis_db:sunion(State#state.db, [Key|Keys]), State);
+run_command(<<"SUNION">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SUNION' command", State);
+run_command(<<"SUNIONSTORE">>, [Destination, Key | Keys], State) ->
+  tcp_number(edis_db:sunion_store(State#state.db, Destination, [Key|Keys]), State);
+run_command(<<"SUNIONSTORE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SUNIONSTORE' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------

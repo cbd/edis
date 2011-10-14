@@ -45,7 +45,7 @@
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
-         smove/4, spop/2, srand_member/2, srem/3]).
+         smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
 
 %% =================================================================================================
 %% External functions
@@ -374,6 +374,14 @@ srand_member(Db, Key) ->
 -spec srem(atom(), binary(), [binary()]) -> non_neg_integer().
 srem(Db, Key, Members) ->
   make_call(Db, {srem, Key, Members}).
+
+-spec sunion(atom(), [binary()]) -> [binary()].
+sunion(Db, Keys) ->
+  make_call(Db, {sunion, Keys}).
+
+-spec sunion_store(atom(), binary(), [binary()]) -> non_neg_integer().
+sunion_store(Db, Destination, Keys) ->
+  make_call(Db, {sunion_store, Destination, Keys}).
 
 %% =================================================================================================
 %% Server functions
@@ -1490,6 +1498,40 @@ handle_call({srem, Key, Members}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({sunion, Keys}, _From, State) ->
+  Reply =
+    try gb_sets:union(
+          [case get_item(State#state.db, set, Key) of
+             #edis_item{value = Value} -> Value;
+             not_found -> gb_sets:empty();
+             {error, Reason} -> throw(Reason)
+           end || Key <- Keys]) of
+      Set -> {ok, gb_sets:to_list(Set)}
+    catch
+      _:empty -> {ok, []};
+      _:Error -> {error, Error}
+    end,
+  {reply, Reply, stamp(Keys, State)};
+handle_call({sunion_store, Destination, Keys}, From, State) ->
+    case handle_call({sunion, Keys}, From, State) of
+      {reply, {ok, []}, NewState} ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
+      {reply, {ok, Members}, NewState} ->
+        Value = gb_sets:from_list(Members),
+        Reply =
+          case eleveldb:put(State#state.db,
+                            Destination,
+                            erlang:term_to_binary(
+                              #edis_item{key = Destination, type = set, encoding = hashtable,
+                                         value = Value}), []) of
+            ok -> {ok, gb_sets:size(Value)};
+            {error, Reason} -> {error, Reason}
+          end,
+        {reply, Reply, stamp([Destination|Keys], NewState)};
+      ErrorReply ->
+        ErrorReply
+    end;
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
