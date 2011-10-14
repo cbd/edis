@@ -781,6 +781,8 @@ tcp_multi_bulk(Lines, State) ->
 -spec tcp_bulk(undefined | iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_bulk(undefined, State) ->
   tcp_send("$-1", State);
+tcp_bulk(<<>>, State) ->
+  tcp_send("$0\r\n", State);
 tcp_bulk(Message, State) ->
   case tcp_send(["$", integer_to_list(iolist_size(Message))], State) of
     {noreply, NewState} -> tcp_send(Message, NewState);
