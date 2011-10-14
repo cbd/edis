@@ -44,7 +44,7 @@
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
--export([sadd/3]).
+-export([sadd/3, scard/2]).
 
 %% =================================================================================================
 %% External functions
@@ -327,6 +327,10 @@ rpush_x(Db, Key, Value) ->
 -spec sadd(atom(), binary(), [binary()]) -> non_neg_integer().
 sadd(Db, Key, Members) ->
   make_call(Db, {sadd, Key, Members}).
+
+-spec scard(atom(), binary()) -> non_neg_integer().
+scard(Db, Key) ->
+  make_call(Db, {scard, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -1251,6 +1255,14 @@ handle_call({sadd, Key, Members}, _From, State) ->
                    {sets:size(NewValue) - sets:size(Item#edis_item.value),
                     Item#edis_item{value = NewValue}}
            end, sets:new()),
+  {reply, Reply, stamp(Key, State)};
+handle_call({scard, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, sets:size(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
   {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
