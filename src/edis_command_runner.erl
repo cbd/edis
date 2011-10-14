@@ -642,6 +642,13 @@ run_command(<<"RPUSHX">>, [Key, Value], State) ->
 run_command(<<"RPUSHX">>, _, State) ->
   tcp_err("wrong number of arguments for 'RPUSHX' command", State);
 
+%% -- Sets -----------------------------------------------------------------------------------------
+run_command(<<"SADD">>, [], State) ->
+  tcp_err("wrong number of arguments for 'BLPOP' command", State);
+run_command(<<"SADD">>, [_], State) ->
+  tcp_err("wrong number of arguments for 'BLPOP' command", State);
+run_command(<<"SADD">>, [Key | Members], State) ->
+  tcp_number(edis_db:sadd(State#state.db, Key, Members), State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
