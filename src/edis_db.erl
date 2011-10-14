@@ -45,7 +45,7 @@
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
-         smove/4]).
+         smove/4, spop/2]).
 
 %% =================================================================================================
 %% External functions
@@ -362,6 +362,10 @@ smembers(Db, Key) ->
 -spec smove(atom(), binary(), binary(), binary()) -> non_neg_integer().
 smove(Db, Source, Destination, Key) ->
   make_call(Db, {smove, Source, Destination, Key}).
+
+-spec spop(atom(), binary()) -> binary().
+spop(Db, Key) ->
+  make_call(Db, {spop, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -1322,6 +1326,9 @@ handle_call({sdiff, [Key | Keys]}, _From, State) ->
   {reply, Reply, stamp(Key, State)};
 handle_call({sdiff_store, Destination, Keys}, From, State) ->
     case handle_call({sdiff, Keys}, From, State) of
+      {reply, {ok, []}, NewState} ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
       {reply, {ok, Members}, NewState} ->
         Value = gb_sets:from_list(Members),
         Reply =
@@ -1353,6 +1360,9 @@ handle_call({sinter, Keys}, _From, State) ->
   {reply, Reply, stamp(Keys, State)};
 handle_call({sinter_store, Destination, Keys}, From, State) ->
     case handle_call({sinter, Keys}, From, State) of
+      {reply, {ok, []}, NewState} ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
       {reply, {ok, Members}, NewState} ->
         Value = gb_sets:from_list(Members),
         Reply =
@@ -1364,7 +1374,7 @@ handle_call({sinter_store, Destination, Keys}, From, State) ->
             ok -> {ok, gb_sets:size(Value)};
             {error, Reason} -> {error, Reason}
           end,
-        {reply, Reply, stamp(Destination, NewState)};
+        {reply, Reply, stamp([Destination|Keys], NewState)};
       ErrorReply ->
         ErrorReply
     end;
@@ -1388,9 +1398,24 @@ handle_call({smove, Source, Destination, Member}, _From, State) ->
   Reply =
     case update(State#state.db, Source, set,
                 fun(Item) ->
-                        {gb_sets:is_element(Member, Item#edis_item.value),
-                         Item#edis_item{value = gb_sets:del_element(Member, Item#edis_item.value)}}
+                        case gb_sets:is_element(Member, Item#edis_item.value) of
+                          false ->
+                            {false, Item};
+                          true ->
+                            NewValue = gb_sets:del_element(Member, Item#edis_item.value),
+                            case gb_sets:size(NewValue) of
+                              0 -> {delete, Item#edis_item{value = NewValue}};
+                              _ -> {true, Item#edis_item{value = NewValue}}
+                            end
+                        end
                 end) of
+      {ok, delete} ->
+        _ = eleveldb:delete(State#state.db, Source, []),
+        update(State#state.db, Destination, set, hashtable,
+               fun(Item) ->
+                       {true, Item#edis_item{value =
+                                               gb_sets:add_element(Member, Item#edis_item.value)}}
+               end, gb_sets:empty());
       {ok, true} ->
         update(State#state.db, Destination, set, hashtable,
                fun(Item) ->
@@ -1401,6 +1426,23 @@ handle_call({smove, Source, Destination, Member}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp([Source, Destination], State)};
+handle_call({spop, Key}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, set,
+                fun(Item) ->
+                        {Member, NewValue} = gb_sets:take_smallest(Item#edis_item.value),
+                        case gb_sets:size(NewValue) of
+                          0 -> {{delete, Member}, Item#edis_item{value = NewValue}};
+                          _ -> {Member, Item#edis_item{value = NewValue}}
+                        end
+                end) of
+      {ok, {delete, Member}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Member};
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

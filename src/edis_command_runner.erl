@@ -659,7 +659,7 @@ run_command(<<"SDIFF">>, _, State) ->
   tcp_err("wrong number of arguments for 'SDIFF' command", State);
 run_command(<<"SDIFFSTORE">>, [Destination, Key | Keys], State) ->
   tcp_number(edis_db:sdiff_store(State#state.db, Destination, [Key|Keys]), State);
-run_command(<<"SDIFFSTORE">>, [], State) ->
+run_command(<<"SDIFFSTORE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SDIFFSTORE' command", State);
 run_command(<<"SINTER">>, [Key|Keys], State) ->
   tcp_multi_bulk(edis_db:sinter(State#state.db, [Key|Keys]), State);
@@ -667,11 +667,11 @@ run_command(<<"SINTER">>, _, State) ->
   tcp_err("wrong number of arguments for 'SINTER' command", State);
 run_command(<<"SINTERSTORE">>, [Destination, Key | Keys], State) ->
   tcp_number(edis_db:sinter_store(State#state.db, Destination, [Key|Keys]), State);
-run_command(<<"SINTERSTORE">>, [], State) ->
+run_command(<<"SINTERSTORE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SINTERSTORE' command", State);
 run_command(<<"SISMEMBER">>, [Key, Member], State) ->
   tcp_boolean(edis_db:sismember(State#state.db, Key, Member), State);
-run_command(<<"SISMEMBER">>, [], State) ->
+run_command(<<"SISMEMBER">>, _, State) ->
   tcp_err("wrong number of arguments for 'SISMEMBER' command", State);
 run_command(<<"SMEMBERS">>, [Key], State) ->
   tcp_multi_bulk(edis_db:smembers(State#state.db, Key), State);
@@ -683,8 +683,16 @@ run_command(<<"SMOVE">>, [Source, Destination, Member], State) ->
   catch
     _:not_found -> tcp_boolean(false, State)
   end;
-run_command(<<"SMOVE">>, [], State) ->
+run_command(<<"SMOVE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SMOVE' command", State);
+run_command(<<"SPOP">>, [Key], State) ->
+  try edis_db:spop(State#state.db, Key) of
+    Member -> tcp_bulk(Member, State)
+  catch
+    _:not_found -> tcp_bulk(undefined, State)
+  end;
+run_command(<<"SPOP">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SPOP' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
