@@ -45,7 +45,7 @@
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
-         smove/4, spop/2]).
+         smove/4, spop/2, srand_member/2]).
 
 %% =================================================================================================
 %% External functions
@@ -366,6 +366,10 @@ smove(Db, Source, Destination, Key) ->
 -spec spop(atom(), binary()) -> binary().
 spop(Db, Key) ->
   make_call(Db, {spop, Key}).
+
+-spec srand_member(atom(), binary()) -> undefined | binary().
+srand_member(Db, Key) ->
+  make_call(Db, {srand_member, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -1441,6 +1445,23 @@ handle_call({spop, Key}, _From, State) ->
         {ok, Member};
       OtherReply ->
         OtherReply
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({srand_member, Key}, _From, State) ->
+  _ = random:seed(erlang:now()),
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} ->
+        Iterator = gb_sets:iterator(Value),
+        {Res, _} =
+          lists:foldl(
+           fun(_, {_, AccIterator}) ->
+                   gb_sets:next(AccIterator)
+           end, {undefined, Iterator},
+           lists:seq(1, random:uniform(gb_sets:size(Value)))),
+        {ok, Res};
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
 

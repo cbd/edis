@@ -693,6 +693,10 @@ run_command(<<"SPOP">>, [Key], State) ->
   end;
 run_command(<<"SPOP">>, _, State) ->
   tcp_err("wrong number of arguments for 'SPOP' command", State);
+run_command(<<"SRANDMEMBER">>, [Key], State) ->
+  tcp_bulk(edis_db:srand_member(State#state.db, Key), State);
+run_command(<<"SRANDMEMBER">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SRANDMEMBER' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
