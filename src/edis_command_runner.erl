@@ -643,12 +643,10 @@ run_command(<<"RPUSHX">>, _, State) ->
   tcp_err("wrong number of arguments for 'RPUSHX' command", State);
 
 %% -- Sets -----------------------------------------------------------------------------------------
-run_command(<<"SADD">>, [], State) ->
+run_command(<<"SADD">>, [Key, Member | Members], State) ->
+  tcp_number(edis_db:sadd(State#state.db, Key, [Member | Members]), State);
+run_command(<<"SADD">>, _, State) ->
   tcp_err("wrong number of arguments for 'SADD' command", State);
-run_command(<<"SADD">>, [_], State) ->
-  tcp_err("wrong number of arguments for 'SADD' command", State);
-run_command(<<"SADD">>, [Key | Members], State) ->
-  tcp_number(edis_db:sadd(State#state.db, Key, Members), State);
 run_command(<<"SCARD">>, [Key], State) ->
   tcp_number(edis_db:scard(State#state.db, Key), State);
 run_command(<<"SCARD">>, _, State) ->
@@ -697,6 +695,15 @@ run_command(<<"SRANDMEMBER">>, [Key], State) ->
   tcp_bulk(edis_db:srand_member(State#state.db, Key), State);
 run_command(<<"SRANDMEMBER">>, _, State) ->
   tcp_err("wrong number of arguments for 'SRANDMEMBER' command", State);
+run_command(<<"SREM">>, [Key, Member | Members], State) ->
+  try edis_db:srem(State#state.db, Key, [Member | Members]) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"SREM">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SREM' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------

@@ -45,7 +45,7 @@
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
-         smove/4, spop/2, srand_member/2]).
+         smove/4, spop/2, srand_member/2, srem/3]).
 
 %% =================================================================================================
 %% External functions
@@ -370,6 +370,10 @@ spop(Db, Key) ->
 -spec srand_member(atom(), binary()) -> undefined | binary().
 srand_member(Db, Key) ->
   make_call(Db, {srand_member, Key}).
+
+-spec srem(atom(), binary(), [binary()]) -> non_neg_integer().
+srem(Db, Key, Members) ->
+  make_call(Db, {srem, Key, Members}).
 
 %% =================================================================================================
 %% Server functions
@@ -1462,6 +1466,28 @@ handle_call({srand_member, Key}, _From, State) ->
         {ok, Res};
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({srem, Key, Members}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, set,
+                fun(Item) ->
+                        NewValue =
+                          lists:foldl(fun gb_sets:del_element/2, Item#edis_item.value, Members),
+                        case gb_sets:size(NewValue) of
+                          0 ->
+                            {{delete, gb_sets:size(Item#edis_item.value)},
+                             Item#edis_item{value = NewValue}};
+                          N ->
+                            {gb_sets:size(Item#edis_item.value) - N,
+                             Item#edis_item{value = NewValue}}
+                        end
+                end) of
+      {ok, {delete, Count}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Count};
+      OtherReply ->
+        OtherReply
     end,
   {reply, Reply, stamp(Key, State)};
 
