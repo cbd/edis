@@ -44,6 +44,7 @@
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
+-export([sadd/3]).
 
 %% =================================================================================================
 %% External functions
@@ -322,6 +323,10 @@ rpush(Db, Key, Value) ->
 -spec rpush_x(atom(), binary(), binary()) -> pos_integer().
 rpush_x(Db, Key, Value) ->
   make_call(Db, {rpush_x, Key, Value}).
+
+-spec sadd(atom(), binary(), [binary()]) -> non_neg_integer().
+sadd(Db, Key, Members) ->
+  make_call(Db, {sadd, Key, Members}).
 
 %% =================================================================================================
 %% Server functions
@@ -1236,6 +1241,16 @@ handle_call({rpush_x, Key, Value}, _From, State) ->
                                        [Value|
                                           lists:reverse(Item#edis_item.value)])}}
            end),
+  {reply, Reply, stamp(Key, State)};
+handle_call({sadd, Key, Members}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, set, hashtable,
+           fun(Item) ->
+                   NewValue =
+                     lists:foldl(fun sets:add_element/2, Item#edis_item.value, Members),
+                   {sets:size(NewValue) - sets:size(Item#edis_item.value),
+                    Item#edis_item{value = NewValue}}
+           end, sets:new()),
   {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
