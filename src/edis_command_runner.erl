@@ -653,10 +653,22 @@ run_command(<<"SCARD">>, [Key], State) ->
   tcp_number(edis_db:scard(State#state.db, Key), State);
 run_command(<<"SCARD">>, _, State) ->
   tcp_err("wrong number of arguments for 'SCARD' command", State);
-run_command(<<"SDIFF">>, [], State) ->
+run_command(<<"SDIFF">>, [Key|Keys], State) ->
+  tcp_multi_bulk(edis_db:sdiff(State#state.db, [Key|Keys]), State);
+run_command(<<"SDIFF">>, _, State) ->
   tcp_err("wrong number of arguments for 'SDIFF' command", State);
-run_command(<<"SDIFF">>, Keys, State) ->
-  tcp_multi_bulk(edis_db:sdiff(State#state.db, Keys), State);
+run_command(<<"SDIFFSTORE">>, [Destination, Key | Keys], State) ->
+  tcp_number(edis_db:sdiff_store(State#state.db, Destination, [Key|Keys]), State);
+run_command(<<"SDIFFSTORE">>, [], State) ->
+  tcp_err("wrong number of arguments for 'SDIFFSTORE' command", State);
+run_command(<<"SINTER">>, [Key|Keys], State) ->
+  tcp_multi_bulk(edis_db:sinter(State#state.db, [Key|Keys]), State);
+run_command(<<"SINTER">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SINTER' command", State);
+run_command(<<"SINTERSTORE">>, [Destination, Key | Keys], State) ->
+  tcp_number(edis_db:sinter_store(State#state.db, Destination, [Key|Keys]), State);
+run_command(<<"SINTERSTORE">>, [], State) ->
+  tcp_err("wrong number of arguments for 'SINTERSTORE' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
