@@ -44,7 +44,7 @@
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
--export([sadd/3, scard/2]).
+-export([sadd/3, scard/2, sdiff/2]).
 
 %% =================================================================================================
 %% External functions
@@ -331,6 +331,10 @@ sadd(Db, Key, Members) ->
 -spec scard(atom(), binary()) -> non_neg_integer().
 scard(Db, Key) ->
   make_call(Db, {scard, Key}).
+
+-spec sdiff(atom(), [binary()]) -> [binary()].
+sdiff(Db, Keys) ->
+  make_call(Db, {sdiff, Keys}).
 
 %% =================================================================================================
 %% Server functions
@@ -1251,16 +1255,41 @@ handle_call({sadd, Key, Members}, _From, State) ->
     update(State#state.db, Key, set, hashtable,
            fun(Item) ->
                    NewValue =
-                     lists:foldl(fun sets:add_element/2, Item#edis_item.value, Members),
-                   {sets:size(NewValue) - sets:size(Item#edis_item.value),
+                     lists:foldl(fun gb_sets:add_element/2, Item#edis_item.value, Members),
+                   {gb_sets:size(NewValue) - gb_sets:size(Item#edis_item.value),
                     Item#edis_item{value = NewValue}}
-           end, sets:new()),
+           end, gb_sets:new()),
   {reply, Reply, stamp(Key, State)};
 handle_call({scard, Key}, _From, State) ->
   Reply =
     case get_item(State#state.db, set, Key) of
-      #edis_item{value = Value} -> {ok, sets:size(Value)};
+      #edis_item{value = Value} -> {ok, gb_sets:size(Value)};
       not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({sdiff, [Key]}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, gb_sets:to_list(Value)};
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({sdiff, [Key | Keys]}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} ->
+        {ok, gb_sets:to_list(
+           lists:foldl(
+             fun(SKey, AccSet) ->
+                     case get_item(State#state.db, set, SKey) of
+                       #edis_item{value = SValue} -> gb_sets:subtract(AccSet, SValue);
+                       not_found -> AccSet;
+                       {error, Reason} -> throw(Reason)
+                     end
+             end, Value, Keys))};
+      not_found -> {ok, []};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};

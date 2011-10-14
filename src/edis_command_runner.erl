@@ -644,15 +644,19 @@ run_command(<<"RPUSHX">>, _, State) ->
 
 %% -- Sets -----------------------------------------------------------------------------------------
 run_command(<<"SADD">>, [], State) ->
-  tcp_err("wrong number of arguments for 'BLPOP' command", State);
+  tcp_err("wrong number of arguments for 'SADD' command", State);
 run_command(<<"SADD">>, [_], State) ->
-  tcp_err("wrong number of arguments for 'BLPOP' command", State);
+  tcp_err("wrong number of arguments for 'SADD' command", State);
 run_command(<<"SADD">>, [Key | Members], State) ->
   tcp_number(edis_db:sadd(State#state.db, Key, Members), State);
 run_command(<<"SCARD">>, [Key], State) ->
   tcp_number(edis_db:scard(State#state.db, Key), State);
 run_command(<<"SCARD">>, _, State) ->
   tcp_err("wrong number of arguments for 'SCARD' command", State);
+run_command(<<"SDIFF">>, [], State) ->
+  tcp_err("wrong number of arguments for 'SDIFF' command", State);
+run_command(<<"SDIFF">>, Keys, State) ->
+  tcp_multi_bulk(edis_db:sdiff(State#state.db, Keys), State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
