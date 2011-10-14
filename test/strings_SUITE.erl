@@ -225,7 +225,7 @@ getrange(Config) ->
 	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"mykey">>,<<"Hello World">>]),
 	<<"Hell">> = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"0">>,<<"3">>]),
 	<<"Hello World">> = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"0">>,<<"-1">>]),
-	nil = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"5">>,<<"3">>]),
+ 	nil = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"5">>,<<"3">>]),
 	<<"orld">> = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"-4">>,<<"-1">>]),
 	<<" World">> = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"5">>,<<"100">>]),
 	<<"Hello World">> = erldis_client:sr_scall(Client,[<<"getrange">>,<<"mykey">>,<<"-500">>,<<"100">>]).
@@ -261,11 +261,6 @@ setnx(Config) ->
 	%% with already existent key
 	false = erldis_client:sr_scall(Client,[<<"setnx">>,<<"x">>,<<"35">>]),
 	<<"10">> = erldis_client:sr_scall(Client,[<<"get">>,<<"x">>]),
-	
-	%% SETNX will overwrite EXPIREing key
-	true = erldis_client:sr_scall(Client,[<<"expire">>,<<"x">>,<<"100">>]),
-    true = erldis_client:sr_scall(Client,[<<"setnx">>,<<"x">>,<<"888">>]),
-	<<"888">> = erldis_client:sr_scall(Client,[<<"get">>,<<"x">>]),
 	
 	{error,<<"ERR wrong number of arguments for 'SETNX' command">>} = erldis_client:sr_scall(Client,[<<"setnx">>,<<"x">>]).
 	
