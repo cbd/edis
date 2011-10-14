@@ -44,7 +44,7 @@
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
--export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3]).
+-export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3]).
 
 %% =================================================================================================
 %% External functions
@@ -347,6 +347,10 @@ sinter(Db, Keys) ->
 -spec sinter_store(atom(), binary(), [binary()]) -> non_neg_integer().
 sinter_store(Db, Destination, Keys) ->
   make_call(Db, {sinter_store, Destination, Keys}).
+
+-spec sismember(atom(), binary(), binary()) -> [binary()].
+sismember(Db, Key, Member) ->
+  make_call(Db, {sismember, Key, Member}).
 
 %% =================================================================================================
 %% Server functions
@@ -1353,6 +1357,14 @@ handle_call({sinter_store, Destination, Keys}, From, State) ->
       ErrorReply ->
         ErrorReply
     end;
+handle_call({sismember, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, gb_sets:is_element(Member, Value)};
+      not_found -> {ok, false};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

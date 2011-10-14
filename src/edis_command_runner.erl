@@ -669,6 +669,10 @@ run_command(<<"SINTERSTORE">>, [Destination, Key | Keys], State) ->
   tcp_number(edis_db:sinter_store(State#state.db, Destination, [Key|Keys]), State);
 run_command(<<"SINTERSTORE">>, [], State) ->
   tcp_err("wrong number of arguments for 'SINTERSTORE' command", State);
+run_command(<<"SISMEMBER">>, [Key, Member], State) ->
+  tcp_boolean(edis_db:sismember(State#state.db, Key, Member), State);
+run_command(<<"SISMEMBER">>, [], State) ->
+  tcp_err("wrong number of arguments for 'SISMEMBER' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
