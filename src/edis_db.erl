@@ -49,7 +49,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4]).
+-export([zadd/3, zcard/2, zcount/4, zincr/4]).
 
 %% =================================================================================================
 %% External functions
@@ -396,6 +396,10 @@ zcard(Db, Key) ->
 -spec zcount(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
 zcount(Db, Key, Min, Max) ->
   make_call(Db, {zcount, Key, Min, Max}).
+
+-spec zincr(atom(), binary(), float(), binary()) -> float().
+zincr(Db, Key, Increment, Member) ->
+  make_call(Db, {zincr, Key, Increment, Member}).
 
 %% =================================================================================================
 %% Server functions
@@ -1573,6 +1577,19 @@ handle_call({zcount, Key, Min, Max}, _From, State) ->
       not_found -> {ok, 0};
       {error, Reason} -> {error, Reason}
     end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zincr, Key, Increment, Member}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, zset, skiplist,
+           fun(Item) ->
+                   NewScore =
+                     case zsets:find(Member, Item#edis_item.value) of
+                       error -> Increment;
+                       {ok, Score} -> Score + Increment
+                     end,
+                   {NewScore, 
+                    Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
+           end, zsets:new()),
   {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
