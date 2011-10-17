@@ -739,6 +739,77 @@ run_command(<<"ZINCRBY">>, [Key, Increment, Member], State) ->
   tcp_float(edis_db:zincr(State#state.db, Key, edis_util:binary_to_float(Increment), Member), State);
 run_command(<<"ZINCRBY">>, _, State) ->
   tcp_err("wrong number of arguments for 'ZINCRBY' command", State);
+run_command(<<"ZINTERSTORE">>, [Destination, NumKeys | Rest], State) ->
+  case edis_util:binary_to_integer(NumKeys, 0) of
+    0 ->
+      tcp_err("at least 1 input key is needed for ZUNIONSTORE/ZINTERSTORE", State);
+    NK when NK < 0 ->
+      tcp_err(["negative length (", NumKeys, ")"], State);
+    NK ->
+      case length(Rest) of
+        RL when RL < NK ->
+          tcp_err("syntax error", State);
+        NK ->
+          tcp_number(edis_db:zinter_store(State#state.db, Destination,
+                                          [{Key, 1.0} || Key <- Rest], sum), State);
+        RL when RL =:= NK + 1 ->
+          tcp_err("syntax error", State);
+        RL when RL > NK ->
+          Keys = lists:sublist(Rest, 1, NK),
+          [W, First | Rest2] = lists:nthtail(NK, Rest),
+          case {edis_util:upper(W), edis_util:upper(First), Rest2} of
+            {<<"AGGREGATE">>, <<"SUM">>, []} ->
+              tcp_number(edis_db:zinter_store(State#state.db, Destination,
+                                              [{Key, 1.0} || Key <- Keys], sum), State);
+            {<<"AGGREGATE">>, <<"MAX">>, []} ->
+              tcp_number(edis_db:zinter_store(State#state.db, Destination,
+                                              [{Key, 1.0} || Key <- Keys], max), State);
+            {<<"AGGREGATE">>, <<"MIN">>, []} ->
+              tcp_number(edis_db:zinter_store(State#state.db, Destination,
+                                              [{Key, 1.0} || Key <- Keys], min), State);
+            {<<"AGGREGATE">>, _, _} ->
+              tcp_err("syntax error", State);
+            {<<"WEIGHTS">>, First, Rest2} when length(Rest2) + 1 < NK ->
+              tcp_err("syntax error", State);
+            {<<"WEIGHTS">>, First, Rest2} when length(Rest2) + 1 =:= NK ->
+              try lists:map(fun edis_util:binary_to_float/1, [First|Rest2]) of
+                Weights ->
+                  tcp_number(edis_db:zinter_store(State#state.db, Destination,
+                                                  lists:zip(Keys, Weights), sum), State)
+              catch
+                _:not_float ->
+                  tcp_err("weight value is not a double", State)
+              end;
+            {<<"WEIGHTS">>, First, Rest2} when length(Rest2) =:= NK + 1 ->
+              WeightBins = lists:sublist([First | Rest2], 1, NK),
+              Aggregate =
+                case lists:map(fun edis_util:upper/1, lists:nthtail(NK-1, Rest2)) of
+                  [<<"AGGREGATE">>, <<"SUM">>] -> sum;
+                  [<<"AGGREGATE">>, <<"MAX">>] -> max;
+                  [<<"AGGREGATE">>, <<"MIN">>] -> min;
+                  _ -> error
+                end,
+              case Aggregate of
+                error ->
+                  tcp_err("syntax error", State);
+                Aggregate ->
+                  try lists:map(fun edis_util:binary_to_float/1, WeightBins) of
+                    Weights ->
+                      tcp_number(edis_db:zinter_store(State#state.db, Destination,
+                                                      lists:zip(Keys, Weights),
+                                                      Aggregate), State)
+                  catch
+                    _:not_float ->
+                      tcp_err("weight value is not a double", State)
+                  end
+              end;
+            _ ->
+              tcp_err("syntax error", State)
+          end
+      end
+  end;
+run_command(<<"ZINTERSTORE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZINTERSTORE' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

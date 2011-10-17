@@ -24,7 +24,8 @@
 -export_type([item_encoding/0, item_type/0]).
 
 -type float_limit() :: neg_infinity | infinity | {exc, float()} | {inc, float()}.
--export_type([float_limit/0]).
+-type aggregate() :: sum | max | min.
+-export_type([float_limit/0, aggregate/0]).
 
 -record(state, {index               :: non_neg_integer(),
                 db                  :: eleveldb:db_ref(),
@@ -49,7 +50,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4, zincr/4]).
+-export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4]).
 
 %% =================================================================================================
 %% External functions
@@ -400,6 +401,10 @@ zcount(Db, Key, Min, Max) ->
 -spec zincr(atom(), binary(), float(), binary()) -> float().
 zincr(Db, Key, Increment, Member) ->
   make_call(Db, {zincr, Key, Increment, Member}).
+
+-spec zinter_store(atom(), binary(), [{binary(), float()}], aggregate()) -> non_neg_integer().
+zinter_store(Db, Destination, WeightedKeys, Aggregate) ->
+  make_call(Db, {zinter_store, Destination, WeightedKeys, Aggregate}).
 
 %% =================================================================================================
 %% Server functions
