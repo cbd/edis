@@ -13,7 +13,7 @@
 
 -include("edis.hrl").
 
--type config_option() :: listener_port_range | client_timeout | databases | requirepass.
+-type config_option() :: listener_port_range | client_timeout | databases | requirepass | dir.
 
 -spec set(config_option(), term()) -> ok.
 set(listener_port_range, {P1, P2}) when is_integer(P1), is_integer(P2), P1 =< P2 ->
@@ -41,6 +41,12 @@ set(requirepass, Pass) when is_binary(Pass) ->
 set(requirepass, Param) ->
   ?THROW("Invalid password: ~p~n", [Param]),
   throw(invalid_param);
+set(dir, Dir) when is_binary(Dir) ->
+  ok = application:set_env(edis, dir, binary_to_list(Dir)),
+  edis_db_sup:reload();
+set(dir, Param) ->
+  ?THROW("Invalid password: ~p~n", [Param]),
+  throw(invalid_param);
 set(Param, Value) ->
   ?THROW("Unsupported param: ~p: ~p~n", [Param, Value]),
   throw(unsupported_param).
@@ -54,6 +60,8 @@ get(databases) ->
   get(databases, 16);
 get(requirepass) ->
   get(requirepass, undefined);
+get(dir) ->
+  get(dir, "./db/");
 get(Pattern) ->
   [{K, V} ||
    {K, V} <- application:get_all_env(edis),
