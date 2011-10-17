@@ -722,6 +722,10 @@ run_command(<<"ZADD">>, [Key | SMs], State) when SMs =/= [], length(SMs) rem 2 =
   tcp_number(edis_db:zadd(State#state.db, Key, ParsedSMs), State);
 run_command(<<"ZADD">>, _, State) ->
   tcp_err("wrong number of arguments for 'ZADD' command", State);
+run_command(<<"ZCARD">>, [Key], State) ->
+  tcp_number(edis_db:zcard(State#state.db, Key), State);
+run_command(<<"ZCARD">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZCARD' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

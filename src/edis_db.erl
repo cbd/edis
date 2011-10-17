@@ -46,7 +46,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3]).
+-export([zadd/3, zcard/2]).
 
 %% =================================================================================================
 %% External functions
@@ -387,6 +387,10 @@ sunion_store(Db, Destination, Keys) ->
 -spec zadd(atom(), binary(), [{float(), binary()}]) -> non_neg_integer().
 zadd(Db, Key, SMs) ->
   make_call(Db, {zadd, Key, SMs}).
+
+-spec zcard(atom(), binary()) -> non_neg_integer().
+zcard(Db, Key) ->
+  make_call(Db, {zcard, Key}).
 
 %% =================================================================================================
 %% Server functions
@@ -1546,6 +1550,14 @@ handle_call({zadd, Key, SMs}, _From, State) ->
                    {zsets:size(NewValue) - zsets:size(Item#edis_item.value),
                     Item#edis_item{value = NewValue}}
            end, zsets:new()),
+  {reply, Reply, stamp(Key, State)};
+handle_call({zcard, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} -> {ok, zsets:size(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
   {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
