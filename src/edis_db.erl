@@ -44,7 +44,8 @@
 -export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
 -export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
--export([sadd/3]).
+-export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
+         smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
 
 %% =================================================================================================
 %% External functions
@@ -220,8 +221,10 @@ hexists(Db, Key, Field) ->
 hget(Db, Key, Fields) when is_list(Fields) ->
   make_call(Db, {hget, Key, Fields});
 hget(Db, Key, Field) ->
-  [Res] = make_call(Db, {hget, Key, [Field]}),
-  Res.
+  case make_call(Db, {hget, Key, [Field]}) of
+    [Res] -> Res;
+    undefined -> undefined
+  end.
 
 -spec hget_all(atom(), binary()) -> [{binary(), binary()}].
 hget_all(Db, Key) ->
@@ -327,6 +330,58 @@ rpush_x(Db, Key, Value) ->
 -spec sadd(atom(), binary(), [binary()]) -> non_neg_integer().
 sadd(Db, Key, Members) ->
   make_call(Db, {sadd, Key, Members}).
+
+-spec scard(atom(), binary()) -> non_neg_integer().
+scard(Db, Key) ->
+  make_call(Db, {scard, Key}).
+
+-spec sdiff(atom(), [binary()]) -> [binary()].
+sdiff(Db, Keys) ->
+  make_call(Db, {sdiff, Keys}).
+
+-spec sdiff_store(atom(), binary(), [binary()]) -> non_neg_integer().
+sdiff_store(Db, Destination, Keys) ->
+  make_call(Db, {sdiff_store, Destination, Keys}).
+
+-spec sinter(atom(), [binary()]) -> [binary()].
+sinter(Db, Keys) ->
+  make_call(Db, {sinter, Keys}).
+
+-spec sinter_store(atom(), binary(), [binary()]) -> non_neg_integer().
+sinter_store(Db, Destination, Keys) ->
+  make_call(Db, {sinter_store, Destination, Keys}).
+
+-spec sismember(atom(), binary(), binary()) -> [binary()].
+sismember(Db, Key, Member) ->
+  make_call(Db, {sismember, Key, Member}).
+
+-spec smembers(atom(), binary()) -> [binary()].
+smembers(Db, Key) ->
+  make_call(Db, {smembers, Key}).
+
+-spec smove(atom(), binary(), binary(), binary()) -> non_neg_integer().
+smove(Db, Source, Destination, Key) ->
+  make_call(Db, {smove, Source, Destination, Key}).
+
+-spec spop(atom(), binary()) -> binary().
+spop(Db, Key) ->
+  make_call(Db, {spop, Key}).
+
+-spec srand_member(atom(), binary()) -> undefined | binary().
+srand_member(Db, Key) ->
+  make_call(Db, {srand_member, Key}).
+
+-spec srem(atom(), binary(), [binary()]) -> non_neg_integer().
+srem(Db, Key, Members) ->
+  make_call(Db, {srem, Key, Members}).
+
+-spec sunion(atom(), [binary()]) -> [binary()].
+sunion(Db, Keys) ->
+  make_call(Db, {sunion, Keys}).
+
+-spec sunion_store(atom(), binary(), [binary()]) -> non_neg_integer().
+sunion_store(Db, Destination, Keys) ->
+  make_call(Db, {sunion_store, Destination, Keys}).
 
 %% =================================================================================================
 %% Server functions
@@ -1247,11 +1302,236 @@ handle_call({sadd, Key, Members}, _From, State) ->
     update(State#state.db, Key, set, hashtable,
            fun(Item) ->
                    NewValue =
-                     lists:foldl(fun sets:add_element/2, Item#edis_item.value, Members),
-                   {sets:size(NewValue) - sets:size(Item#edis_item.value),
+                     lists:foldl(fun gb_sets:add_element/2, Item#edis_item.value, Members),
+                   {gb_sets:size(NewValue) - gb_sets:size(Item#edis_item.value),
                     Item#edis_item{value = NewValue}}
-           end, sets:new()),
+           end, gb_sets:new()),
   {reply, Reply, stamp(Key, State)};
+handle_call({scard, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, gb_sets:size(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({sdiff, [Key]}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, gb_sets:to_list(Value)};
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({sdiff, [Key | Keys]}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} ->
+        {ok, gb_sets:to_list(
+           lists:foldl(
+             fun(SKey, AccSet) ->
+                     case get_item(State#state.db, set, SKey) of
+                       #edis_item{value = SValue} -> gb_sets:subtract(AccSet, SValue);
+                       not_found -> AccSet;
+                       {error, Reason} -> throw(Reason)
+                     end
+             end, Value, Keys))};
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({sdiff_store, Destination, Keys}, From, State) ->
+    case handle_call({sdiff, Keys}, From, State) of
+      {reply, {ok, []}, NewState} ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
+      {reply, {ok, Members}, NewState} ->
+        Value = gb_sets:from_list(Members),
+        Reply =
+          case eleveldb:put(State#state.db,
+                            Destination,
+                            erlang:term_to_binary(
+                              #edis_item{key = Destination, type = set, encoding = hashtable,
+                                         value = Value}), []) of
+            ok -> {ok, gb_sets:size(Value)};
+            {error, Reason} -> {error, Reason}
+          end,
+        {reply, Reply, stamp(Destination, NewState)};
+      ErrorReply ->
+        ErrorReply
+    end;
+handle_call({sinter, Keys}, _From, State) ->
+  Reply =
+    try gb_sets:intersection(
+          [case get_item(State#state.db, set, Key) of
+             #edis_item{value = Value} -> Value;
+             not_found -> throw(empty);
+             {error, Reason} -> throw(Reason)
+           end || Key <- Keys]) of
+      Set -> {ok, gb_sets:to_list(Set)}
+    catch
+      _:empty -> {ok, []};
+      _:Error -> {error, Error}
+    end,
+  {reply, Reply, stamp(Keys, State)};
+handle_call({sinter_store, Destination, Keys}, From, State) ->
+    case handle_call({sinter, Keys}, From, State) of
+      {reply, {ok, []}, NewState} ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
+      {reply, {ok, Members}, NewState} ->
+        Value = gb_sets:from_list(Members),
+        Reply =
+          case eleveldb:put(State#state.db,
+                            Destination,
+                            erlang:term_to_binary(
+                              #edis_item{key = Destination, type = set, encoding = hashtable,
+                                         value = Value}), []) of
+            ok -> {ok, gb_sets:size(Value)};
+            {error, Reason} -> {error, Reason}
+          end,
+        {reply, Reply, stamp([Destination|Keys], NewState)};
+      ErrorReply ->
+        ErrorReply
+    end;
+handle_call({sismember, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, gb_sets:is_element(Member, Value)};
+      not_found -> {ok, false};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({smembers, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} -> {ok, gb_sets:to_list(Value)};
+      not_found -> {ok, []};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({smove, Source, Destination, Member}, _From, State) ->
+  Reply =
+    case update(State#state.db, Source, set,
+                fun(Item) ->
+                        case gb_sets:is_element(Member, Item#edis_item.value) of
+                          false ->
+                            {false, Item};
+                          true ->
+                            NewValue = gb_sets:del_element(Member, Item#edis_item.value),
+                            case gb_sets:size(NewValue) of
+                              0 -> {delete, Item#edis_item{value = NewValue}};
+                              _ -> {true, Item#edis_item{value = NewValue}}
+                            end
+                        end
+                end) of
+      {ok, delete} ->
+        _ = eleveldb:delete(State#state.db, Source, []),
+        update(State#state.db, Destination, set, hashtable,
+               fun(Item) ->
+                       {true, Item#edis_item{value =
+                                               gb_sets:add_element(Member, Item#edis_item.value)}}
+               end, gb_sets:empty());
+      {ok, true} ->
+        update(State#state.db, Destination, set, hashtable,
+               fun(Item) ->
+                       {true, Item#edis_item{value =
+                                               gb_sets:add_element(Member, Item#edis_item.value)}}
+               end, gb_sets:empty());
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp([Source, Destination], State)};
+handle_call({spop, Key}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, set,
+                fun(Item) ->
+                        {Member, NewValue} = gb_sets:take_smallest(Item#edis_item.value),
+                        case gb_sets:size(NewValue) of
+                          0 -> {{delete, Member}, Item#edis_item{value = NewValue}};
+                          _ -> {Member, Item#edis_item{value = NewValue}}
+                        end
+                end) of
+      {ok, {delete, Member}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Member};
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({srand_member, Key}, _From, State) ->
+  _ = random:seed(erlang:now()),
+  Reply =
+    case get_item(State#state.db, set, Key) of
+      #edis_item{value = Value} ->
+        Iterator = gb_sets:iterator(Value),
+        {Res, _} =
+          lists:foldl(
+           fun(_, {_, AccIterator}) ->
+                   gb_sets:next(AccIterator)
+           end, {undefined, Iterator},
+           lists:seq(1, random:uniform(gb_sets:size(Value)))),
+        {ok, Res};
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({srem, Key, Members}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, set,
+                fun(Item) ->
+                        NewValue =
+                          lists:foldl(fun gb_sets:del_element/2, Item#edis_item.value, Members),
+                        case gb_sets:size(NewValue) of
+                          0 ->
+                            {{delete, gb_sets:size(Item#edis_item.value)},
+                             Item#edis_item{value = NewValue}};
+                          N ->
+                            {gb_sets:size(Item#edis_item.value) - N,
+                             Item#edis_item{value = NewValue}}
+                        end
+                end) of
+      {ok, {delete, Count}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Count};
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({sunion, Keys}, _From, State) ->
+  Reply =
+    try gb_sets:union(
+          [case get_item(State#state.db, set, Key) of
+             #edis_item{value = Value} -> Value;
+             not_found -> gb_sets:empty();
+             {error, Reason} -> throw(Reason)
+           end || Key <- Keys]) of
+      Set -> {ok, gb_sets:to_list(Set)}
+    catch
+      _:empty -> {ok, []};
+      _:Error -> {error, Error}
+    end,
+  {reply, Reply, stamp(Keys, State)};
+handle_call({sunion_store, Destination, Keys}, From, State) ->
+    case handle_call({sunion, Keys}, From, State) of
+      {reply, {ok, []}, NewState} ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
+      {reply, {ok, Members}, NewState} ->
+        Value = gb_sets:from_list(Members),
+        Reply =
+          case eleveldb:put(State#state.db,
+                            Destination,
+                            erlang:term_to_binary(
+                              #edis_item{key = Destination, type = set, encoding = hashtable,
+                                         value = Value}), []) of
+            ok -> {ok, gb_sets:size(Value)};
+            {error, Reason} -> {error, Reason}
+          end,
+        {reply, Reply, stamp([Destination|Keys], NewState)};
+      ErrorReply ->
+        ErrorReply
+    end;
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

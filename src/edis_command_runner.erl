@@ -643,12 +643,75 @@ run_command(<<"RPUSHX">>, _, State) ->
   tcp_err("wrong number of arguments for 'RPUSHX' command", State);
 
 %% -- Sets -----------------------------------------------------------------------------------------
-run_command(<<"SADD">>, [], State) ->
-  tcp_err("wrong number of arguments for 'BLPOP' command", State);
-run_command(<<"SADD">>, [_], State) ->
-  tcp_err("wrong number of arguments for 'BLPOP' command", State);
-run_command(<<"SADD">>, [Key | Members], State) ->
-  tcp_number(edis_db:sadd(State#state.db, Key, Members), State);
+run_command(<<"SADD">>, [Key, Member | Members], State) ->
+  tcp_number(edis_db:sadd(State#state.db, Key, [Member | Members]), State);
+run_command(<<"SADD">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SADD' command", State);
+run_command(<<"SCARD">>, [Key], State) ->
+  tcp_number(edis_db:scard(State#state.db, Key), State);
+run_command(<<"SCARD">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SCARD' command", State);
+run_command(<<"SDIFF">>, [Key|Keys], State) ->
+  tcp_multi_bulk(edis_db:sdiff(State#state.db, [Key|Keys]), State);
+run_command(<<"SDIFF">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SDIFF' command", State);
+run_command(<<"SDIFFSTORE">>, [Destination, Key | Keys], State) ->
+  tcp_number(edis_db:sdiff_store(State#state.db, Destination, [Key|Keys]), State);
+run_command(<<"SDIFFSTORE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SDIFFSTORE' command", State);
+run_command(<<"SINTER">>, [Key|Keys], State) ->
+  tcp_multi_bulk(edis_db:sinter(State#state.db, [Key|Keys]), State);
+run_command(<<"SINTER">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SINTER' command", State);
+run_command(<<"SINTERSTORE">>, [Destination, Key | Keys], State) ->
+  tcp_number(edis_db:sinter_store(State#state.db, Destination, [Key|Keys]), State);
+run_command(<<"SINTERSTORE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SINTERSTORE' command", State);
+run_command(<<"SISMEMBER">>, [Key, Member], State) ->
+  tcp_boolean(edis_db:sismember(State#state.db, Key, Member), State);
+run_command(<<"SISMEMBER">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SISMEMBER' command", State);
+run_command(<<"SMEMBERS">>, [Key], State) ->
+  tcp_multi_bulk(edis_db:smembers(State#state.db, Key), State);
+run_command(<<"SMEMBERS">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SMEMBERS' command", State);
+run_command(<<"SMOVE">>, [Source, Destination, Member], State) ->
+  try edis_db:smove(State#state.db, Source, Destination, Member) of
+    Moved -> tcp_boolean(Moved, State)
+  catch
+    _:not_found -> tcp_boolean(false, State)
+  end;
+run_command(<<"SMOVE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SMOVE' command", State);
+run_command(<<"SPOP">>, [Key], State) ->
+  try edis_db:spop(State#state.db, Key) of
+    Member -> tcp_bulk(Member, State)
+  catch
+    _:not_found -> tcp_bulk(undefined, State)
+  end;
+run_command(<<"SPOP">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SPOP' command", State);
+run_command(<<"SRANDMEMBER">>, [Key], State) ->
+  tcp_bulk(edis_db:srand_member(State#state.db, Key), State);
+run_command(<<"SRANDMEMBER">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SRANDMEMBER' command", State);
+run_command(<<"SREM">>, [Key, Member | Members], State) ->
+  try edis_db:srem(State#state.db, Key, [Member | Members]) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"SREM">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SREM' command", State);
+run_command(<<"SUNION">>, [Key|Keys], State) ->
+  tcp_multi_bulk(edis_db:sunion(State#state.db, [Key|Keys]), State);
+run_command(<<"SUNION">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SUNION' command", State);
+run_command(<<"SUNIONSTORE">>, [Destination, Key | Keys], State) ->
+  tcp_number(edis_db:sunion_store(State#state.db, Destination, [Key|Keys]), State);
+run_command(<<"SUNIONSTORE">>, _, State) ->
+  tcp_err("wrong number of arguments for 'SUNIONSTORE' command", State);
 
 
 %% -- Server ---------------------------------------------------------------------------------------
