@@ -46,6 +46,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
+-export([zadd/3]).
 
 %% =================================================================================================
 %% External functions
@@ -382,6 +383,10 @@ sunion(Db, Keys) ->
 -spec sunion_store(atom(), binary(), [binary()]) -> non_neg_integer().
 sunion_store(Db, Destination, Keys) ->
   make_call(Db, {sunion_store, Destination, Keys}).
+
+-spec zadd(atom(), binary(), [{float(), binary()}]) -> non_neg_integer().
+zadd(Db, Key, SMs) ->
+  make_call(Db, {zadd, Key, SMs}).
 
 %% =================================================================================================
 %% Server functions
@@ -1532,6 +1537,16 @@ handle_call({sunion_store, Destination, Keys}, From, State) ->
       ErrorReply ->
         ErrorReply
     end;
+handle_call({zadd, Key, SMs}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, zset, skiplist,
+           fun(Item) ->
+                   NewValue =
+                     lists:foldl(fun zsets:enter/2, Item#edis_item.value, SMs),
+                   {zsets:size(NewValue) - zsets:size(Item#edis_item.value),
+                    Item#edis_item{value = NewValue}}
+           end, zsets:new()),
+  {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.

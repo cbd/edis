@@ -80,6 +80,9 @@ handle_cast({run, Cmd, Args}, State) ->
     _:not_integer ->
       ?ERROR("The value affected by ~s was not a integer on db #~p~n", [Cmd, State#state.db]),
       tcp_err("value is not an integer or out of range", State);
+    _:not_float ->
+      ?ERROR("The value affected by ~s was not a float on db #~p~n", [Cmd, State#state.db]),
+      tcp_err("value is not a double", State);
     _:bad_item_type ->
       ?ERROR("Bad type running ~s on db #~p~n", [Cmd, State#state.db]),
       tcp_err("Operation against a key holding the wrong kind of value", State);
@@ -713,6 +716,12 @@ run_command(<<"SUNIONSTORE">>, [Destination, Key | Keys], State) ->
 run_command(<<"SUNIONSTORE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SUNIONSTORE' command", State);
 
+%% -- Sets -----------------------------------------------------------------------------------------
+run_command(<<"ZADD">>, [Key | SMs], State) when SMs =/= [], length(SMs) rem 2 =:= 0 ->
+  ParsedSMs = [{edis_util:binary_to_float(S), M} || {S, M} <- edis_util:make_pairs(SMs)],
+  tcp_number(edis_db:zadd(State#state.db, Key, ParsedSMs), State);
+run_command(<<"ZADD">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZADD' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
