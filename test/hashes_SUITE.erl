@@ -5,7 +5,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
-	[hset_hlen,hset_hget].
+	[hset_hlen,hset_hget,hsetnx,hmset,hkeys,hvals].
 
 init_per_testcase(TestCase,Config) ->
 	ct:print("*** Init ~p Test ***",[TestCase]),
@@ -56,7 +56,96 @@ hset_hget(Config) ->
 	%% Set Already existing field
 	false = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,<<"5">>,<<"foo">>]),
 	<<"foo">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"5">>]),
+
+	%% Add new field
+	true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,<<"9">>,<<"bar">>]),
+	<<"bar">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"9">>]),
 	
 	{error,<<"ERR wrong number of arguments for 'HGET' command">>} = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>]),
 	{error,<<"ERR wrong number of arguments for 'HGET' command">>} = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"8">>,<<"9">>]).
 
+hsetnx(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	%% With not existing key
+	true = erldis_client:sr_scall(Client,[<<"hsetnx">>,<<"myhash">>,<<"field">>,<<"foo">>]),
+	<<"foo">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"field">>]),
+	
+	%% With not existing field
+	true = erldis_client:sr_scall(Client,[<<"hsetnx">>,<<"myhash">>,<<"field2">>,<<"bar">>]),
+	<<"bar">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"field2">>]),
+	
+	%% With already existing field
+	false = erldis_client:sr_scall(Client,[<<"hsetnx">>,<<"myhash">>,<<"field">>,<<"buzz">>]),
+	<<"foo">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"field">>]),
+	
+	{error,<<"ERR wrong number of arguments for 'HSETNX' command">>} = erldis_client:sr_scall(Client,[<<"hsetnx">>,<<"myhash">>,<<"field">>,<<"foo">>,<<"buzz">>]),
+	{error,<<"ERR wrong number of arguments for 'HSETNX' command">>} = erldis_client:sr_scall(Client,[<<"hsetnx">>,<<"myhash">>,<<"field">>]),
+	{error,<<"ERR wrong number of arguments for 'HSETNX' command">>} = erldis_client:sr_scall(Client,[<<"hsetnx">>,<<"myhash">>]),
+	{error,<<"ERR wrong number of arguments for 'HSETNX' command">>} = erldis_client:sr_scall(Client,[<<"hsetnx">>]).
+
+hmset(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	%% With not existing key
+	ok = erldis_client:sr_scall(Client,[<<"hmset">>,<<"myhash">>,<<"field">>,<<"foo">>,<<"field2">>,<<"bar">>,<<"field3">>,<<"buzz">>]),
+	<<"bar">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"field2">>]),
+	
+	%% With not existing field
+	ok = erldis_client:sr_scall(Client,[<<"hmset">>,<<"myhash">>,<<"field4">>,<<"hello">>,<<"field5">>,<<"world">>]),
+	<<"hello">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"field4">>]),
+	
+	%% With already existing field
+	ok = erldis_client:sr_scall(Client,[<<"hmset">>,<<"myhash">>,<<"field4">>,<<"hi">>,<<"field5">>,<<"edis">>]),
+	<<"edis">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"field5">>]),
+
+    {error,<<"ERR wrong number of arguments for HMSET">>} = erldis_client:sr_scall(Client,[<<"hmset">>,<<"myhash">>,<<"field">>,<<"foo">>,<<"field2">>]),
+    {error,<<"ERR wrong number of arguments for HMSET">>} = erldis_client:sr_scall(Client,[<<"hmset">>,<<"myhash">>,<<"field">>]),
+    {error,<<"ERR wrong number of arguments for HMSET">>} = erldis_client:sr_scall(Client,[<<"hmset">>,<<"myhash">>]),
+    {error,<<"ERR wrong number of arguments for HMSET">>} = erldis_client:sr_scall(Client,[<<"hmset">>]).
+
+hmget(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	[true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,edis_util:integer_to_binary(E),list_to_binary("value "++integer_to_list(E))])
+	|| E <- lists:seq(1,8)],
+	
+	[<<"value 1">>,<<"value 2">>,<<"value 5">>,<<"value 8">>] = erldis_client:scall(Client,[<<"hmget">>,<<"myhash">>,<<"1">>,<<"2">>,<<"5">>,<<"8">>]),
+	
+	%% Not existing hash
+	[nil,nil,nil,nil] = erldis_client:scall(Client,[<<"hmget">>,<<"notexisting">>,<<"1">>,<<"2">>,<<"5">>,<<"8">>]),
+	
+	%% Not existing field
+	[<<"value 1">>,nil,nil,<<"value 11">>] = erldis_client:scall(Client,[<<"hmget">>,<<"myhash">>,<<"1">>,<<"9">>,<<"11">>,<<"8">>]),
+	
+	{error,<<"ERR wrong number of arguments for 'HMGET' command">>} = erldis_client:scall(Client,[<<"hmget">>,<<"myhash">>]),
+	{error,<<"ERR wrong number of arguments for 'HMGET' command">>} = erldis_client:scall(Client,[<<"hmget">>]).
+	
+hkeys(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	[true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,edis_util:integer_to_binary(E),list_to_binary("value "++integer_to_list(E))])
+	|| E <- lists:seq(1,8)],
+	
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>,<<"8">>] = lists:sort(erldis_client:scall(Client,[<<"hkeys">>,<<"myhash">>])),
+	
+	%% Not existing hash
+	[] = erldis_client:scall(Client,[<<"hkeys">>,<<"notexisting">>]),
+	
+	[{error,<<"ERR wrong number of arguments for 'HKEYS' command">>}] = erldis_client:scall(Client,[<<"hkeys">>]),
+	[{error,<<"ERR wrong number of arguments for 'HKEYS' command">>}] = erldis_client:scall(Client,[<<"hkeys">>,<<"myhash">>,<<"1">>]).
+
+hvals(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	[true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,list_to_binary("key "++integer_to_list(E)),edis_util:integer_to_binary(E)])
+	|| E <- lists:seq(1,8)],
+	
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>,<<"8">>] = lists:sort(erldis_client:scall(Client,[<<"hvals">>,<<"myhash">>])),
+	
+	%% Not existing hash
+	[] = erldis_client:scall(Client,[<<"hvals">>,<<"notexisting">>]),
+	
+	[{error,<<"ERR wrong number of arguments for 'HVALS' command">>}] = erldis_client:scall(Client,[<<"hvals">>]),
+	[{error,<<"ERR wrong number of arguments for 'HVALS' command">>}] = erldis_client:scall(Client,[<<"hvals">>,<<"myhash">>,<<"1">>]).
+	
