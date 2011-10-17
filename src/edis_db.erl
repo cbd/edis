@@ -23,6 +23,9 @@
 -type item_encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
 -export_type([item_encoding/0, item_type/0]).
 
+-type float_limit() :: neg_infinity | infinity | {exc, float()} | {inc, float()}.
+-export_type([float_limit/0]).
+
 -record(state, {index               :: non_neg_integer(),
                 db                  :: eleveldb:db_ref(),
                 start_time          :: pos_integer(),
@@ -46,6 +49,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
+-export([zadd/3, zcard/2, zcount/4]).
 
 %% =================================================================================================
 %% External functions
@@ -221,10 +225,8 @@ hexists(Db, Key, Field) ->
 hget(Db, Key, Fields) when is_list(Fields) ->
   make_call(Db, {hget, Key, Fields});
 hget(Db, Key, Field) ->
-  case make_call(Db, {hget, Key, [Field]}) of
-    [Res] -> Res;
-    undefined -> undefined
-  end.
+  [Res] = make_call(Db, {hget, Key, [Field]}),
+  Res.
 
 -spec hget_all(atom(), binary()) -> [{binary(), binary()}].
 hget_all(Db, Key) ->
@@ -382,6 +384,18 @@ sunion(Db, Keys) ->
 -spec sunion_store(atom(), binary(), [binary()]) -> non_neg_integer().
 sunion_store(Db, Destination, Keys) ->
   make_call(Db, {sunion_store, Destination, Keys}).
+
+-spec zadd(atom(), binary(), [{float(), binary()}]) -> non_neg_integer().
+zadd(Db, Key, SMs) ->
+  make_call(Db, {zadd, Key, SMs}).
+
+-spec zcard(atom(), binary()) -> non_neg_integer().
+zcard(Db, Key) ->
+  make_call(Db, {zcard, Key}).
+
+-spec zcount(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
+zcount(Db, Key, Min, Max) ->
+  make_call(Db, {zcount, Key, Min, Max}).
 
 %% =================================================================================================
 %% Server functions
@@ -850,7 +864,7 @@ handle_call({hexists, Key, Field}, _From, State) ->
 handle_call({hget, Key, Fields}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
-      not_found -> {ok, undefined};
+      not_found -> {ok, [undefined || _ <- Fields]};
       {error, Reason} -> {error, Reason};
       Item ->
         Results =
@@ -1532,6 +1546,34 @@ handle_call({sunion_store, Destination, Keys}, From, State) ->
       ErrorReply ->
         ErrorReply
     end;
+handle_call({zadd, Key, SMs}, _From, State) ->
+  Reply =
+    update(State#state.db, Key, zset, skiplist,
+           fun(Item) ->
+                   NewValue =
+                     lists:foldl(fun zsets:enter/2, Item#edis_item.value, SMs),
+                   {zsets:size(NewValue) - zsets:size(Item#edis_item.value),
+                    Item#edis_item{value = NewValue}}
+           end, zsets:new()),
+  {reply, Reply, stamp(Key, State)};
+handle_call({zcard, Key}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} -> {ok, zsets:size(Value)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zcount, Key, Min, Max}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        Iterator = zsets:iterator(Value),
+        {ok, zsets_count(Min, Max, Iterator)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
@@ -1781,3 +1823,29 @@ timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
 
 timeout_to_ms(infinity) -> infinity;
 timeout_to_ms(Timeout) -> Timeout * 1000.
+
+zsets_count(Min, Max, Iterator) ->
+  zsets_count(Min, Max, Iterator, 0).
+zsets_count(Min, Max, Iterator, Acc) ->
+  case zsets:next(Iterator) of
+    none -> Acc;
+    {Score, _Value, NextIterator} ->
+      case {check_limit(min, Min, Score), check_limit(max, Max, Score)} of
+        {in, in} -> zsets_count(Min, Max, NextIterator, Acc + 1);
+        {_, out} -> Acc;
+        {out, in} -> zsets_count(Min, Max, NextIterator, Acc)
+      end
+  end.
+
+check_limit(min, neg_infinity, _) -> in;
+check_limit(min, infinity, _) -> out;
+check_limit(min, {exc, Min}, Score) when Min < Score -> in;
+check_limit(min, {exc, Min}, Score) when Min >= Score -> out;
+check_limit(min, {inc, Min}, Score) when Min =< Score -> in;
+check_limit(min, {inc, Min}, Score) when Min > Score -> out;
+check_limit(max, neg_infinity, _) -> out;
+check_limit(max, infinity, _) -> in;
+check_limit(max, {exc, Max}, Score) when Max > Score -> in;
+check_limit(max, {exc, Max}, Score) when Max =< Score -> out;
+check_limit(max, {inc, Max}, Score) when Max >= Score -> in;
+check_limit(max, {inc, Max}, Score) when Max < Score -> out.

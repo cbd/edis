@@ -80,6 +80,9 @@ handle_cast({run, Cmd, Args}, State) ->
     _:not_integer ->
       ?ERROR("The value affected by ~s was not a integer on db #~p~n", [Cmd, State#state.db]),
       tcp_err("value is not an integer or out of range", State);
+    _:not_float ->
+      ?ERROR("The value affected by ~s was not a float on db #~p~n", [Cmd, State#state.db]),
+      tcp_err("value is not a double", State);
     _:bad_item_type ->
       ?ERROR("Bad type running ~s on db #~p~n", [Cmd, State#state.db]),
       tcp_err("Operation against a key holding the wrong kind of value", State);
@@ -713,6 +716,25 @@ run_command(<<"SUNIONSTORE">>, [Destination, Key | Keys], State) ->
 run_command(<<"SUNIONSTORE">>, _, State) ->
   tcp_err("wrong number of arguments for 'SUNIONSTORE' command", State);
 
+%% -- Sets -----------------------------------------------------------------------------------------
+run_command(<<"ZADD">>, [Key | SMs], State) when SMs =/= [], length(SMs) rem 2 =:= 0 ->
+  ParsedSMs = [{edis_util:binary_to_float(S), M} || {S, M} <- edis_util:make_pairs(SMs)],
+  tcp_number(edis_db:zadd(State#state.db, Key, ParsedSMs), State);
+run_command(<<"ZADD">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZADD' command", State);
+run_command(<<"ZCARD">>, [Key], State) ->
+  tcp_number(edis_db:zcard(State#state.db, Key), State);
+run_command(<<"ZCARD">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZCARD' command", State);
+run_command(<<"ZCOUNT">>, [Key, Min, Max], State) ->
+  try tcp_number(edis_db:zcount(State#state.db, Key,
+                                parse_float_limit(Min), parse_float_limit(Max)), State)
+  catch
+    _:not_float ->
+      tcp_err("min or max is not a double", State)
+  end;
+run_command(<<"ZCOUNT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZCOUNT' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
@@ -902,3 +924,15 @@ tcp_send(Message, State) ->
       ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
       {stop, normal, State}
   end.
+
+parse_float_limit(Bin) ->
+  do_parse_float_limit(edis_util:lower(Bin)).
+
+do_parse_float_limit(<<"-inf">>) -> neg_infinity;
+do_parse_float_limit(<<"inf">>) -> infinity;
+do_parse_float_limit(<<"+inf">>) -> infinity;
+do_parse_float_limit(<<"-infinity">>) -> neg_infinity;
+do_parse_float_limit(<<"infinity">>) -> infinity;
+do_parse_float_limit(<<"+infinity">>) -> infinity;
+do_parse_float_limit(<<$(, Rest/binary>>) -> {exc, edis_util:binary_to_float(Rest)};
+do_parse_float_limit(Bin) -> {inc, edis_util:binary_to_float(Bin)}.
