@@ -726,6 +726,15 @@ run_command(<<"ZCARD">>, [Key], State) ->
   tcp_number(edis_db:zcard(State#state.db, Key), State);
 run_command(<<"ZCARD">>, _, State) ->
   tcp_err("wrong number of arguments for 'ZCARD' command", State);
+run_command(<<"ZCOUNT">>, [Key, Min, Max], State) ->
+  try tcp_number(edis_db:zcount(State#state.db, Key,
+                                parse_float_limit(Min), parse_float_limit(Max)), State)
+  catch
+    _:not_float ->
+      tcp_err("min or max is not a double", State)
+  end;
+run_command(<<"ZCOUNT">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZCOUNT' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
@@ -915,3 +924,15 @@ tcp_send(Message, State) ->
       ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
       {stop, normal, State}
   end.
+
+parse_float_limit(Bin) ->
+  do_parse_float_limit(edis_util:lower(Bin)).
+
+do_parse_float_limit(<<"-inf">>) -> neg_infinity;
+do_parse_float_limit(<<"inf">>) -> infinity;
+do_parse_float_limit(<<"+inf">>) -> infinity;
+do_parse_float_limit(<<"-infinity">>) -> neg_infinity;
+do_parse_float_limit(<<"infinity">>) -> infinity;
+do_parse_float_limit(<<"+infinity">>) -> infinity;
+do_parse_float_limit(<<$(, Rest/binary>>) -> {exc, edis_util:binary_to_float(Rest)};
+do_parse_float_limit(Bin) -> {inc, edis_util:binary_to_float(Bin)}.

@@ -13,9 +13,11 @@
                tree :: gb_tree()}).
 -opaque zset(_Scores, _Values) :: #zset{}.
 
--export_type([zset/2]).
+-opaque iterator(_Scores, _Values) :: gb_tree:iter().
+-export_type([zset/2, iterator/2]).
 
 -export([new/0, enter/2, enter/3, size/1]).
+-export([iterator/1, next/1]).
 
 %% @doc Creates an empty {@link zset(any(), any())}
 -spec new() -> zset(any(), any()).
@@ -34,10 +36,10 @@ enter(Score, Value, ZSet = #zset{}) ->
   case dict:find(Value, ZSet#zset.dict) of
     error ->
       ZSet#zset{dict = dict:store(Value, Score, ZSet#zset.dict),
-                tree = gb_trees:enter({Score, Value}, Value, ZSet#zset.tree)};
+                tree = gb_trees:enter({Score, Value}, undefined, ZSet#zset.tree)};
     {ok, PrevScore} ->
       ZSet#zset{dict = dict:store(Value, Score, ZSet#zset.dict),
-                tree = gb_trees:enter({Score, Value}, Value,
+                tree = gb_trees:enter({Score, Value}, undefined,
                                       gb_trees:delete({PrevScore, Value}, ZSet#zset.tree))}
   end.
 
@@ -46,4 +48,19 @@ enter(Score, Value, ZSet = #zset{}) ->
 size(ZSet) ->
   gb_trees:size(ZSet#zset.tree).
 
-x() -> y.
+%% @doc Returns an iterator that can be used for traversing the entries of Tree; see {@link next/1}.
+-spec iterator(zset(Scores, Values)) -> iterator(Scores, Values).
+iterator(ZSet) ->
+  gb_trees:iterator(ZSet#zset.tree).
+
+%% @doc Returns {Score, Value, Iter2} where Score is the smallest score referred to by the iterator
+%% Iter1, and Iter2 is the new iterator to be used for traversing the remaining nodes, or the atom
+%% none if no nodes remain.
+ -spec next(iterator(Scores, Values)) -> none | {Scores, Values, iterator(Scores, Values)}.
+next(Iter1) ->
+  case gb_trees:next(Iter1) of
+    none -> none;
+    {{Score, Value}, _, Iter2} -> {Score, Value, Iter2}
+  end.
+ 
+x() -> y. 
