@@ -735,6 +735,10 @@ run_command(<<"ZCOUNT">>, [Key, Min, Max], State) ->
   end;
 run_command(<<"ZCOUNT">>, _, State) ->
   tcp_err("wrong number of arguments for 'ZCOUNT' command", State);
+run_command(<<"ZINCRBY">>, [Key, Increment, Member], State) ->
+  tcp_float(edis_db:zincr(State#state.db, Key, edis_util:binary_to_float(Increment), Member), State);
+run_command(<<"ZINCRBY">>, _, State) ->
+  tcp_err("wrong number of arguments for 'ZINCRBY' command", State);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
@@ -887,6 +891,16 @@ tcp_number(undefined, State) ->
   tcp_bulk(undefined, State);
 tcp_number(Number, State) ->
   tcp_send([":", integer_to_list(Number)], State).
+
+%% @private
+-spec tcp_float(undefined | float(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_float(undefined, State) ->
+  tcp_bulk(undefined, State);
+tcp_float(Float, State) ->
+  case erlang:trunc(Float) * 1.0 of
+    Float -> tcp_bulk(integer_to_list(erlang:trunc(Float)), State);
+    _ -> tcp_bulk(io_lib:format("~.18f", [Float]), State)
+  end.
 
 %% @private
 -spec tcp_err(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
