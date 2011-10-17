@@ -420,7 +420,7 @@ handle_call(info, _From, State) ->
                 {db_stats, Stats}]}, %%TODO: add info
    State};
 handle_call(flush, _From, State) ->
-  ok = eleveldb:destroy("db/edis-" ++ integer_to_list(State#state.index), []),
+  ok = eleveldb:destroy(edis_config:get(dir) ++ "/edis-" ++ integer_to_list(State#state.index), []),
   case init(State#state.index) of
     {ok, NewState} ->
       {reply, ok, NewState};
