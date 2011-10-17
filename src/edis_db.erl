@@ -390,7 +390,7 @@ sunion_store(Db, Destination, Keys) ->
 -spec init(non_neg_integer()) -> {ok, state()} | {stop, any()}.
 init(Index) ->
   _ = random:seed(erlang:now()),
-  case eleveldb:open("db/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
+  case eleveldb:open(edis_config:get(dir) ++ "/edis-" ++ integer_to_list(Index), [{create_if_missing, true}]) of
     {ok, Ref} ->
       {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp(),
                   start_time = edis_util:now(), accesses = dict:new(),
