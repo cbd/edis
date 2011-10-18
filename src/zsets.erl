@@ -17,7 +17,7 @@
 -export_type([zset/2, iterator/2]).
 
 -export([new/0, enter/2, enter/3, size/1, find/2]).
--export([iterator/1, next/1, map/2]).
+-export([iterator/1, next/1, map/2, to_list/1, subset/3]).
 -export([intersection/2, intersection/3]).
 
 %% @doc Creates an empty {@link zset(any(), any())}
@@ -89,6 +89,21 @@ intersection(Aggregate, [ZSet1 | ZSets]) ->
 map(Fun, ZSet) ->
   map(Fun, next(iterator(ZSet)), new()).
 
+%% @doc Converts the sorted set into a list of {Score, Member} pairs
+-spec to_list(zset(Scores, Members)) -> [{Scores, Members}].
+to_list(ZSet) ->
+  gb_trees:keys(ZSet#zset.tree).
+
+%% @doc Returns the sub-zset of ZSet1 starting at Start and with (max) Len elements.
+%%      It is not an error for Start+Len to exceed the length of the list.
+-spec subset(zset(Scores, Members), pos_integer(), non_neg_integer()) -> zset(Scores, Members).
+subset(_ZSet, _Start, 0) -> new();
+subset(ZSet, Start, Len) ->
+  Iter = iterator(ZSet),
+  NewIter = skip(Start-1, Iter),
+  take(Len, NewIter).
+
+
 %% =================================================================================================
 %% Private functions
 %% =================================================================================================
@@ -106,3 +121,19 @@ intersection(Aggregate, [{M1, S1} | D1], [{M2, _S2} | D2], Acc) when M1 >= M2 ->
 map(_Fun, none, Acc) -> Acc;
 map(Fun, {Score, Member, Iter}, Acc) ->
   map(Fun, next(Iter), enter(Fun(Score, Member), Member, Acc)).
+
+%% @private
+skip(0, Iter) -> Iter;
+skip(N, Iter) ->
+  case next(Iter) of
+    none -> Iter;
+    {_S, _M, NextIter} -> skip(N-1, NextIter)
+  end.
+
+%% @private
+take(Len, Iter) ->
+  take(Len, next(Iter), new()).
+take(0, _Step, Acc) -> Acc;
+take(_N, none, Acc) -> Acc;
+take(N, {Score, Member, Iter}, Acc) ->
+  take(N-1, next(Iter), enter(Score, Member, Acc)).

@@ -737,6 +737,27 @@ run_command(<<"ZINTERSTORE">>, [Destination, NumKeys | Rest], State) ->
     edis_db:zinter_store(State#state.db, Destination, lists:zip(Keys, Weights), Aggregate),
     State);
 run_command(<<"ZINTERSTORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZRANGE">>, [Key, Start, Stop], State) ->
+  Reply =
+    [Member ||
+     {_Score, Member} <- edis_db:zrange(State#state.db, Key,
+                                        edis_util:binary_to_integer(Start, 0),
+                                        edis_util:binary_to_integer(Stop, 0))],
+  tcp_multi_bulk(Reply, State);
+run_command(<<"ZRANGE">>, [Key, Start, Stop, Option], State) ->
+  case edis_util:upper(Option) of
+    <<"WITHSCORES">> ->
+      Reply =
+        lists:flatten(
+          [[Member, Score] ||
+           {Score, Member} <- edis_db:zrange(State#state.db, Key,
+                                             edis_util:binary_to_integer(Start, 0),
+                                             edis_util:binary_to_integer(Stop, 0))]),
+      tcp_multi_bulk(Reply, State);
+    _ ->
+      throw(syntax)
+  end;
+run_command(<<"ZRANGE">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
@@ -849,7 +870,9 @@ tcp_boolean(false, State) -> tcp_number(0, State).
 -spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_multi_bulk(Lines, State) ->
   lists:foldl(
-    fun(Line, {noreply, AccState}) ->
+    fun(Float, {noreply, AccState}) when is_float(Float) ->
+            tcp_float(Float, AccState);
+       (Line, {noreply, AccState}) ->
             tcp_bulk(Line, AccState);
        (_Line, Error) ->
             Error

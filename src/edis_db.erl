@@ -50,7 +50,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4]).
+-export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4]).
 
 %% =================================================================================================
 %% External functions
@@ -298,7 +298,7 @@ lpush(Db, Key, Value) ->
 lpush_x(Db, Key, Value) ->
   make_call(Db, {lpush_x, Key, Value}).
 
--spec lrange(atom(), binary(), integer(), integer()) -> ok.
+-spec lrange(atom(), binary(), integer(), integer()) -> [binary()].
 lrange(Db, Key, Start, Stop) ->
   make_call(Db, {lrange, Key, Start, Stop}).
 
@@ -405,6 +405,10 @@ zincr(Db, Key, Increment, Member) ->
 -spec zinter_store(atom(), binary(), [{binary(), float()}], aggregate()) -> non_neg_integer().
 zinter_store(Db, Destination, WeightedKeys, Aggregate) ->
   make_call(Db, {zinter_store, Destination, WeightedKeys, Aggregate}).
+
+-spec zrange(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
+zrange(Db, Key, Start, Stop) ->
+  make_call(Db, {zrange, Key, Start, Stop}).
 
 %% =================================================================================================
 %% Server functions
@@ -1629,6 +1633,40 @@ handle_call({zinter_store, Destination, WeightedKeys, Aggregate}, _From, State) 
         {error, Error}
     end,
   {reply, Reply, stamp([Destination|[Key || {Key, _} <- WeightedKeys]], State)};
+handle_call({zrange, Key, Start, Stop}, _From, State) ->
+  Reply =
+    try
+      case get_item(State#state.db, zset, Key) of
+        #edis_item{value = Value} ->
+          L = zsets:size(Value),
+          StartPos =
+            case Start of
+              Start when Start >= L -> throw(empty);
+              Start when Start >= 0 -> Start + 1;
+              Start when Start < (-1)*L -> 1;
+              Start -> L + 1 + Start
+            end,
+          StopPos =
+            case Stop of
+              Stop when Stop >= 0, Stop >= L -> L;
+              Stop when Stop >= 0 -> Stop + 1;
+              Stop when Stop < (-1)*L -> 0;
+              Stop -> L + 1 + Stop
+            end,
+          case StopPos - StartPos + 1 of
+            Len when Len =< 0 -> {ok, []};
+            Len ->
+              {ok,
+               zsets:to_list(
+                 zsets:subset(Value, StartPos, Len))}
+          end;
+        not_found -> {ok, []};
+        {error, Reason} -> {error, Reason}
+      end
+    catch
+      _:empty -> {ok, []}
+    end,
+  {reply, Reply, stamp(Key, State)};
   
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
