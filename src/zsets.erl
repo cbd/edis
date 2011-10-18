@@ -9,7 +9,7 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--record(zset, {dict :: [{_,_}],
+-record(zset, {dict :: dict(),
                tree :: gb_tree()}).
 -opaque zset(_Scores, _Members) :: #zset{}.
 
@@ -23,7 +23,7 @@
 %% @doc Creates an empty {@link zset(any(), any())}
 -spec new() -> zset(any(), any()).
 new() ->
-  #zset{dict = orddict:new(), tree = gb_trees:empty()}.
+  #zset{dict = dict:new(), tree = gb_trees:empty()}.
 
 %% @equiv enter(Score, Member, ZSet)
 -spec enter({Score, Member}, zset(Scores, Members)) -> zset(Scores, Members) when is_subtype(Score, Scores), is_subtype(Member, Members).
@@ -34,12 +34,12 @@ enter({Score, Member}, ZSet) ->
 %%      If the element is already present it justs updates its score
 -spec enter(Score, Member, zset(Scores, Members)) -> zset(Scores, Members) when is_subtype(Score, Scores), is_subtype(Member, Members).
 enter(Score, Member, ZSet = #zset{}) ->
-  case orddict:find(Member, ZSet#zset.dict) of
+  case dict:find(Member, ZSet#zset.dict) of
     error ->
-      ZSet#zset{dict = orddict:store(Member, Score, ZSet#zset.dict),
+      ZSet#zset{dict = dict:store(Member, Score, ZSet#zset.dict),
                 tree = gb_trees:enter({Score, Member}, undefined, ZSet#zset.tree)};
     {ok, PrevScore} ->
-      ZSet#zset{dict = orddict:store(Member, Score, ZSet#zset.dict),
+      ZSet#zset{dict = dict:store(Member, Score, ZSet#zset.dict),
                 tree = gb_trees:enter({Score, Member}, undefined,
                                       gb_trees:delete({PrevScore, Member}, ZSet#zset.tree))}
   end.
@@ -68,12 +68,12 @@ next(Iter1) ->
 %%      associated with Member, or error if the key is not present.
  -spec find(Member, iterator(Scores, Members)) -> Scores when is_subtype(Member, Members).
 find(Member, ZSet) ->
-  orddict:find(Member, ZSet#zset.dict).
+  dict:find(Member, ZSet#zset.dict).
 
 %% @doc Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate
 -spec intersection(fun((Scores1, Scores2) -> Scores3), zset(Scores1, Members), zset(Scores2, Members)) -> zset(Scores3, Members).
 intersection(Aggregate, ZSet1, ZSet2) ->
-  intersection(Aggregate, orddict:to_list(ZSet1#zset.dict), orddict:to_list(ZSet2#zset.dict), new()).
+  intersection(Aggregate, dict:to_list(ZSet1#zset.dict), dict:to_list(ZSet2#zset.dict), new()).
 
 %% @doc Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
 %%      The last argument will be the accumulated result
