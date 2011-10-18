@@ -50,7 +50,7 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4]).
+-export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4]).
 
 %% =================================================================================================
 %% External functions
@@ -409,6 +409,10 @@ zinter_store(Db, Destination, WeightedKeys, Aggregate) ->
 -spec zrange(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
 zrange(Db, Key, Start, Stop) ->
   make_call(Db, {zrange, Key, Start, Stop}).
+
+-spec zrange_by_score(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
+zrange_by_score(Db, Key, Min, Max) ->
+  make_call(Db, {zrange_by_score, Key, Min, Max}).
 
 %% =================================================================================================
 %% Server functions
@@ -1667,6 +1671,16 @@ handle_call({zrange, Key, Start, Stop}, _From, State) ->
       _:empty -> {ok, []}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({zrange_by_score, Key, Min, Max}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        Iterator = zsets:iterator(Value),
+        {ok, zsets_list(Min, Max, Iterator)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
   
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
@@ -1927,6 +1941,19 @@ zsets_count(Min, Max, Iterator, Acc) ->
         {in, in} -> zsets_count(Min, Max, NextIterator, Acc + 1);
         {_, out} -> Acc;
         {out, in} -> zsets_count(Min, Max, NextIterator, Acc)
+      end
+  end.
+
+zsets_list(Min, Max, Iterator) ->
+  lists:reverse(zsets_list(Min, Max, Iterator, [])).
+zsets_list(Min, Max, Iterator, Acc) ->
+  case zsets:next(Iterator) of
+    none -> Acc;
+    {Score, Member, NextIterator} ->
+      case {check_limit(min, Min, Score), check_limit(max, Max, Score)} of
+        {in, in} -> zsets_list(Min, Max, NextIterator, [{Score, Member}|Acc]);
+        {_, out} -> Acc;
+        {out, in} -> zsets_list(Min, Max, NextIterator, Acc)
       end
   end.
 

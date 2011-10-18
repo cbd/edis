@@ -758,6 +758,53 @@ run_command(<<"ZRANGE">>, [Key, Start, Stop, Option], State) ->
       throw(syntax)
   end;
 run_command(<<"ZRANGE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZRANGEBYSCORE">>, [Key, Min, Max | Options], State) when 0 =< length(Options),
+                                                                        length(Options) =< 4->
+  {ShowScores, Limit} =
+    case lists:map(fun edis_util:upper/1, Options) of
+      [] -> {false, undefined};
+      [<<"WITHSCORES">>] -> {true, undefined};
+      [<<"LIMIT">>, Offset, Count] ->
+        {false, {edis_util:binary_to_integer(Offset, 0),
+                 edis_util:binary_to_integer(Count, 0)}};
+      [<<"WITHSCORES">>, <<"LIMIT">>, Offset, Count] ->
+        {true, {edis_util:binary_to_integer(Offset, 0), edis_util:binary_to_integer(Count, 0)}};
+      [<<"LIMIT">>, Offset, Count, <<"WITHSCORES">>] ->
+        {true, {edis_util:binary_to_integer(Offset, 0), edis_util:binary_to_integer(Count, 0)}};
+      _ ->
+        throw(syntax)
+    end,
+  
+  Range =
+    try edis_db:zrange_by_score(State#state.db, Key, parse_float_limit(Min), parse_float_limit(Max))
+    catch
+      _:not_float ->
+        throw({not_float, "min or max"})
+    end,
+  
+  Reply =
+    case {ShowScores, Limit} of
+      {false, undefined} ->
+        [Member || {_Score, Member} <- Range];
+      {true, undefined} ->
+        lists:flatten([[Member, Score] || {Score, Member} <- Range]);
+      {_, {_Off, 0}} ->
+        [];
+      {_, {Off, _Lim}} when Off < 0 ->
+        [];
+      {_, {Off, _Lim}} when Off >= length(Range) ->
+        [];
+      {false, {Off, Lim}} when Lim < 0 ->
+        [Member || {_Score, Member} <- lists:nthtail(Off, Range)];
+      {true, {Off, Lim}} when Lim < 0 ->
+        lists:flatten([[Member, Score] || {Score, Member} <- lists:nthtail(Off, Range)]);
+      {false, {Off, Lim}} ->
+        [Member || {_Score, Member} <- lists:sublist(Range, Off+1, Lim)];
+      {true, {Off, Lim}} ->
+        lists:flatten([[Member, Score] || {Score, Member} <- lists:sublist(Range, Off+1, Lim)])
+    end,
+  tcp_multi_bulk(Reply, State);
+run_command(<<"ZRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
