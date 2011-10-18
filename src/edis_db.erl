@@ -1596,7 +1596,40 @@ handle_call({zincr, Key, Increment, Member}, _From, State) ->
                     Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
            end, zsets:new()),
   {reply, Reply, stamp(Key, State)};
-
+handle_call({zinter_store, Destination, WeightedKeys, Aggregate}, _From, State) ->
+  Reply =
+    try zsets_weighted_intersection(
+          Aggregate,
+          [case get_item(State#state.db, zset, Key) of
+              #edis_item{value = Value} -> {Value, Weight};
+              not_found -> throw(empty);
+              {error, Reason} -> throw(Reason)
+            end || {Key, Weight} <- WeightedKeys]) of
+      ZSet ->
+        case zsets:size(ZSet) of
+          0 ->
+            _ = eleveldb:delete(State#state.db, Destination, []),
+            {ok, 0};
+          Size ->
+            case eleveldb:put(State#state.db,
+                              Destination,
+                              erlang:term_to_binary(
+                                #edis_item{key = Destination, type = zset, encoding = skiplist,
+                                           value = ZSet}), []) of
+              ok -> {ok, Size};
+              {error, Reason} -> {error, Reason}
+            end
+        end
+    catch
+      _:empty ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {ok, 0};
+      _:Error ->
+        ?ERROR("~p~n", [Error]),
+        {error, Error}
+    end,
+  {reply, Reply, stamp([Destination|[Key || {Key, _} <- WeightedKeys]], State)};
+  
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -1871,3 +1904,17 @@ check_limit(max, {exc, Max}, Score) when Max > Score -> in;
 check_limit(max, {exc, Max}, Score) when Max =< Score -> out;
 check_limit(max, {inc, Max}, Score) when Max >= Score -> in;
 check_limit(max, {inc, Max}, Score) when Max < Score -> out.
+
+zsets_weighted_intersection(_Aggregate, [{ZSet, Weight}]) ->
+  zsets:map(fun(Score, _) -> Score * Weight end, ZSet);
+zsets_weighted_intersection(Aggregate, [{ZSet, Weight}|WeightedZSets]) ->
+  zsets_weighted_intersection(Aggregate, WeightedZSets, Weight, ZSet).
+
+zsets_weighted_intersection(_Aggregate, [], 1.0, AccZSet) -> AccZSet;
+zsets_weighted_intersection(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
+  zsets_weighted_intersection(
+    Aggregate, Rest, 1.0,
+    zsets:intersection(
+      fun(Score, AccScore) ->
+              lists:Aggregate([Score * Weight, AccScore * AccWeight])
+      end, ZSet, AccZSet)).
