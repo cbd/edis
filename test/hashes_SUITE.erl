@@ -5,10 +5,10 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
-	[hset_hlen,hset_hget,hsetnx,hmset,hkeys,hvals].
+	[hset_hlen,hset_hget,hsetnx,hmset,hkeys,hvals,
+	 hgetall,hdel,hexists,hincrby].
 
 init_per_testcase(TestCase,Config) ->
-	ct:print("*** Init ~p Test ***",[TestCase]),
 	{ok,Client} = connect_erldis(10),
     erldis_client:sr_scall(Client,[<<"flushdb">>]),
 	
@@ -60,6 +60,12 @@ hset_hget(Config) ->
 	%% Add new field
 	true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,<<"9">>,<<"bar">>]),
 	<<"bar">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"9">>]),
+    
+	%% Long keys
+	LongKey = list_to_binary(["k" || _ <- lists:seq(1, 500)]),
+	erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,LongKey,<<"a">>]),
+	erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,LongKey,<<"b">>]),
+	<<"b">> = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,LongKey]),
 	
 	{error,<<"ERR wrong number of arguments for 'HGET' command">>} = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>]),
 	{error,<<"ERR wrong number of arguments for 'HGET' command">>} = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"8">>,<<"9">>]).
@@ -149,3 +155,71 @@ hvals(Config) ->
 	[{error,<<"ERR wrong number of arguments for 'HVALS' command">>}] = erldis_client:scall(Client,[<<"hvals">>]),
 	[{error,<<"ERR wrong number of arguments for 'HVALS' command">>}] = erldis_client:scall(Client,[<<"hvals">>,<<"myhash">>,<<"1">>]).
 	
+hgetall(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	Hash = lists:sort([{list_to_binary("key "++integer_to_list(E)),list_to_binary("value "++integer_to_list(E))}
+			|| E <- lists:seq(1,8)]),
+	
+	[true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,Key,Value])
+	|| {Key,Value} <- Hash],
+	
+	Hash = lists:sort(edis_util:make_pairs(erldis_client:scall(Client,[<<"hgetall">>,<<"myhash">>]))),
+	
+	[{error,<<"ERR wrong number of arguments for 'HGETALL' command">>}] = erldis_client:scall(Client,[<<"hgetall">>,<<"myhash">>,<<"key 1">>]),
+	[{error,<<"ERR wrong number of arguments for 'HGETALL' command">>}] = erldis_client:scall(Client,[<<"hgetall">>]).
+	
+hdel(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	[true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,list_to_binary("key "++integer_to_list(E)),edis_util:integer_to_binary(E)])
+	|| E <- lists:seq(1,8)],
+	
+	true = erldis_client:sr_scall(Client,[<<"hdel">>,<<"myhash">>,<<"key 2">>]),
+	nil = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"key 2">>]),
+	
+	3 = erldis_client:sr_scall(Client,[<<"hdel">>,<<"myhash">>,<<"key 4">>,<<"key 1">>,<<"key 7">>]),
+	nil = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"key 1">>]),
+	nil = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"key 4">>]),
+	nil = erldis_client:sr_scall(Client,[<<"hget">>,<<"myhash">>,<<"key 7">>]),
+		
+	false = erldis_client:sr_scall(Client,[<<"hdel">>,<<"myhash">>,<<"key 34">>]),
+	false = erldis_client:sr_scall(Client,[<<"hdel">>,<<"notexisting">>,<<"key 6">>]),
+	
+	{error,<<"ERR wrong number of arguments for 'HDEL' command">>} = erldis_client:sr_scall(Client,[<<"hdel">>,<<"myhash">>]),
+	{error,<<"ERR wrong number of arguments for 'HDEL' command">>} = erldis_client:sr_scall(Client,[<<"hdel">>]).
+	
+hexists(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	[true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,list_to_binary("key "++integer_to_list(E)),edis_util:integer_to_binary(E)])
+	|| E <- lists:seq(1,8)],
+	
+	true = erldis_client:sr_scall(Client,[<<"hexists">>,<<"myhash">>,<<"key 5">>]),
+	false = erldis_client:sr_scall(Client,[<<"hexists">>,<<"myhash">>,<<"key 10">>]),
+	
+	{error,<<"ERR wrong number of arguments for 'HEXISTS' command">>} = erldis_client:sr_scall(Client,[<<"hexists">>,<<"myhash">>]),
+	{error,<<"ERR wrong number of arguments for 'HEXISTS' command">>} = erldis_client:sr_scall(Client,[<<"hexists">>,<<"myhash">>,<<"key 1">>,<<"key 14">>]).
+
+hincrby(Config) -> 
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	4 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"4">>]),
+	7 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"3">>]),
+	true = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"-6">>]),
+	-14 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"-15">>]),
+		
+	false = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,<<"key 1">>,<<"17179869184">>]),
+	17179869185 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"1">>]),
+	19179969185 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"2000100000">>]),
+	19179969085 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"-100">>]),
+	-20000 = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 1">>,<<"-19179989085">>]),
+	
+	true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,<<"key 2">>,<<"4ed3">>]),
+    {error,<<"ERR hash value is not an integer or out of range">>} = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 2">>,<<"120">>]),
+	
+	true = erldis_client:sr_scall(Client,[<<"hset">>,<<"myhash">>,<<"key 3">>,<<"1236">>]),
+	{error,<<"ERR value is not an integer or out of range">>} = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 3">>,<<"1a6">>]),
+	
+	{error,<<"ERR wrong number of arguments for 'HINCRBY' command">>} = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 3">>,<<"16">>,<<"435">>]),
+	{error,<<"ERR wrong number of arguments for 'HINCRBY' command">>} = erldis_client:sr_scall(Client,[<<"hincrby">>,<<"myhash">>,<<"key 3">>]).
