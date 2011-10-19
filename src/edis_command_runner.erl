@@ -826,6 +826,15 @@ run_command(<<"ZREMRANGEBYRANK">>, [Key, Start, Stop], State) ->
       tcp_number(0, State)
   end;
 run_command(<<"ZREMRANGEBYRANK">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREMRANGEBYSCORE">>, [Key, Min, Max], State) ->
+  try edis_db:zrem_range_by_score(State#state.db, Key,
+                                  parse_float_limit(Min), parse_float_limit(Max)) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"ZREMRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

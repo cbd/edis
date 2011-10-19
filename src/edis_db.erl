@@ -51,7 +51,7 @@
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
 -export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3,
-         zrem/3, zrem_range_by_rank/4]).
+         zrem/3, zrem_range_by_rank/4, zrem_range_by_score/4]).
 
 %% =================================================================================================
 %% External functions
@@ -426,6 +426,10 @@ zrem(Db, Key, Members) ->
 -spec zrem_range_by_rank(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
 zrem_range_by_rank(Db, Key, Start, Stop) ->
   make_call(Db, {zrem_range_by_rank, Key, Start, Stop}).
+
+-spec zrem_range_by_score(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
+zrem_range_by_score(Db, Key, Min, Max) ->
+  make_call(Db, {zrem_range_by_score, Key, Min, Max}).
 
 %% =================================================================================================
 %% Server functions
@@ -1730,53 +1734,20 @@ handle_call({zrem, Key, Members}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrem_range_by_rank, Key, Start, Stop}, _From, State) ->
-  Reply =
-    case update(
-           State#state.db, Key, zset,
-           fun(Item) ->
-                   L = zsets:size(Item#edis_item.value),
-                   StartPos =
-                     case Start of
-                       Start when Start >= L -> throw(empty);
-                       Start when Start >= 0 -> Start + 1;
-                       Start when Start < (-1)*L -> 1;
-                       Start -> L + 1 + Start
-                     end,
-                   StopPos =
-                     case Stop of
-                       Stop when Stop >= 0, Stop >= L -> L;
-                       Stop when Stop >= 0 -> Stop + 1;
-                       Stop when Stop < (-1)*L -> 0;
-                       Stop -> L + 1 + Stop
-                     end,
-                   ToDelete =
-                     case StopPos - StartPos + 1 of
-                       Len when Len =< 0 -> [];
-                       Len ->
-                         zsets:to_list(zsets:subset(Item#edis_item.value, StartPos, Len))
-                     end,
-                   NewValue =
-                     lists:foldl(fun zsets:delete_any/2, Item#edis_item.value,
-                                 [Member || {_Score, Member} <- ToDelete]),
-                   case zsets:size(NewValue) of
-                     0 ->
-                       {{delete, zsets:size(Item#edis_item.value)},
-                        Item#edis_item{value = NewValue}};
-                     N ->
-                       {zsets:size(Item#edis_item.value) - N,
-                        Item#edis_item{value = NewValue}}
-                   end
-           end) of
-      {ok, {delete, Count}} ->
-        _ = eleveldb:delete(State#state.db, Key, []),
-        {ok, Count};
-      {error, empty} ->
-        {ok, 0};
-      OtherReply ->
-        OtherReply
-    end,
-  {reply, Reply, stamp(Key, State)};
+handle_call({zrem_range_by_rank, Key, Start, Stop}, From, State) ->
+  case handle_call({zrange, Key, Start, Stop}, From, State) of
+    {reply, {ok, SMs}, NewState} ->
+      handle_call({zrem, Key, [Member || {_Score, Member} <- SMs]}, From, NewState);
+    OtherReply ->
+      OtherReply
+  end;
+handle_call({zrem_range_by_score, Key, Min, Max}, From, State) ->
+  case handle_call({zrange_by_score, Key, Min, Max}, From, State) of
+    {reply, {ok, SMs}, NewState} ->
+      handle_call({zrem, Key, [Member || {_Score, Member} <- SMs]}, From, NewState);
+    OtherReply ->
+      OtherReply
+  end;
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
