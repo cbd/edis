@@ -907,6 +907,9 @@ run_command(<<"ZREVRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
 run_command(<<"ZREVRANK">>, [Key, Member], State) ->
   tcp_number(edis_db:zrev_rank(State#state.db, Key, Member), State);
 run_command(<<"ZREVRANK">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZSCORE">>, [Key, Member], State) ->
+  tcp_float(edis_db:zscore(State#state.db, Key, Member), State);
+run_command(<<"ZSCORE">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

@@ -52,7 +52,7 @@
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
 -export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3,
          zrem/3, zrem_range_by_rank/4, zrem_range_by_score/4, zrev_range/4, zrev_range_by_score/4,
-         zrev_rank/3]).
+         zrev_rank/3, zscore/3]).
 
 %% =================================================================================================
 %% External functions
@@ -443,6 +443,10 @@ zrev_range_by_score(Db, Key, Min, Max) ->
 -spec zrev_rank(atom(), binary(), binary()) -> undefined | non_neg_integer().
 zrev_rank(Db, Key, Member) ->
   make_call(Db, {zrev_rank, Key, Member}).
+
+-spec zscore(atom(), binary(), binary()) -> undefined | non_neg_integer().
+zscore(Db, Key, Member) ->
+  make_call(Db, {zscore, Key, Member}).
 
 %% =================================================================================================
 %% Server functions
@@ -1814,6 +1818,18 @@ handle_call({zrev_rank, Key, Member}, _From, State) ->
           {ok, Score} ->
             Iterator = zsets:iterator(Value, backwards),
             {ok, zsets_count(infinity, {exc, Score}, Iterator)}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zscore, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        case zsets:find(Member, Value) of
+          error -> {ok, undefined};
+          {ok, Score} -> {ok, Score}
         end;
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
