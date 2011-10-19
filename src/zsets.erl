@@ -16,7 +16,7 @@
 -opaque iterator(_Scores, _Members) :: gb_tree:iter().
 -export_type([zset/2, iterator/2]).
 
--export([new/0, enter/2, enter/3, size/1, find/2]).
+-export([new/0, enter/2, enter/3, size/1, find/2, delete_any/2]).
 -export([iterator/1, next/1, map/2, to_list/1, subset/3]).
 -export([intersection/2, intersection/3]).
 
@@ -42,6 +42,17 @@ enter(Score, Member, ZSet = #zset{}) ->
       ZSet#zset{dict = dict:store(Member, Score, ZSet#zset.dict),
                 tree = gb_trees:enter({Score, Member}, undefined,
                                       gb_trees:delete({PrevScore, Member}, ZSet#zset.tree))}
+  end.
+
+%% @doc Removes the node with key Key from Tree1 if the key is present in the tree, otherwise does 
+%%      nothing; returns new tree.
+-spec delete_any(Members, zset(Scores, Members)) -> zset(Scores, Members).
+delete_any(Member, ZSet) ->
+  case dict:find(Member, ZSet#zset.dict) of
+    error -> ZSet;
+    {ok, Score} ->
+      ZSet#zset{dict = dict:erase(Member, ZSet#zset.dict),
+                tree = gb_trees:delete_any({Score, Member}, ZSet#zset.tree)}
   end.
 
 %% @doc Returns the size of the zset

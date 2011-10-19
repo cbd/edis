@@ -808,7 +808,14 @@ run_command(<<"ZRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
 run_command(<<"ZRANK">>, [Key, Member], State) ->
   tcp_number(edis_db:zrank(State#state.db, Key, Member), State);
 run_command(<<"ZRANK">>, _, _State) -> throw(bad_arg_num);
-
+run_command(<<"ZREM">>, [Key, Member | Members], State) ->
+  try edis_db:zrem(State#state.db, Key, [Member | Members]) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"ZREM">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

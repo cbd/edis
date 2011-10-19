@@ -50,7 +50,8 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3]).
+-export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3,
+         zrem/3]).
 
 %% =================================================================================================
 %% External functions
@@ -417,6 +418,10 @@ zrange_by_score(Db, Key, Min, Max) ->
 -spec zrank(atom(), binary(), binary()) -> undefined | non_neg_integer().
 zrank(Db, Key, Member) ->
   make_call(Db, {zrank, Key, Member}).
+
+-spec zrem(atom(), binary(), [binary()]) -> non_neg_integer().
+zrem(Db, Key, Members) ->
+  make_call(Db, {zrem, Key, Members}).
 
 %% =================================================================================================
 %% Server functions
@@ -1699,8 +1704,29 @@ handle_call({zrank, Key, Member}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
+handle_call({zrem, Key, Members}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, zset,
+                fun(Item) ->
+                        NewValue =
+                          lists:foldl(fun zsets:delete_any/2, Item#edis_item.value, Members),
+                        case zsets:size(NewValue) of
+                          0 ->
+                            {{delete, zsets:size(Item#edis_item.value)},
+                             Item#edis_item{value = NewValue}};
+                          N ->
+                            {zsets:size(Item#edis_item.value) - N,
+                             Item#edis_item{value = NewValue}}
+                        end
+                end) of
+      {ok, {delete, Count}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Count};
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp(Key, State)};
 
-  
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
