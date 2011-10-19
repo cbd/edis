@@ -10,20 +10,24 @@
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -record(zset, {dict :: dict(),
-               tree :: gb_tree()}).
+               tree :: edis_gb_trees:edis_gb_tree()}).
 -opaque zset(_Scores, _Members) :: #zset{}.
 
--opaque iterator(_Scores, _Members) :: gb_tree:iter().
+-type direction() :: forward | backwards.
+-record(zset_iterator, {direction = forward :: direction(),
+                        iterator            :: edis_gb_tree:iter()}).
+
+-opaque iterator(_Scores, _Members) :: #zset_iterator{}.
 -export_type([zset/2, iterator/2]).
 
 -export([new/0, enter/2, enter/3, size/1, find/2, delete_any/2]).
--export([iterator/1, next/1, map/2, to_list/1, subset/3]).
+-export([iterator/1, iterator/2, direction/1, next/1, map/2, to_list/1]).
 -export([intersection/2, intersection/3]).
 
 %% @doc Creates an empty {@link zset(any(), any())}
 -spec new() -> zset(any(), any()).
 new() ->
-  #zset{dict = dict:new(), tree = gb_trees:empty()}.
+  #zset{dict = dict:new(), tree = edis_gb_trees:empty()}.
 
 %% @equiv enter(Score, Member, ZSet)
 -spec enter({Score, Member}, zset(Scores, Members)) -> zset(Scores, Members) when is_subtype(Score, Scores), is_subtype(Member, Members).
@@ -37,11 +41,12 @@ enter(Score, Member, ZSet = #zset{}) ->
   case dict:find(Member, ZSet#zset.dict) of
     error ->
       ZSet#zset{dict = dict:store(Member, Score, ZSet#zset.dict),
-                tree = gb_trees:enter({Score, Member}, undefined, ZSet#zset.tree)};
+                tree = edis_gb_trees:enter({Score, Member}, undefined, ZSet#zset.tree)};
     {ok, PrevScore} ->
       ZSet#zset{dict = dict:store(Member, Score, ZSet#zset.dict),
-                tree = gb_trees:enter({Score, Member}, undefined,
-                                      gb_trees:delete({PrevScore, Member}, ZSet#zset.tree))}
+                tree = edis_gb_trees:enter({Score, Member}, undefined,
+                                           edis_gb_trees:delete({PrevScore, Member},
+                                                                ZSet#zset.tree))}
   end.
 
 %% @doc Removes the node with key Key from Tree1 if the key is present in the tree, otherwise does 
@@ -52,29 +57,47 @@ delete_any(Member, ZSet) ->
     error -> ZSet;
     {ok, Score} ->
       ZSet#zset{dict = dict:erase(Member, ZSet#zset.dict),
-                tree = gb_trees:delete_any({Score, Member}, ZSet#zset.tree)}
+                tree = edis_gb_trees:delete_any({Score, Member}, ZSet#zset.tree)}
   end.
 
 %% @doc Returns the size of the zset
 -spec size(zset(any(), any())) -> non_neg_integer().
 size(ZSet) ->
-  gb_trees:size(ZSet#zset.tree).
+  edis_gb_trees:size(ZSet#zset.tree).
 
-%% @doc Returns an iterator that can be used for traversing the entries of Tree; see {@link next/1}.
+%% @equiv iterator(ZSet, forward).
 -spec iterator(zset(Scores, Members)) -> iterator(Scores, Members).
 iterator(ZSet) ->
-  gb_trees:iterator(ZSet#zset.tree).
+  iterator(ZSet, forward).
+
+%% @doc Returns an iterator that can be used for traversing the entries of Tree; see {@link next/1}.
+-spec iterator(zset(Scores, Members), direction()) -> iterator(Scores, Members).
+iterator(ZSet, forward) ->
+  #zset_iterator{direction = forward,
+                 iterator = edis_gb_trees:iterator(ZSet#zset.tree)};
+iterator(ZSet, backwards) ->
+  #zset_iterator{direction = backwards,
+                 iterator = edis_gb_trees:rev_iterator(ZSet#zset.tree)}.
 
 %% @doc Returns {Score, Member, Iter2} where Score is the smallest score referred to by the iterator
 %% Iter1, and Iter2 is the new iterator to be used for traversing the remaining nodes, or the atom
 %% none if no nodes remain.
  -spec next(iterator(Scores, Members)) -> none | {Scores, Members, iterator(Scores, Members)}.
 next(Iter1) ->
-  case gb_trees:next(Iter1) of
+  Function =
+    case Iter1#zset_iterator.direction of
+      forward -> next;
+      backwards -> previous
+    end,
+  case edis_gb_trees:Function(Iter1#zset_iterator.iterator) of
     none -> none;
-    {{Score, Member}, _, Iter2} -> {Score, Member, Iter2}
+    {{Score, Member}, _, Iter2} -> {Score, Member, Iter1#zset_iterator{iterator = Iter2}}
   end.
- 
+
+%% @doc Returns the direction of the iterator
+-spec direction(iterator(_Scores, _Members)) -> direction().
+direction(Iter) -> Iter#zset_iterator.direction.
+
 %% @doc This function searches for a key in a zset. Returns {ok, Score} where Score is the score
 %%      associated with Member, or error if the key is not present.
  -spec find(Member, iterator(Scores, Members)) -> Scores when is_subtype(Member, Members).
@@ -103,17 +126,7 @@ map(Fun, ZSet) ->
 %% @doc Converts the sorted set into a list of {Score, Member} pairs
 -spec to_list(zset(Scores, Members)) -> [{Scores, Members}].
 to_list(ZSet) ->
-  gb_trees:keys(ZSet#zset.tree).
-
-%% @doc Returns the sub-zset of ZSet1 starting at Start and with (max) Len elements.
-%%      It is not an error for Start+Len to exceed the length of the list.
--spec subset(zset(Scores, Members), pos_integer(), non_neg_integer()) -> zset(Scores, Members).
-subset(_ZSet, _Start, 0) -> new();
-subset(ZSet, Start, Len) ->
-  Iter = iterator(ZSet),
-  NewIter = skip(Start-1, Iter),
-  take(Len, NewIter).
-
+  edis_gb_trees:keys(ZSet#zset.tree).
 
 %% =================================================================================================
 %% Private functions
@@ -132,19 +145,3 @@ intersection(Aggregate, [{M1, S1} | D1], [{M2, _S2} | D2], Acc) when M1 >= M2 ->
 map(_Fun, none, Acc) -> Acc;
 map(Fun, {Score, Member, Iter}, Acc) ->
   map(Fun, next(Iter), enter(Fun(Score, Member), Member, Acc)).
-
-%% @private
-skip(0, Iter) -> Iter;
-skip(N, Iter) ->
-  case next(Iter) of
-    none -> Iter;
-    {_S, _M, NextIter} -> skip(N-1, NextIter)
-  end.
-
-%% @private
-take(Len, Iter) ->
-  take(Len, next(Iter), new()).
-take(0, _Step, Acc) -> Acc;
-take(_N, none, Acc) -> Acc;
-take(N, {Score, Member, Iter}, Acc) ->
-  take(N-1, next(Iter), enter(Score, Member, Acc)).

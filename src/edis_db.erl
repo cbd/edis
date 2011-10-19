@@ -51,7 +51,8 @@
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
 -export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3,
-         zrem/3, zrem_range_by_rank/4, zrem_range_by_score/4]).
+         zrem/3, zrem_range_by_rank/4, zrem_range_by_score/4, zrev_range/4, zrev_range_by_score/4,
+         zrev_rank/3]).
 
 %% =================================================================================================
 %% External functions
@@ -430,6 +431,18 @@ zrem_range_by_rank(Db, Key, Start, Stop) ->
 -spec zrem_range_by_score(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
 zrem_range_by_score(Db, Key, Min, Max) ->
   make_call(Db, {zrem_range_by_score, Key, Min, Max}).
+
+-spec zrev_range(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
+zrev_range(Db, Key, Start, Stop) ->
+  make_call(Db, {zrev_range, Key, Start, Stop}).
+
+-spec zrev_range_by_score(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
+zrev_range_by_score(Db, Key, Min, Max) ->
+  make_call(Db, {zrev_range_by_score, Key, Min, Max}).
+
+-spec zrev_rank(atom(), binary(), binary()) -> undefined | non_neg_integer().
+zrev_rank(Db, Key, Member) ->
+  make_call(Db, {zrev_rank, Key, Member}).
 
 %% =================================================================================================
 %% Server functions
@@ -1674,12 +1687,12 @@ handle_call({zrange, Key, Start, Stop}, _From, State) ->
               Stop when Stop < (-1)*L -> 0;
               Stop -> L + 1 + Stop
             end,
-          case StopPos - StartPos + 1 of
-            Len when Len =< 0 -> {ok, []};
-            Len ->
+          case StopPos of
+            StopPos when StopPos < StartPos -> {ok, []};
+            StopPos ->
+              Iterator = zsets:iterator(Value),
               {ok,
-               zsets:to_list(
-                 zsets:subset(Value, StartPos, Len))}
+               zsets_range(StartPos, StopPos, Iterator)}
           end;
         not_found -> {ok, []};
         {error, Reason} -> {error, Reason}
@@ -1748,6 +1761,64 @@ handle_call({zrem_range_by_score, Key, Min, Max}, From, State) ->
     OtherReply ->
       OtherReply
   end;
+handle_call({zrev_range, Key, Start, Stop}, _From, State) ->
+  Reply =
+    try
+      case get_item(State#state.db, zset, Key) of
+        #edis_item{value = Value} ->
+          L = zsets:size(Value),
+          StartPos =
+            case Start of
+              Start when Start >= L -> throw(empty);
+              Start when Start >= 0 -> Start + 1;
+              Start when Start < (-1)*L -> 1;
+              Start -> L + 1 + Start
+            end,
+          StopPos =
+            case Stop of
+              Stop when Stop >= 0, Stop >= L -> L;
+              Stop when Stop >= 0 -> Stop + 1;
+              Stop when Stop < (-1)*L -> 0;
+              Stop -> L + 1 + Stop
+            end,
+          case StopPos of
+            StopPos when StopPos < StartPos -> {ok, []};
+            StopPos ->
+              Iterator = zsets:iterator(Value, backwards),
+              {ok,
+               zsets_range(StartPos, StopPos, Iterator)}
+          end;
+        not_found -> {ok, []};
+        {error, Reason} -> {error, Reason}
+      end
+    catch
+      _:empty -> {ok, []}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zrev_range_by_score, Key, Min, Max}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        Iterator = zsets:iterator(Value, backwards),
+        {ok, zsets_list(Min, Max, Iterator)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zrev_rank, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        case zsets:find(Member, Value) of
+          error -> {ok, undefined};
+          {ok, Score} ->
+            Iterator = zsets:iterator(Value, backwards),
+            {ok, zsets_count(infinity, {exc, Score}, Iterator)}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
@@ -2004,12 +2075,22 @@ zsets_count(Min, Max, Iterator, Acc) ->
   case zsets:next(Iterator) of
     none -> Acc;
     {Score, _Value, NextIterator} ->
-      case {check_limit(min, Min, Score), check_limit(max, Max, Score)} of
+      case {check_limit(min, Min, Score, zsets:direction(NextIterator)),
+            check_limit(max, Max, Score, zsets:direction(NextIterator))} of
         {in, in} -> zsets_count(Min, Max, NextIterator, Acc + 1);
         {_, out} -> Acc;
         {out, in} -> zsets_count(Min, Max, NextIterator, Acc)
       end
   end.
+
+zsets_range(Start, Stop, Iter) ->
+  lists:reverse(zsets_range(Start, Stop, zsets:next(Iter), 1, [])).
+zsets_range(_Start, _Stop, none, _, Acc) -> Acc;
+zsets_range(Start, Stop, {_Score, _Member, Iter}, Pos, Acc) when Pos < Start ->
+  zsets_range(Start, Stop, zsets:next(Iter), Pos+1, Acc);
+zsets_range(Start, Stop, {Score, Member, Iter}, Pos, Acc) when Pos =< Stop ->
+  zsets_range(Start, Stop, zsets:next(Iter), Pos+1, [{Score, Member} | Acc]);
+zsets_range(_, _, _, _, Acc) -> Acc.
 
 zsets_list(Min, Max, Iterator) ->
   lists:reverse(zsets_list(Min, Max, Iterator, [])).
@@ -2017,25 +2098,38 @@ zsets_list(Min, Max, Iterator, Acc) ->
   case zsets:next(Iterator) of
     none -> Acc;
     {Score, Member, NextIterator} ->
-      case {check_limit(min, Min, Score), check_limit(max, Max, Score)} of
+      case {check_limit(min, Min, Score, zsets:direction(NextIterator)),
+            check_limit(max, Max, Score, zsets:direction(NextIterator))} of
         {in, in} -> zsets_list(Min, Max, NextIterator, [{Score, Member}|Acc]);
         {_, out} -> Acc;
         {out, in} -> zsets_list(Min, Max, NextIterator, Acc)
       end
   end.
 
-check_limit(min, neg_infinity, _) -> in;
-check_limit(min, infinity, _) -> out;
-check_limit(min, {exc, Min}, Score) when Min < Score -> in;
-check_limit(min, {exc, Min}, Score) when Min >= Score -> out;
-check_limit(min, {inc, Min}, Score) when Min =< Score -> in;
-check_limit(min, {inc, Min}, Score) when Min > Score -> out;
-check_limit(max, neg_infinity, _) -> out;
-check_limit(max, infinity, _) -> in;
-check_limit(max, {exc, Max}, Score) when Max > Score -> in;
-check_limit(max, {exc, Max}, Score) when Max =< Score -> out;
-check_limit(max, {inc, Max}, Score) when Max >= Score -> in;
-check_limit(max, {inc, Max}, Score) when Max < Score -> out.
+check_limit(min, neg_infinity, _, forward) -> in;
+check_limit(min, infinity, _, forward) -> out;
+check_limit(min, {exc, Min}, Score, forward) when Min < Score -> in;
+check_limit(min, {exc, Min}, Score, forward) when Min >= Score -> out;
+check_limit(min, {inc, Min}, Score, forward) when Min =< Score -> in;
+check_limit(min, {inc, Min}, Score, forward) when Min > Score -> out;
+check_limit(max, neg_infinity, _, forward) -> out;
+check_limit(max, infinity, _, forward) -> in;
+check_limit(max, {exc, Max}, Score, forward) when Max > Score -> in;
+check_limit(max, {exc, Max}, Score, forward) when Max =< Score -> out;
+check_limit(max, {inc, Max}, Score, forward) when Max >= Score -> in;
+check_limit(max, {inc, Max}, Score, forward) when Max < Score -> out;
+check_limit(min, neg_infinity, _, backwards) -> out;
+check_limit(min, infinity, _, backwards) -> in;
+check_limit(min, {exc, Min}, Score, backwards) when Min > Score -> in;
+check_limit(min, {exc, Min}, Score, backwards) when Min =< Score -> out;
+check_limit(min, {inc, Min}, Score, backwards) when Min >= Score -> in;
+check_limit(min, {inc, Min}, Score, backwards) when Min < Score -> out;
+check_limit(max, neg_infinity, _, backwards) -> in;
+check_limit(max, infinity, _, backwards) -> out;
+check_limit(max, {exc, Max}, Score, backwards) when Max < Score -> in;
+check_limit(max, {exc, Max}, Score, backwards) when Max >= Score -> out;
+check_limit(max, {inc, Max}, Score, backwards) when Max =< Score -> in;
+check_limit(max, {inc, Max}, Score, backwards) when Max > Score -> out.
 
 zsets_weighted_intersection(_Aggregate, [{ZSet, Weight}]) ->
   zsets:map(fun(Score, _) -> Score * Weight end, ZSet);
