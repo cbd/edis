@@ -17,7 +17,8 @@
 -export_type([zset/2, iterator/2]).
 
 -export([new/0, enter/2, enter/3, size/1, find/2]).
--export([iterator/1, next/1]).
+-export([iterator/1, next/1, map/2, to_list/1, subset/3]).
+-export([intersection/2, intersection/3]).
 
 %% @doc Creates an empty {@link zset(any(), any())}
 -spec new() -> zset(any(), any()).
@@ -68,3 +69,71 @@ next(Iter1) ->
  -spec find(Member, iterator(Scores, Members)) -> Scores when is_subtype(Member, Members).
 find(Member, ZSet) ->
   dict:find(Member, ZSet#zset.dict).
+
+%% @doc Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate
+-spec intersection(fun((Scores1, Scores2) -> Scores3), zset(Scores1, Members), zset(Scores2, Members)) -> zset(Scores3, Members).
+intersection(Aggregate, ZSet1, ZSet2) ->
+  intersection(Aggregate, dict:to_list(ZSet1#zset.dict), dict:to_list(ZSet2#zset.dict), new()).
+
+%% @doc Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
+%%      The last argument will be the accumulated result
+-spec intersection(fun((Scores, Scores) -> Scores), [zset(Scores, Members),...]) -> zset(Scores, Members).
+intersection(Aggregate, [ZSet1 | ZSets]) ->
+  lists:foldl(
+    fun(ZSet, AccZSet) ->
+            intersection(Aggregate, ZSet, AccZSet)
+    end, ZSet1, ZSets).
+
+%% @doc Executes Fun in each element and returns the zset with the scores returned by it
+-spec map(fun((Scores, Members) -> Scores2), zset(Scores, Members)) -> zset(Scores2, Members).
+map(Fun, ZSet) ->
+  map(Fun, next(iterator(ZSet)), new()).
+
+%% @doc Converts the sorted set into a list of {Score, Member} pairs
+-spec to_list(zset(Scores, Members)) -> [{Scores, Members}].
+to_list(ZSet) ->
+  gb_trees:keys(ZSet#zset.tree).
+
+%% @doc Returns the sub-zset of ZSet1 starting at Start and with (max) Len elements.
+%%      It is not an error for Start+Len to exceed the length of the list.
+-spec subset(zset(Scores, Members), pos_integer(), non_neg_integer()) -> zset(Scores, Members).
+subset(_ZSet, _Start, 0) -> new();
+subset(ZSet, Start, Len) ->
+  Iter = iterator(ZSet),
+  NewIter = skip(Start-1, Iter),
+  take(Len, NewIter).
+
+
+%% =================================================================================================
+%% Private functions
+%% =================================================================================================
+%% @private
+intersection(_Aggregate, [], _D2, Acc) -> Acc;
+intersection(_Aggregate, _D1, [], Acc) -> Acc;
+intersection(Aggregate, [{M, S1} | D1], [{M, S2} | D2], Acc) ->
+  intersection(Aggregate, D1, D2, enter(Aggregate(S1, S2), M, Acc));
+intersection(Aggregate, [{M1, _S1} | D1], [{M2, S2} | D2], Acc) when M1 < M2 ->
+  intersection(Aggregate, D1, [{M2, S2} | D2], Acc);
+intersection(Aggregate, [{M1, S1} | D1], [{M2, _S2} | D2], Acc) when M1 >= M2 ->
+  intersection(Aggregate, [{M1, S1} | D1], D2, Acc).
+
+%% @private
+map(_Fun, none, Acc) -> Acc;
+map(Fun, {Score, Member, Iter}, Acc) ->
+  map(Fun, next(Iter), enter(Fun(Score, Member), Member, Acc)).
+
+%% @private
+skip(0, Iter) -> Iter;
+skip(N, Iter) ->
+  case next(Iter) of
+    none -> Iter;
+    {_S, _M, NextIter} -> skip(N-1, NextIter)
+  end.
+
+%% @private
+take(Len, Iter) ->
+  take(Len, next(Iter), new()).
+take(0, _Step, Acc) -> Acc;
+take(_N, none, Acc) -> Acc;
+take(N, {Score, Member, Iter}, Acc) ->
+  take(N-1, next(Iter), enter(Score, Member, Acc)).
