@@ -805,6 +805,10 @@ run_command(<<"ZRANGEBYSCORE">>, [Key, Min, Max | Options], State) when 0 =< len
     end,
   tcp_multi_bulk(Reply, State);
 run_command(<<"ZRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZRANK">>, [Key, Member], State) ->
+  tcp_number(edis_db:zrank(State#state.db, Key, Member), State);
+run_command(<<"ZRANK">>, _, _State) -> throw(bad_arg_num);
+
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
