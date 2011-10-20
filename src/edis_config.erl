@@ -33,14 +33,8 @@ set(databases, Dbs) when is_integer(Dbs), Dbs > 0 ->
 set(databases, Param) ->
   ?THROW("Invalid number: ~p~n", [Param]),
   throw(invalid_param);
-set(requirepass, undefined) ->
-  ok = application:set_env(edis, requirepass, undefined);
-set(requirepass, Pass) when is_binary(Pass) ->
-  ok = application:set_env(edis, requirepass, Pass),
-  edis_client_sup:reload();
-set(requirepass, Param) ->
-  ?THROW("Invalid password: ~p~n", [Param]),
-  throw(invalid_param);
+set(requirepass, Pass) ->
+  ok = application:set_env(edis, requirepass, Pass);
 set(dir, Dir) when is_binary(Dir) ->
   ok = application:set_env(edis, dir, binary_to_list(Dir)),
   edis_db_sup:reload();
