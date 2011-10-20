@@ -58,8 +58,7 @@ notify(DbProcess, Command) ->
         [C|A] = tuple_to_list(Command),
         {C, A}
     end,
-  gen_event:notify(?MODULE, #edis_command{timestamp = edis_util:timestamp(),
-                                          db = list_to_integer(Index),
+  gen_event:notify(?MODULE, #edis_command{db = list_to_integer(Index),
                                           cmd = Cmd,
                                           args = Args}).
 
