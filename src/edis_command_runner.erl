@@ -910,6 +910,65 @@ run_command(<<"ZREVRANK">>, _, _State) -> throw(bad_arg_num);
 run_command(<<"ZSCORE">>, [Key, Member], State) ->
   tcp_float(edis_db:zscore(State#state.db, Key, Member), State);
 run_command(<<"ZSCORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZUNIONSTORE">>, [Destination, NumKeys | Rest], State) ->
+  NK = edis_util:binary_to_integer(NumKeys, 0),
+  {Keys, Extras} =
+    case {NK, length(Rest)} of
+      {0, _} ->
+        throw({error, "at least 1 input key is needed for ZUNIONSTORE/ZINTERSTORE"});
+      {NK, _} when NK < 0 ->
+        throw({error, ["negative length (", NumKeys, ")"]});
+      {NK, RL}  when RL < NK->
+        throw(syntax);
+      {NK, NK} ->
+        {Rest, []};
+      {NK, RL} when RL == NK + 1 ->
+        throw(syntax); %% Extras should at least have name (weight | aggregate) and a value
+      {NK, _} ->
+        {lists:sublist(Rest, 1, NK), lists:nthtail(NK, Rest)}
+    end,
+  {Weights, Aggregate} =
+    case lists:map(fun edis_util:upper/1, Extras) of
+      [] ->
+        {[1.0 || _ <- Keys], sum};
+      [<<"AGGREGATE">>, <<"SUM">>] -> {[1.0 || _ <- Keys], sum};
+      [<<"AGGREGATE">>, <<"MAX">>] -> {[1.0 || _ <- Keys], max};
+      [<<"AGGREGATE">>, <<"MIN">>] -> {[1.0 || _ <- Keys], min};
+      [<<"AGGREGATE">>, _] -> throw(syntax);
+      [<<"WEIGHTS">> | Rest2] ->
+        case {NK, length(Rest2)} of
+          {NK, R2L}  when R2L < NK->
+            throw(syntax);
+          {NK, NK} ->
+            {try lists:map(fun edis_util:binary_to_float/1, Rest2)
+             catch
+               _:not_float ->
+                 throw({not_float, "weight"})
+             end, sum};
+          {NK, R2L} when R2L == NK + 1 ->
+            throw(syntax);
+          {NK, R2L} when R2L == NK + 2 ->
+            {try lists:map(fun edis_util:binary_to_float/1, lists:sublist(Rest2, 1, NK))
+             catch
+               _:not_float ->
+                 throw({not_float, "weight"})
+             end,
+             case lists:nthtail(NK, Rest2) of
+               [<<"AGGREGATE">>, <<"SUM">>] -> sum;
+               [<<"AGGREGATE">>, <<"MAX">>] -> max;
+               [<<"AGGREGATE">>, <<"MIN">>] -> min;
+               [<<"AGGREGATE">>, _] -> throw(syntax)
+             end};
+          {NK, _} ->
+            throw(syntax)
+        end;
+      _ ->
+        throw(syntax)
+    end,
+  tcp_number(
+    edis_db:zunion_store(State#state.db, Destination, lists:zip(Keys, Weights), Aggregate),
+    State);
+run_command(<<"ZUNIONSTORE">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->
