@@ -805,6 +805,170 @@ run_command(<<"ZRANGEBYSCORE">>, [Key, Min, Max | Options], State) when 0 =< len
     end,
   tcp_multi_bulk(Reply, State);
 run_command(<<"ZRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZRANK">>, [Key, Member], State) ->
+  tcp_number(edis_db:zrank(State#state.db, Key, Member), State);
+run_command(<<"ZRANK">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREM">>, [Key, Member | Members], State) ->
+  try edis_db:zrem(State#state.db, Key, [Member | Members]) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"ZREM">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREMRANGEBYRANK">>, [Key, Start, Stop], State) ->
+  try edis_db:zrem_range_by_rank(State#state.db, Key,
+                                 edis_util:binary_to_integer(Start, 0),
+                                 edis_util:binary_to_integer(Stop, 0)) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"ZREMRANGEBYRANK">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREMRANGEBYSCORE">>, [Key, Min, Max], State) ->
+  try edis_db:zrem_range_by_score(State#state.db, Key,
+                                  parse_float_limit(Min), parse_float_limit(Max)) of
+    Count -> tcp_number(Count, State)
+  catch
+    _:not_found ->
+      tcp_number(0, State)
+  end;
+run_command(<<"ZREMRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREVRANGE">>, [Key, Start, Stop], State) ->
+  Reply =
+    [Member ||
+     {_Score, Member} <- edis_db:zrev_range(State#state.db, Key,
+                                            edis_util:binary_to_integer(Start, 0),
+                                            edis_util:binary_to_integer(Stop, 0))],
+  tcp_multi_bulk(Reply, State);
+run_command(<<"ZREVRANGE">>, [Key, Start, Stop, Option], State) ->
+  case edis_util:upper(Option) of
+    <<"WITHSCORES">> ->
+      Reply =
+        lists:flatten(
+          [[Member, Score] ||
+           {Score, Member} <- edis_db:zrev_range(State#state.db, Key,
+                                                 edis_util:binary_to_integer(Start, 0),
+                                                 edis_util:binary_to_integer(Stop, 0))]),
+      tcp_multi_bulk(Reply, State);
+    _ ->
+      throw(syntax)
+  end;
+run_command(<<"ZREVRANGE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREVRANGEBYSCORE">>, [Key, Min, Max | Options], State) when 0 =< length(Options),
+                                                                        length(Options) =< 4->
+  {ShowScores, Limit} =
+    case lists:map(fun edis_util:upper/1, Options) of
+      [] -> {false, undefined};
+      [<<"WITHSCORES">>] -> {true, undefined};
+      [<<"LIMIT">>, Offset, Count] ->
+        {false, {edis_util:binary_to_integer(Offset, 0),
+                 edis_util:binary_to_integer(Count, 0)}};
+      [<<"WITHSCORES">>, <<"LIMIT">>, Offset, Count] ->
+        {true, {edis_util:binary_to_integer(Offset, 0), edis_util:binary_to_integer(Count, 0)}};
+      [<<"LIMIT">>, Offset, Count, <<"WITHSCORES">>] ->
+        {true, {edis_util:binary_to_integer(Offset, 0), edis_util:binary_to_integer(Count, 0)}};
+      _ ->
+        throw(syntax)
+    end,
+  
+  Range =
+    try edis_db:zrev_range_by_score(State#state.db,
+                                    Key, parse_float_limit(Min), parse_float_limit(Max))
+    catch
+      _:not_float ->
+        throw({not_float, "min or max"})
+    end,
+  
+  Reply =
+    case {ShowScores, Limit} of
+      {false, undefined} ->
+        [Member || {_Score, Member} <- Range];
+      {true, undefined} ->
+        lists:flatten([[Member, Score] || {Score, Member} <- Range]);
+      {_, {_Off, 0}} ->
+        [];
+      {_, {Off, _Lim}} when Off < 0 ->
+        [];
+      {_, {Off, _Lim}} when Off >= length(Range) ->
+        [];
+      {false, {Off, Lim}} when Lim < 0 ->
+        [Member || {_Score, Member} <- lists:nthtail(Off, Range)];
+      {true, {Off, Lim}} when Lim < 0 ->
+        lists:flatten([[Member, Score] || {Score, Member} <- lists:nthtail(Off, Range)]);
+      {false, {Off, Lim}} ->
+        [Member || {_Score, Member} <- lists:sublist(Range, Off+1, Lim)];
+      {true, {Off, Lim}} ->
+        lists:flatten([[Member, Score] || {Score, Member} <- lists:sublist(Range, Off+1, Lim)])
+    end,
+  tcp_multi_bulk(Reply, State);
+run_command(<<"ZREVRANGEBYSCORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZREVRANK">>, [Key, Member], State) ->
+  tcp_number(edis_db:zrev_rank(State#state.db, Key, Member), State);
+run_command(<<"ZREVRANK">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZSCORE">>, [Key, Member], State) ->
+  tcp_float(edis_db:zscore(State#state.db, Key, Member), State);
+run_command(<<"ZSCORE">>, _, _State) -> throw(bad_arg_num);
+run_command(<<"ZUNIONSTORE">>, [Destination, NumKeys | Rest], State) ->
+  NK = edis_util:binary_to_integer(NumKeys, 0),
+  {Keys, Extras} =
+    case {NK, length(Rest)} of
+      {0, _} ->
+        throw({error, "at least 1 input key is needed for ZUNIONSTORE/ZINTERSTORE"});
+      {NK, _} when NK < 0 ->
+        throw({error, ["negative length (", NumKeys, ")"]});
+      {NK, RL}  when RL < NK->
+        throw(syntax);
+      {NK, NK} ->
+        {Rest, []};
+      {NK, RL} when RL == NK + 1 ->
+        throw(syntax); %% Extras should at least have name (weight | aggregate) and a value
+      {NK, _} ->
+        {lists:sublist(Rest, 1, NK), lists:nthtail(NK, Rest)}
+    end,
+  {Weights, Aggregate} =
+    case lists:map(fun edis_util:upper/1, Extras) of
+      [] ->
+        {[1.0 || _ <- Keys], sum};
+      [<<"AGGREGATE">>, <<"SUM">>] -> {[1.0 || _ <- Keys], sum};
+      [<<"AGGREGATE">>, <<"MAX">>] -> {[1.0 || _ <- Keys], max};
+      [<<"AGGREGATE">>, <<"MIN">>] -> {[1.0 || _ <- Keys], min};
+      [<<"AGGREGATE">>, _] -> throw(syntax);
+      [<<"WEIGHTS">> | Rest2] ->
+        case {NK, length(Rest2)} of
+          {NK, R2L}  when R2L < NK->
+            throw(syntax);
+          {NK, NK} ->
+            {try lists:map(fun edis_util:binary_to_float/1, Rest2)
+             catch
+               _:not_float ->
+                 throw({not_float, "weight"})
+             end, sum};
+          {NK, R2L} when R2L == NK + 1 ->
+            throw(syntax);
+          {NK, R2L} when R2L == NK + 2 ->
+            {try lists:map(fun edis_util:binary_to_float/1, lists:sublist(Rest2, 1, NK))
+             catch
+               _:not_float ->
+                 throw({not_float, "weight"})
+             end,
+             case lists:nthtail(NK, Rest2) of
+               [<<"AGGREGATE">>, <<"SUM">>] -> sum;
+               [<<"AGGREGATE">>, <<"MAX">>] -> max;
+               [<<"AGGREGATE">>, <<"MIN">>] -> min;
+               [<<"AGGREGATE">>, _] -> throw(syntax)
+             end};
+          {NK, _} ->
+            throw(syntax)
+        end;
+      _ ->
+        throw(syntax)
+    end,
+  tcp_number(
+    edis_db:zunion_store(State#state.db, Destination, lists:zip(Keys, Weights), Aggregate),
+    State);
+run_command(<<"ZUNIONSTORE">>, _, _State) -> throw(bad_arg_num);
 
 %% -- Server ---------------------------------------------------------------------------------------
 run_command(<<"CONFIG">>, [SubCommand | Rest], State) ->

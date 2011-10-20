@@ -23,10 +23,6 @@
 -type item_encoding() :: raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist.
 -export_type([item_encoding/0, item_type/0]).
 
--type float_limit() :: neg_infinity | infinity | {exc, float()} | {inc, float()}.
--type aggregate() :: sum | max | min.
--export_type([float_limit/0, aggregate/0]).
-
 -record(state, {index               :: non_neg_integer(),
                 db                  :: eleveldb:db_ref(),
                 start_time          :: pos_integer(),
@@ -50,7 +46,9 @@
          lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
 -export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
          smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4]).
+-export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3,
+         zrem/3, zrem_range_by_rank/4, zrem_range_by_score/4, zrev_range/4, zrev_range_by_score/4,
+         zrev_rank/3, zscore/3, zunion_store/4]).
 
 %% =================================================================================================
 %% External functions
@@ -394,7 +392,7 @@ zadd(Db, Key, SMs) ->
 zcard(Db, Key) ->
   make_call(Db, {zcard, Key}).
 
--spec zcount(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
+-spec zcount(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
 zcount(Db, Key, Min, Max) ->
   make_call(Db, {zcount, Key, Min, Max}).
 
@@ -402,17 +400,53 @@ zcount(Db, Key, Min, Max) ->
 zincr(Db, Key, Increment, Member) ->
   make_call(Db, {zincr, Key, Increment, Member}).
 
--spec zinter_store(atom(), binary(), [{binary(), float()}], aggregate()) -> non_neg_integer().
+-spec zinter_store(atom(), binary(), [{binary(), float()}], zsets:aggregate()) -> non_neg_integer().
 zinter_store(Db, Destination, WeightedKeys, Aggregate) ->
   make_call(Db, {zinter_store, Destination, WeightedKeys, Aggregate}).
+
+-spec zunion_store(atom(), binary(), [{binary(), float()}], zsets:aggregate()) -> non_neg_integer().
+zunion_store(Db, Destination, WeightedKeys, Aggregate) ->
+  make_call(Db, {zunion_store, Destination, WeightedKeys, Aggregate}).
 
 -spec zrange(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
 zrange(Db, Key, Start, Stop) ->
   make_call(Db, {zrange, Key, Start, Stop}).
 
--spec zrange_by_score(atom(), binary(), float_limit(), float_limit()) -> non_neg_integer().
+-spec zrange_by_score(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
 zrange_by_score(Db, Key, Min, Max) ->
   make_call(Db, {zrange_by_score, Key, Min, Max}).
+
+-spec zrank(atom(), binary(), binary()) -> undefined | non_neg_integer().
+zrank(Db, Key, Member) ->
+  make_call(Db, {zrank, Key, Member}).
+
+-spec zrem(atom(), binary(), [binary()]) -> non_neg_integer().
+zrem(Db, Key, Members) ->
+  make_call(Db, {zrem, Key, Members}).
+
+-spec zrem_range_by_rank(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
+zrem_range_by_rank(Db, Key, Start, Stop) ->
+  make_call(Db, {zrem_range_by_rank, Key, Start, Stop}).
+
+-spec zrem_range_by_score(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
+zrem_range_by_score(Db, Key, Min, Max) ->
+  make_call(Db, {zrem_range_by_score, Key, Min, Max}).
+
+-spec zrev_range(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
+zrev_range(Db, Key, Start, Stop) ->
+  make_call(Db, {zrev_range, Key, Start, Stop}).
+
+-spec zrev_range_by_score(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
+zrev_range_by_score(Db, Key, Min, Max) ->
+  make_call(Db, {zrev_range_by_score, Key, Min, Max}).
+
+-spec zrev_rank(atom(), binary(), binary()) -> undefined | non_neg_integer().
+zrev_rank(Db, Key, Member) ->
+  make_call(Db, {zrev_rank, Key, Member}).
+
+-spec zscore(atom(), binary(), binary()) -> undefined | non_neg_integer().
+zscore(Db, Key, Member) ->
+  make_call(Db, {zscore, Key, Member}).
 
 %% =================================================================================================
 %% Server functions
@@ -451,7 +485,7 @@ handle_call(info, _From, State) ->
                 {db_stats, Stats}]}, %%TODO: add info
    State};
 handle_call(flush, _From, State) ->
-  ok = eleveldb:destroy(edis_config:get(dir) ++ "/edis-" ++ integer_to_list(State#state.index), []),
+  ok = eleveldb:destroy("db/edis-" ++ integer_to_list(State#state.index), []),
   case init(State#state.index) of
     {ok, NewState} ->
       {reply, ok, NewState};
@@ -1584,9 +1618,7 @@ handle_call({zcard, Key}, _From, State) ->
 handle_call({zcount, Key, Min, Max}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
-      #edis_item{value = Value} ->
-        Iterator = zsets:iterator(Value),
-        {ok, zsets_count(Min, Max, Iterator)};
+      #edis_item{value = Value} -> {ok, zsets:count(Min, Max, Value)};
       not_found -> {ok, 0};
       {error, Reason} -> {error, Reason}
     end,
@@ -1606,7 +1638,7 @@ handle_call({zincr, Key, Increment, Member}, _From, State) ->
   {reply, Reply, stamp(Key, State)};
 handle_call({zinter_store, Destination, WeightedKeys, Aggregate}, _From, State) ->
   Reply =
-    try zsets_weighted_intersection(
+    try weighted_intersection(
           Aggregate,
           [case get_item(State#state.db, zset, Key) of
               #edis_item{value = Value} -> {Value, Weight};
@@ -1657,12 +1689,9 @@ handle_call({zrange, Key, Start, Stop}, _From, State) ->
               Stop when Stop < (-1)*L -> 0;
               Stop -> L + 1 + Stop
             end,
-          case StopPos - StartPos + 1 of
-            Len when Len =< 0 -> {ok, []};
-            Len ->
-              {ok,
-               zsets:to_list(
-                 zsets:subset(Value, StartPos, Len))}
+          case StopPos of
+            StopPos when StopPos < StartPos -> {ok, []};
+            StopPos -> {ok, zsets:range(StartPos, StopPos, Value)}
           end;
         not_found -> {ok, []};
         {error, Reason} -> {error, Reason}
@@ -1674,14 +1703,156 @@ handle_call({zrange, Key, Start, Stop}, _From, State) ->
 handle_call({zrange_by_score, Key, Min, Max}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
-      #edis_item{value = Value} ->
-        Iterator = zsets:iterator(Value),
-        {ok, zsets_list(Min, Max, Iterator)};
+      #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value)};
       not_found -> {ok, 0};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-  
+handle_call({zrank, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        case zsets:find(Member, Value) of
+          error -> {ok, undefined};
+          {ok, Score} -> {ok, zsets:count(neg_infinity, {exc, Score}, Value)}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zrem, Key, Members}, _From, State) ->
+  Reply =
+    case update(State#state.db, Key, zset,
+                fun(Item) ->
+                        NewValue =
+                          lists:foldl(fun zsets:delete_any/2, Item#edis_item.value, Members),
+                        case zsets:size(NewValue) of
+                          0 ->
+                            {{delete, zsets:size(Item#edis_item.value)},
+                             Item#edis_item{value = NewValue}};
+                          N ->
+                            {zsets:size(Item#edis_item.value) - N,
+                             Item#edis_item{value = NewValue}}
+                        end
+                end) of
+      {ok, {delete, Count}} ->
+        _ = eleveldb:delete(State#state.db, Key, []),
+        {ok, Count};
+      OtherReply ->
+        OtherReply
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zrem_range_by_rank, Key, Start, Stop}, From, State) ->
+  case handle_call({zrange, Key, Start, Stop}, From, State) of
+    {reply, {ok, SMs}, NewState} ->
+      handle_call({zrem, Key, [Member || {_Score, Member} <- SMs]}, From, NewState);
+    OtherReply ->
+      OtherReply
+  end;
+handle_call({zrem_range_by_score, Key, Min, Max}, From, State) ->
+  case handle_call({zrange_by_score, Key, Min, Max}, From, State) of
+    {reply, {ok, SMs}, NewState} ->
+      handle_call({zrem, Key, [Member || {_Score, Member} <- SMs]}, From, NewState);
+    OtherReply ->
+      OtherReply
+  end;
+handle_call({zrev_range, Key, Start, Stop}, _From, State) ->
+  Reply =
+    try
+      case get_item(State#state.db, zset, Key) of
+        #edis_item{value = Value} ->
+          L = zsets:size(Value),
+          StartPos =
+            case Start of
+              Start when Start >= L -> throw(empty);
+              Start when Start >= 0 -> Start + 1;
+              Start when Start < (-1)*L -> 1;
+              Start -> L + 1 + Start
+            end,
+          StopPos =
+            case Stop of
+              Stop when Stop >= 0, Stop >= L -> L;
+              Stop when Stop >= 0 -> Stop + 1;
+              Stop when Stop < (-1)*L -> 0;
+              Stop -> L + 1 + Stop
+            end,
+          case StopPos of
+            StopPos when StopPos < StartPos -> {ok, []};
+            StopPos -> {ok, zsets:range(StartPos, StopPos, Value, backwards)}
+          end;
+        not_found -> {ok, []};
+        {error, Reason} -> {error, Reason}
+      end
+    catch
+      _:empty -> {ok, []}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zrev_range_by_score, Key, Min, Max}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value, backwards)};
+      not_found -> {ok, 0};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zrev_rank, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        case zsets:find(Member, Value) of
+          error -> {ok, undefined};
+          {ok, Score} -> {ok, zsets:count(infinity, {exc, Score}, Value, backwards)}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zscore, Key, Member}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, zset, Key) of
+      #edis_item{value = Value} ->
+        case zsets:find(Member, Value) of
+          error -> {ok, undefined};
+          {ok, Score} -> {ok, Score}
+        end;
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call({zunion_store, Destination, WeightedKeys, Aggregate}, _From, State) ->
+  Reply =
+    try weighted_union(
+          Aggregate,
+          [case get_item(State#state.db, zset, Key) of
+              #edis_item{value = Value} -> {Value, Weight};
+              not_found -> {zsets:new(), 0.0};
+              {error, Reason} -> throw(Reason)
+            end || {Key, Weight} <- WeightedKeys]) of
+      ZSet ->
+        case zsets:size(ZSet) of
+          0 ->
+            _ = eleveldb:delete(State#state.db, Destination, []),
+            {ok, 0};
+          Size ->
+            case eleveldb:put(State#state.db,
+                              Destination,
+                              erlang:term_to_binary(
+                                #edis_item{key = Destination, type = zset, encoding = skiplist,
+                                           value = ZSet}), []) of
+              ok -> {ok, Size};
+              {error, Reason} -> {error, Reason}
+            end
+        end
+    catch
+      _:empty ->
+        _ = eleveldb:delete(State#state.db, Destination, []),
+        {ok, 0};
+      _:Error ->
+        ?ERROR("~p~n", [Error]),
+        {error, Error}
+    end,
+  {reply, Reply, stamp([Destination|[Key || {Key, _} <- WeightedKeys]], State)};
+
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
@@ -1931,55 +2102,34 @@ timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
 timeout_to_ms(infinity) -> infinity;
 timeout_to_ms(Timeout) -> Timeout * 1000.
 
-zsets_count(Min, Max, Iterator) ->
-  zsets_count(Min, Max, Iterator, 0).
-zsets_count(Min, Max, Iterator, Acc) ->
-  case zsets:next(Iterator) of
-    none -> Acc;
-    {Score, _Value, NextIterator} ->
-      case {check_limit(min, Min, Score), check_limit(max, Max, Score)} of
-        {in, in} -> zsets_count(Min, Max, NextIterator, Acc + 1);
-        {_, out} -> Acc;
-        {out, in} -> zsets_count(Min, Max, NextIterator, Acc)
-      end
-  end.
-
-zsets_list(Min, Max, Iterator) ->
-  lists:reverse(zsets_list(Min, Max, Iterator, [])).
-zsets_list(Min, Max, Iterator, Acc) ->
-  case zsets:next(Iterator) of
-    none -> Acc;
-    {Score, Member, NextIterator} ->
-      case {check_limit(min, Min, Score), check_limit(max, Max, Score)} of
-        {in, in} -> zsets_list(Min, Max, NextIterator, [{Score, Member}|Acc]);
-        {_, out} -> Acc;
-        {out, in} -> zsets_list(Min, Max, NextIterator, Acc)
-      end
-  end.
-
-check_limit(min, neg_infinity, _) -> in;
-check_limit(min, infinity, _) -> out;
-check_limit(min, {exc, Min}, Score) when Min < Score -> in;
-check_limit(min, {exc, Min}, Score) when Min >= Score -> out;
-check_limit(min, {inc, Min}, Score) when Min =< Score -> in;
-check_limit(min, {inc, Min}, Score) when Min > Score -> out;
-check_limit(max, neg_infinity, _) -> out;
-check_limit(max, infinity, _) -> in;
-check_limit(max, {exc, Max}, Score) when Max > Score -> in;
-check_limit(max, {exc, Max}, Score) when Max =< Score -> out;
-check_limit(max, {inc, Max}, Score) when Max >= Score -> in;
-check_limit(max, {inc, Max}, Score) when Max < Score -> out.
-
-zsets_weighted_intersection(_Aggregate, [{ZSet, Weight}]) ->
+weighted_intersection(_Aggregate, [{ZSet, Weight}]) ->
   zsets:map(fun(Score, _) -> Score * Weight end, ZSet);
-zsets_weighted_intersection(Aggregate, [{ZSet, Weight}|WeightedZSets]) ->
-  zsets_weighted_intersection(Aggregate, WeightedZSets, Weight, ZSet).
+weighted_intersection(Aggregate, [{ZSet, Weight}|WeightedZSets]) ->
+  weighted_intersection(Aggregate, WeightedZSets, Weight, ZSet).
 
-zsets_weighted_intersection(_Aggregate, [], 1.0, AccZSet) -> AccZSet;
-zsets_weighted_intersection(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
-  zsets_weighted_intersection(
+weighted_intersection(_Aggregate, [], 1.0, AccZSet) -> AccZSet;
+weighted_intersection(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
+  weighted_intersection(
     Aggregate, Rest, 1.0,
     zsets:intersection(
       fun(Score, AccScore) ->
+              lists:Aggregate([Score * Weight, AccScore * AccWeight])
+      end, ZSet, AccZSet)).
+
+weighted_union(_Aggregate, [{ZSet, Weight}]) ->
+  zsets:map(fun(Score, _) -> Score * Weight end, ZSet);
+weighted_union(Aggregate, [{ZSet, Weight}|WeightedZSets]) ->
+  weighted_union(Aggregate, WeightedZSets, Weight, ZSet).
+
+weighted_union(_Aggregate, [], 1.0, AccZSet) -> AccZSet;
+weighted_union(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
+  weighted_union(
+    Aggregate, Rest, 1.0,
+    zsets:union(
+      fun(undefined, AccScore) ->
+              AccScore * AccWeight;
+         (Score, undefined) ->
+              Score * Weight;
+         (Score, AccScore) ->
               lists:Aggregate([Score * Weight, AccScore * AccWeight])
       end, ZSet, AccZSet)).
