@@ -10,7 +10,7 @@
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
-         integer_to_binary/1, binary_to_float/1, make_pairs/1, glob_to_re/1]).
+         integer_to_binary/1, binary_to_float/1, make_pairs/1, glob_to_re/1, join/2]).
 
 -include("elog.hrl").
 
@@ -108,3 +108,11 @@ glob_to_re(Pattern) ->
         <<"?">>, <<".">>, [global]),
       <<"(">>, <<"\\(">>, [global]),
     <<")">>, <<"\\)">>, [global]).
+
+-spec join([binary()], binary()) -> binary().
+join([], _) -> <<>>;
+join([Bin], _) -> Bin;
+join([Bin|Bins], Sep) -> join(Bins, Sep, Bin).
+
+join([], _, Acc) -> Acc;
+join([Bin|Bins], Sep, Acc) -> join(Bins, Sep, <<Acc/binary, Sep/binary, Bin/binary>>).

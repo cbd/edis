@@ -78,9 +78,11 @@ handle_cast({err, Message}, State) ->
   tcp_err(Message, State);
 handle_cast({run, Cmd, Args}, State) ->
   try
-    Command = parse_command(#edis_command{cmd = Cmd,
-                                          db = State#state.db_index,
-                                          args = Args}),
+    OriginalCommand = #edis_command{cmd = Cmd,
+                                    db = State#state.db_index,
+                                    args = Args},
+    Command = parse_command(OriginalCommand),
+    ok = edis_db_monitor:notify(OriginalCommand),
     run(Command, State)
   catch
     _:unknown_command ->
@@ -133,14 +135,14 @@ handle_cast({run, Cmd, Args}, State) ->
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
 handle_info(#edis_command{db = 0} = Command, State) ->
-  tcp_ok(io_lib:format("~p ~s ~p", [Command#edis_command.timestamp,
+  tcp_ok(io_lib:format("~p ~s ~s", [Command#edis_command.timestamp,
                                     Command#edis_command.cmd,
-                                    Command#edis_command.args]), State);
+                                    edis_util:join(Command#edis_command.args, <<" ">>)]), State);
 handle_info(#edis_command{} = Command, State) ->
-  tcp_ok(io_lib:format("~p (db ~p) ~s ~p", [Command#edis_command.timestamp,
+  tcp_ok(io_lib:format("~p (db ~p) ~s ~s", [Command#edis_command.timestamp,
                                             Command#edis_command.db,
                                             Command#edis_command.cmd,
-                                            Command#edis_command.args]), State);
+                                            edis_util:join(Command#edis_command.args, <<" ">>)]), State);
 handle_info({gen_event_EXIT, _Handler, Reason}, State) ->
   ?INFO("Monitor deactivated. Reason: ~p~n", [Reason]),
   {noreply, State, hibernate};

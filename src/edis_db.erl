@@ -2084,7 +2084,6 @@ make_call(Process, Request) ->
 %% @private
 make_call(Process, Request, Timeout) ->
   ?DEBUG("CALL for ~p: ~p~n", [Process, Request]),
-  ok = edis_db_monitor:notify(Process, Request),
   try gen_server:call(Process, Request, Timeout) of
     ok -> ok;
     {ok, Reply} -> Reply;
