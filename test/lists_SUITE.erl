@@ -71,7 +71,7 @@ long_list(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
 	
 	Elements = [edis_util:integer_to_binary(E)
-			    || E <- lists:seq(0,9999)], 
+			    || E <- lists:seq(0,999)], 
 	
 	%% Create Elements	
 	[erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>,E])
@@ -80,5 +80,5 @@ long_list(Config) ->
     %% Check elements with positive and negative index
     [{E,E} = 
      {erldis:lindex(Client,<<"mylist">>,E),
-      erldis:lindex(Client,<<"mylist">>,edis_util:integer_to_binary(-10000+edis_util:binary_to_integer(E)))}
+      erldis:lindex(Client,<<"mylist">>,edis_util:integer_to_binary(-1000+edis_util:binary_to_integer(E)))}
     || E <- Elements].
