@@ -13,7 +13,7 @@
 
 -behaviour(gen_event).
 
--export([start_link/0, add_sup_handler/0, delete_handler/0, notify/2]).
+-export([start_link/0, add_sup_handler/0, delete_handler/0, notify/1]).
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
 
 -record(state, {client :: pid()}).
@@ -48,20 +48,9 @@ delete_handler() ->
   gen_event:delete_handler(?MODULE, {?MODULE, self()}, normal).
 
 %% @doc Notifies an event.
--spec notify(atom(), term()) -> ok.
-notify(DbProcess, Command) ->
-  "edis-db-" ++ Index = atom_to_list(DbProcess),
-  {Cmd, Args} =
-    case Command of
-      Command when is_atom(Command) -> {Command, []};
-      Command ->
-        [C|A] = tuple_to_list(Command),
-        {C, A}
-    end,
-  gen_event:notify(?MODULE, #edis_command{timestamp = edis_util:timestamp(),
-                                          db = list_to_integer(Index),
-                                          cmd = Cmd,
-                                          args = Args}).
+-spec notify(#edis_command{}) -> ok.
+notify(Command) ->
+  gen_event:notify(?MODULE, Command).
 
 %% ====================================================================
 %% Server functions

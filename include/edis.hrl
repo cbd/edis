@@ -1,8 +1,9 @@
 -include("elog.hrl").
 
--record(edis_command, {timestamp    :: float(),
+-record(edis_command, {timestamp = edis_util:timestamp()
+                                    :: float(),
                        db           :: non_neg_integer(),
-                       cmd          :: atom(),
+                       cmd          :: binary(),
                        args = []    :: [term()]}).
 
 -record(edis_item, {key               :: binary(),
