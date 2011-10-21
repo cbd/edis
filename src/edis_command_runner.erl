@@ -185,13 +185,13 @@ parse_command(C = #edis_command{cmd = <<"APPEND">>, args = [_Key, _Value]}) -> C
 parse_command(#edis_command{cmd = <<"APPEND">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"DECR">>, args = [_Key]}) -> C;
 parse_command(#edis_command{cmd = <<"DECR">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"DECRBY">>, args = [_Key, _Decrement]}) -> C;
+parse_command(C = #edis_command{cmd = <<"DECRBY">>, args = [Key, Decrement]}) -> C#edis_command{args = [Key, edis_util:binary_to_integer(Decrement)]};
 parse_command(#edis_command{cmd = <<"DECRBY">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"GET">>, args = [_Key]}) -> C;
 parse_command(#edis_command{cmd = <<"GET">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"GETBIT">>, args = [Key, Offset]}) ->
   try edis_util:binary_to_integer(Offset) of
-    O when O >= 0 -> C#edis_command{args = [Key, 0]};
+    O when O >= 0 -> C#edis_command{args = [Key, O]};
     _ -> throw({not_integer, "bit offset"})
   catch
     _:not_integer -> throw({not_integer, "bit offset"})
@@ -547,10 +547,10 @@ run(#edis_command{cmd = <<"INCRBY">>, args = [Key, Increment]}, State) ->
   tcp_number(edis_db:incr(State#state.db, Key, Increment), State);
 run(#edis_command{cmd = <<"MGET">>, args = Keys}, State) ->
   tcp_multi_bulk(edis_db:get(State#state.db, Keys), State);
-run(#edis_command{cmd = <<"MSET">>, args = KVs}, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+run(#edis_command{cmd = <<"MSET">>, args = KVs}, State) ->
   ok = edis_db:set(State#state.db, KVs),
   tcp_ok(State);
-run(#edis_command{cmd = <<"MSETNX">>, args = KVs}, State) when KVs =/= [], length(KVs) rem 2 =:= 0 ->
+run(#edis_command{cmd = <<"MSETNX">>, args = KVs}, State) ->
   try edis_db:set_nx(State#state.db, KVs) of
     ok -> tcp_boolean(true, State)
   catch
