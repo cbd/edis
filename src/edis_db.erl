@@ -90,46 +90,12 @@ init(Index) ->
 
 %% @hidden
 -spec handle_call(term(), reference(), state()) -> {reply, ok | {ok, term()} | {error, term()}, state()} | {stop, {unexpected_request, term()}, {unexpected_request, term()}, state()}.
-handle_call(save, _From, State) ->
-  {reply, ok, State#state{last_save = edis_util:timestamp()}};
-handle_call(last_save, _From, State) ->
-  {reply, {ok, State#state.last_save}, State};
-handle_call(ping, _From, State) ->
+handle_call(#edis_command{cmd = <<"PING">>}, _From, State) ->
   {reply, {ok, <<"PONG">>}, State};
-handle_call(info, _From, State) ->
-  Version =
-    case lists:keyfind(edis, 1, application:loaded_applications()) of
-      false -> "0";
-      {edis, _Desc, V} -> V
-    end,
-  {ok, Stats} = eleveldb:status(State#state.db, <<"leveldb.stats">>),
-  {reply, {ok, [{edis_version, Version},
-                {last_save, State#state.last_save},
-                {db_stats, Stats}]}, %%TODO: add info
-   State};
-handle_call(flush, _From, State) ->
-  ok = eleveldb:destroy(edis_config:get(dir) ++ "/edis-" ++ integer_to_list(State#state.index), []),
-  case init(State#state.index) of
-    {ok, NewState} ->
-      {reply, ok, NewState};
-    {stop, Reason} ->
-      {reply, {error, Reason}, State}
-  end;
-handle_call(size, _From, State) ->
-  %%TODO: We need to 
-  Now = edis_util:now(),
-  Size = eleveldb:fold(
-           State#state.db,
-           fun({_Key, Bin}, Acc) ->
-                   case erlang:binary_to_term(Bin) of
-                     #edis_item{expire = Expire} when Expire >= Now ->
-                       Acc + 1;
-                     _ ->
-                       Acc
-                   end
-           end, 0, [{fill_cache, false}]),
-  {reply, {ok, Size}, State};
-handle_call({append, Key, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ECHO">>, args = [Word]}, _From, State) ->
+  {reply, {ok, Word}, State};
+%% -- Strings --------------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"APPEND">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
@@ -137,7 +103,9 @@ handle_call({append, Key, Value}, _From, State) ->
                    {erlang:size(NewV), Item#edis_item{value = NewV}}
            end, <<>>),
   {reply, Reply, stamp(Key, State)};
-handle_call({decr, Key, Decrement}, _From, State) ->
+handle_call(#edis_command{cmd = <<"DECR">>, args = [Key]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"DECRBY">>, args = [Key, 1]}, From, State);
+handle_call(#edis_command{cmd = <<"DECRBY">>, args = [Key, Decrement]}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
@@ -151,20 +119,15 @@ handle_call({decr, Key, Decrement}, _From, State) ->
                    end
            end, <<"0">>),
   {reply, Reply, stamp(Key, State)};
-handle_call({get, Keys}, _From, State) ->
+handle_call(#edis_command{cmd = <<"GET">>, args = [Key]}, _From, State) ->
   Reply =
-    lists:foldr(
-      fun(Key, {ok, AccValues}) ->
-              case get_item(State#state.db, string, Key) of
-                #edis_item{type = string, value = Value} -> {ok, [Value | AccValues]};
-                not_found -> {ok, [undefined | AccValues]};
-                {error, bad_item_type} -> {ok, [undefined | AccValues]};
-                {error, Reason} -> {error, Reason}
-              end;
-         (_, AccErr) -> AccErr
-      end, {ok, []}, Keys),
-  {reply, Reply, stamp(Keys, State)};
-handle_call({get_bit, Key, Offset}, _From, State) ->
+    case get_item(State#state.db, string, Key) of
+      #edis_item{type = string, value = Value} -> {ok, Value};
+      not_found -> {ok, undefined};
+      {error, Reason} -> {error, Reason}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call(#edis_command{cmd = <<"GETBIT">>, args = [Key, Offset]}, _From, State) ->
   Reply =
     case get_item(State#state.db, string, Key) of
       #edis_item{value =
@@ -174,7 +137,7 @@ handle_call({get_bit, Key, Offset}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({get_range, Key, Start, End}, _From, State) ->
+handle_call(#edis_command{cmd = <<"GETRANGE">>, args = [Key, Start, End]}, _From, State) ->
   Reply =
     try
       case get_item(State#state.db, string, Key) of
@@ -205,14 +168,16 @@ handle_call({get_range, Key, Start, End}, _From, State) ->
       _:empty -> {ok, <<>>}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({get_and_set, Key, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"GETSET">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
                    {OldV, Item#edis_item{value = Value}}
            end, undefined),
   {reply, Reply, stamp(Key, State)};
-handle_call({incr, Key, Increment}, _From, State) ->
+handle_call(#edis_command{cmd = <<"INCR">>, args = [Key]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"INCRBY">>, args = [Key, 1]}, From, State);
+handle_call(#edis_command{cmd = <<"INCRBY">>, args = [Key, Increment]}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = OldV}) ->
@@ -226,7 +191,20 @@ handle_call({incr, Key, Increment}, _From, State) ->
                    end
            end, <<"0">>),
   {reply, Reply, stamp(Key, State)};
-handle_call({set, KVs}, _From, State) ->
+handle_call(#edis_command{cmd = <<"MGET">>, args = Keys}, _From, State) ->
+  Reply =
+    lists:foldr(
+      fun(Key, {ok, AccValues}) ->
+              case get_item(State#state.db, string, Key) of
+                #edis_item{type = string, value = Value} -> {ok, [Value | AccValues]};
+                not_found -> {ok, [undefined | AccValues]};
+                {error, bad_item_type} -> {ok, [undefined | AccValues]};
+                {error, Reason} -> {error, Reason}
+              end;
+         (_, AccErr) -> AccErr
+      end, {ok, []}, Keys),
+  {reply, Reply, stamp(Keys, State)};
+handle_call(#edis_command{cmd = <<"MSET">>, args = KVs}, _From, State) ->
   Reply =
     eleveldb:write(State#state.db,
                    [{put, Key,
@@ -235,24 +213,27 @@ handle_call({set, KVs}, _From, State) ->
                                   type = string, value = Value})} || {Key, Value} <- KVs],
                     []),
   {reply, Reply, stamp([K || {K, _} <- KVs], State)};
-handle_call({set_nx, KVs}, _From, State) ->
+handle_call(#edis_command{cmd = <<"MSETNX">>, args = KVs}, _From, State) ->
   Reply =
     case lists:any(
            fun({Key, _}) ->
                    exists_item(State#state.db, Key)
            end, KVs) of
       true ->
-        {error, already_exists};
+        {ok, 0};
       false ->
-        eleveldb:write(State#state.db,
-                       [{put, Key,
-                         erlang:term_to_binary(
-                           #edis_item{key = Key, encoding = raw,
-                                      type = string, value = Value})} || {Key, Value} <- KVs],
-                       [])
+        ok = eleveldb:write(State#state.db,
+                            [{put, Key,
+                              erlang:term_to_binary(
+                                #edis_item{key = Key, encoding = raw,
+                                           type = string, value = Value})} || {Key, Value} <- KVs],
+                            []),
+        {ok, 1}
     end,
   {reply, Reply, stamp([K || {K, _} <- KVs], State)};
-handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SET">>, args = [Key, Value]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"MSET">>, args = [{Key, Value}]}, From, State);
+handle_call(#edis_command{cmd = <<"SETBIT">>, args = [Key, Offset, Bit]}, _From, State) ->
   Reply =
     update(State#state.db, Key, string, raw,
            fun(Item = #edis_item{value = <<Prefix:Offset/unit:1, OldBit:1/unit:1, _Rest/bitstring>>}) ->
@@ -269,7 +250,7 @@ handle_call({set_bit, Key, Offset, Bit}, _From, State) ->
                                                 0:BitsAfter/unit:1>>}}
            end, <<>>),
   {reply, Reply, stamp(Key, State)};
-handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SETEX">>, args = [Key, Seconds, Value]}, _From, State) ->
   Reply =
     eleveldb:put(
       State#state.db, Key,
@@ -278,7 +259,9 @@ handle_call({set_ex, Key, Seconds, Value}, _From, State) ->
                    expire = edis_util:now() + Seconds,
                    value = Value}), []),
   {reply, Reply, stamp(Key, State)};
-handle_call({set_range, Key, Offset, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SETNX">>, args = [Key, Value]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"MSETNX">>, args = [{Key, Value}]}, From, State);
+handle_call(#edis_command{cmd = <<"SETRANGE">>, args = [Key, Offset, Value]}, _From, State) ->
   Length = erlang:size(Value),
   Reply =
     update(State#state.db, Key, string, raw,
@@ -294,7 +277,7 @@ handle_call({set_range, Key, Offset, Value}, _From, State) ->
                    {erlang:size(NewV), Item#edis_item{value = NewV}}
            end, <<>>),
   {reply, Reply, stamp(Key, State)};
-handle_call({str_len, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"STRLEN">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, string, Key) of
       #edis_item{value = Value} -> {ok, erlang:size(Value)};
@@ -302,7 +285,8 @@ handle_call({str_len, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({del, Keys}, _From, State) ->
+%% -- Keys -----------------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"DEL">>, args = Keys}, _From, State) ->
   DeleteActions =
       [{delete, Key} || Key <- Keys, exists_item(State#state.db, Key)],
   Reply =
@@ -311,7 +295,7 @@ handle_call({del, Keys}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Keys, State)};
-handle_call({exists, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"EXISTS">>, args = [Key]}, _From, State) ->
   Reply =
       case exists_item(State#state.db, Key) of
         true -> {ok, true};
@@ -319,7 +303,9 @@ handle_call({exists, Key}, _From, State) ->
         {error, Reason} -> {error, Reason}
       end,
   {reply, Reply, stamp(Key, State)};
-handle_call({expire_at, Key, Timestamp}, _From, State) ->
+handle_call(#edis_command{cmd = <<"EXPIRE">>, args = [Key, Seconds]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"EXPIREAT">>, args = [Key, edis_util:now() + Seconds]}, From, State);
+handle_call(#edis_command{cmd = <<"EXPIREAT">>, args = [Key, Timestamp]}, _From, State) ->
   Reply =
       case edis_util:now() of
         Now when Timestamp =< Now -> %% It's a delete (it already expired)
@@ -348,7 +334,7 @@ handle_call({expire_at, Key, Timestamp}, _From, State) ->
           end
       end,
   {reply, Reply, stamp(Key, State)};
-handle_call({keys, Pattern}, _From, State) ->
+handle_call(#edis_command{cmd = <<"KEYS">>, args = [Pattern]}, _From, State) ->
   Reply =
     case re:compile(Pattern) of
       {ok, Compiled} ->
@@ -375,7 +361,7 @@ handle_call({keys, Pattern}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, State};
-handle_call({move, Key, NewDb}, _From, State) ->
+handle_call(#edis_command{cmd = <<"MOVE">>, args = [Key, NewDb]}, _From, State) ->
   Reply =
     case get_item(State#state.db, string, Key) of
       not_found ->
@@ -398,22 +384,29 @@ handle_call({move, Key, NewDb}, _From, State) ->
         end
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({recv, Item}, _From, State) ->
+handle_call(#edis_command{cmd = <<"-INTERNAL-RECV">>, args = [Item]}, _From, State) ->
   Reply =
     case exists_item(State#state.db, Item#edis_item.key) of
       true -> {error, found};
       false -> eleveldb:put(State#state.db, Item#edis_item.key, erlang:term_to_binary(Item), [])
     end,
   {reply, Reply, stamp(Item#edis_item.key, State)};
-handle_call({encoding, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"OBJECT REFCOUNT">>, args = [Key]}, _From, State) ->
+  Reply =
+    case exists_item(State#state.db, Key) of
+      true -> {ok, 1};
+      false -> {ok, 0}
+    end,
+  {reply, Reply, State};
+handle_call(#edis_command{cmd = <<"OBJECT ENCODING">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
-      #edis_item{encoding = Encoding} -> {ok, Encoding};
+      #edis_item{encoding = Encoding} -> {ok, atom_to_binary(Encoding, utf8)};
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, State};
-handle_call({idle_time, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"OBJECT IDLETIME">>, args = [Key]}, _From, State) ->
   Reply =
     case exists_item(State#state.db, Key) of
       true ->
@@ -427,7 +420,7 @@ handle_call({idle_time, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, State};
-handle_call({persist, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"PERSIST">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, any,
                 fun(Item) ->
@@ -441,7 +434,7 @@ handle_call({persist, Key}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call(random_key, _From, State) ->
+handle_call(#edis_command{cmd = <<"RANDOMKEY">>}, _From, State) ->
   Reply =
     case eleveldb:is_empty(State#state.db) of
       true -> undefined;
@@ -452,11 +445,11 @@ handle_call(random_key, _From, State) ->
         key_at(State#state.db, RandomIndex)
     end,
   {reply, Reply, State};
-handle_call({rename, Key, NewKey}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RENAME">>, args = [Key, NewKey]}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
       not_found ->
-        {error, not_found};
+        {error, no_such_key};
       {error, Reason} ->
         {error, Reason};
       Item ->
@@ -467,47 +460,49 @@ handle_call({rename, Key, NewKey}, _From, State) ->
                        [])
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({rename_nx, Key, NewKey}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RENAMENX">>, args = [Key, NewKey]}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
       not_found ->
-        {error, not_found};
+        {error, no_such_key};
       {error, Reason} ->
         {error, Reason};
       Item ->
         case exists_item(State#state.db, NewKey) of
           true ->
-            {error, already_exists};
+            {ok, false};
           false ->
-            eleveldb:write(State#state.db,
-                           [{delete, Key},
-                            {put, NewKey,
-                             erlang:term_to_binary(Item#edis_item{key = NewKey})}],
-                           [])
+            ok = eleveldb:write(State#state.db,
+                                [{delete, Key},
+                                 {put, NewKey,
+                                  erlang:term_to_binary(Item#edis_item{key = NewKey})}],
+                                []),
+            {ok, true}
         end
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({ttl, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"TTL">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
       not_found ->
-        {error, not_found};
+        {ok, -1};
       #edis_item{expire = infinity} ->
-        {ok, undefined};
+        {ok, -1};
       Item ->
         {ok, Item#edis_item.expire - edis_util:now()}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({type, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"TYPE">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, any, Key) of
       not_found ->
-        {error, not_found};
+        {ok, <<"none">>};
       Item ->
-        {ok, Item#edis_item.type}
+        {ok, atom_to_binary(Item#edis_item.type, utf8)}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hdel, Key, Fields}, _From, State) ->
+%% -- Hashes ---------------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"HDEL">>, args = [Key | Fields]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, hash,
                 fun(Item) ->
@@ -527,7 +522,7 @@ handle_call({hdel, Key, Fields}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hexists, Key, Field}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HEXISTS">>, args = [Key, Field]}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
       not_found -> {ok, false};
@@ -535,32 +530,26 @@ handle_call({hexists, Key, Field}, _From, State) ->
       Item -> {ok, dict:is_key(Field, Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hget, Key, Fields}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HGET">>, args = [Key, Field]}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
-      not_found -> {ok, [undefined || _ <- Fields]};
+      not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason};
-      Item ->
-        Results =
-          lists:map(
-            fun(Field) ->
-                    case dict:find(Field, Item#edis_item.value) of
-                      {ok, Value} -> Value;
-                      error -> undefined
-                    end
-            end, Fields),
-        {ok, Results}
+      Item -> {ok, case dict:find(Field, Item#edis_item.value) of
+                     {ok, Value} -> Value;
+                     error -> undefined
+                   end}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hget_all, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HGETALL">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
       not_found -> {ok, []};
       {error, Reason} -> {error, Reason};
-      Item -> {ok, dict:to_list(Item#edis_item.value)}
+      Item -> {ok, lists:flatmap(fun tuple_to_list/1, dict:to_list(Item#edis_item.value))}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hincr, Key, Field, Increment}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HINCRBY">>, args = [Key, Field, Increment]}, _From, State) ->
   Reply =
     update(
       State#state.db, Key, hash, hashtable,
@@ -581,13 +570,13 @@ handle_call({hincr, Key, Field, Increment}, _From, State) ->
                                                    edis_util:integer_to_binary(OldInt + Increment),
                                                    Item#edis_item.value)}}
                   catch
-                    _:badarg ->
-                      throw(not_integer)
+                    _:not_integer ->
+                      throw({not_integer, "hash value"})
                   end
               end
       end, dict:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call({hkeys, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HKEYS">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
       not_found -> {ok, []};
@@ -595,7 +584,7 @@ handle_call({hkeys, Key}, _From, State) ->
       Item -> {ok, dict:fetch_keys(Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hlen, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HLEN">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
       not_found -> {ok, 0};
@@ -603,7 +592,24 @@ handle_call({hlen, Key}, _From, State) ->
       Item -> {ok, dict:size(Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({hset, Key, FVs}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HMGET">>, args = [Key | Fields]}, _From, State) ->
+  Reply =
+    case get_item(State#state.db, hash, Key) of
+      not_found -> {ok, [undefined || _ <- Fields]};
+      {error, Reason} -> {error, Reason};
+      Item ->
+        Results =
+          lists:map(
+            fun(Field) ->
+                    case dict:find(Field, Item#edis_item.value) of
+                      {ok, Value} -> Value;
+                      error -> undefined
+                    end
+            end, Fields),
+        {ok, Results}
+    end,
+  {reply, Reply, stamp(Key, State)};
+handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, FVs]}, _From, State) ->
   Reply =
     update(
       State#state.db, Key, hash, hashtable,
@@ -616,27 +622,28 @@ handle_call({hset, Key, FVs}, _From, State) ->
                              Item#edis_item{value =
                                               dict:store(Field, Value, AccItem#edis_item.value)}};
                           false ->
-                            {inserted,
+                            {true,
                              Item#edis_item{value =
                                               dict:store(Field, Value, AccItem#edis_item.value)}}
                         end
-                end, {updated, Item}, FVs)
+                end, {false, Item}, FVs)
       end, dict:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call({hset_nx, Key, Field, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, Field, Value]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, {Field, Value}]}, From, State);
+handle_call(#edis_command{cmd = <<"HSETNX">>, args = [Key, Field, Value]}, _From, State) ->
   Reply =
     update(
       State#state.db, Key, hash, hashtable,
       fun(Item) ->
               case dict:is_key(Field, Item#edis_item.value) of
-                true ->
-                  throw(already_exists);
-                false ->
-                  {ok, Item#edis_item{value = dict:store(Field, Value, Item#edis_item.value)}}
-                end
+                true -> {false, Item};
+                false -> {true, Item#edis_item{value =
+                                                 dict:store(Field, Value, Item#edis_item.value)}}
+              end
       end, dict:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call({hvals, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"HVALS">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, hash, Key) of
       not_found -> {ok, []};
@@ -646,20 +653,24 @@ handle_call({hvals, Key}, _From, State) ->
                              end, [], Item#edis_item.value)}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({blpop, Keys, Timeout}, From, State) ->
-  Reqs = [{blpop_internal, Key, []} || Key <- Keys],
+%% -- Lists ----------------------------------------------------------------------------------------
+handle_call(C = #edis_command{cmd = <<"BLPOP">>, args = Args}, From, State) ->
+  [Timeout | Keys] = lists:reverse(Args),
+  Reqs = [C#edis_command{cmd = <<"-INTERNAL-BLPOP">>, args = [Key]} || Key <- Keys],
   case first_that_works(Reqs, From, State) of
     {reply, {error, not_found}, NewState} ->
       {noreply,
        lists:foldl(
          fun(Key, AccState) ->
-                 block_list_op(Key, {blpop_internal, Key, Keys}, From, Timeout, AccState)
+                 block_list_op(Key,
+                               C#edis_command{cmd = <<"-INTERNAL-BLPOP">>,
+                                              args = [Key|Keys]}, From, Timeout, AccState)
          end, NewState, Keys)};
     OtherReply ->
       OtherReply
   end;
-handle_call({blpop_internal, Key, Keys}, From, State) ->
-  case handle_call({lpop, Key}, From, State) of
+handle_call(C = #edis_command{cmd = <<"-INTERNAL-BLPOP">>, args = [Key | Keys]}, From, State) ->
+  case handle_call(C#edis_command{cmd = <<"LPOP">>, args = [Key]}, From, State) of
     {reply, {ok, Value}, NewState} ->
       {reply, {ok, {Key, Value}},
        lists:foldl(
@@ -669,20 +680,23 @@ handle_call({blpop_internal, Key, Keys}, From, State) ->
     OtherReply ->
       OtherReply
   end;
-handle_call({brpop, Keys, Timeout}, From, State) ->
-  Reqs = [{brpop_internal, Key, []} || Key <- Keys],
+handle_call(C = #edis_command{cmd = <<"BRPOP">>, args = Args}, From, State) ->
+  [Timeout | Keys] = lists:reverse(Args),
+  Reqs = [C#edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key]} || Key <- Keys],
   case first_that_works(Reqs, From, State) of
     {reply, {error, not_found}, NewState} ->
       {noreply,
        lists:foldl(
          fun(Key, AccState) ->
-                 block_list_op(Key, {brpop_internal, Key, Keys}, From, Timeout, AccState)
+                 block_list_op(Key,
+                               C#edis_command{cmd = <<"-INTERNAL-BRPOP">>,
+                                              args = [Key|Keys]}, From, Timeout, AccState)
          end, NewState, Keys)};
     OtherReply ->
       OtherReply
   end;
-handle_call({brpop_internal, Key, Keys}, From, State) ->
-  case handle_call({rpop, Key}, From, State) of
+handle_call(C = #edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key | Keys]}, From, State) ->
+  case handle_call(C#edis_command{cmd = <<"RPOP">>, args = [Key]}, From, State) of
     {reply, {ok, Value}, NewState} ->
       {reply, {ok, {Key, Value}},
        lists:foldl(
@@ -692,15 +706,15 @@ handle_call({brpop_internal, Key, Keys}, From, State) ->
     OtherReply ->
       OtherReply
   end;
-handle_call({brpop_lpush, Source, Destination, Timeout}, From, State) ->
-  Req = {rpop_lpush, Source, Destination},
+handle_call(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination, Timeout]}, From, State) ->
+  Req = C#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]},
   case handle_call(Req, From, State) of
     {reply, {error, not_found}, NewState} ->
       {noreply, block_list_op(Source, Req, From, Timeout, NewState)};
     OtherReply ->
       OtherReply
   end;
-handle_call({lindex, Key, Index}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LINDEX">>, args = [Key, Index]}, _From, State) ->
   Reply =
     case get_item(State#state.db, list, Key) of
       #edis_item{value = Value} ->
@@ -719,7 +733,7 @@ handle_call({lindex, Key, Index}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({linsert, Key, Position, Pivot, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LINSERT">>, args = [Key, Position, Pivot, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
            fun(Item) ->
@@ -735,9 +749,9 @@ handle_call({linsert, Key, Position, Pivot, Value}, _From, State) ->
                        {length(Item#edis_item.value) + 1,
                         Item#edis_item{value = lists:append(Before, [Pivot, Value|After])}}
                    end
-           end),
+           end, -1),
   {reply, Reply, stamp(Key, State)};
-handle_call({llen, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LLEN">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, list, Key) of
       #edis_item{value = Value} -> {ok, length(Value)};
@@ -745,7 +759,7 @@ handle_call({llen, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({lpop, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LPOP">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, list,
                 fun(Item) ->
@@ -757,7 +771,7 @@ handle_call({lpop, Key}, _From, State) ->
                           [] ->
                             throw(not_found)
                         end
-                end) of
+                end, {keep, undefined}) of
       {ok, {delete, Value}} ->
         _ = eleveldb:delete(State#state.db, Key, []),
         {ok, Value};
@@ -767,7 +781,7 @@ handle_call({lpop, Key}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({lpush, Key, Values}, From, State) ->
+handle_call(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
            fun(Item) ->
@@ -778,15 +792,15 @@ handle_call({lpush, Key, Values}, From, State) ->
   gen_server:reply(From, Reply),
   NewState = check_blocked_list_ops(Key, State),
   {noreply, stamp(Key, NewState)};
-handle_call({lpush_x, Key, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
            fun(Item) ->
                    {length(Item#edis_item.value) + 1,
                     Item#edis_item{value = [Value | Item#edis_item.value]}}
-           end),
+           end, 0),
   {reply, Reply, stamp(Key, State)};
-handle_call({lrange, Key, Start, Stop}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LRANGE">>, args = [Key, Start, Stop]}, _From, State) ->
   Reply =
     try
       case get_item(State#state.db, list, Key) of
@@ -817,7 +831,7 @@ handle_call({lrange, Key, Start, Stop}, _From, State) ->
       _:empty -> {ok, []}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({lrem, Key, Count, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LREM">>, args = [Key, Count, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
            fun(Item) ->
@@ -835,9 +849,9 @@ handle_call({lrem, Key, Count, Value}, _From, State) ->
                              lists:duplicate((-1)*Count, Value))
                      end,
                    {length(Item#edis_item.value) - length(NewV), Item#edis_item{value = NewV}}
-           end),
+           end, 0),
   {reply, Reply, stamp(Key, State)};
-handle_call({lset, Key, Index, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LSET">>, args = [Key, Index, Value]}, _From, State) ->
   Reply =
     case
       update(State#state.db, Key, list,
@@ -864,11 +878,12 @@ handle_call({lset, Key, Index, Value}, _From, State) ->
                      end
              end) of
       {ok, ok} -> ok;
-      {error, badarg} -> {error, out_of_range};
+      {error, not_found} -> {error, no_such_key};
+      {error, badarg} -> {error, {out_of_range, "index"}};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({ltrim, Key, Start, Stop}, _From, State) ->
+handle_call(#edis_command{cmd = <<"LTRIM">>, args = [Key, Start, Stop]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, list,
                 fun(Item) ->
@@ -893,7 +908,7 @@ handle_call({ltrim, Key, Start, Stop}, _From, State) ->
                             {ok, Item#edis_item{value =
                                                   lists:sublist(Item#edis_item.value, StartPos, Len)}}
                         end
-                end) of
+                end, ok) of
       {ok, ok} -> ok;
       {error, empty} ->
         _ = eleveldb:delete(State#state.db, Key, []),
@@ -901,7 +916,7 @@ handle_call({ltrim, Key, Start, Stop}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({rpop, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RPOP">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, list,
                 fun(Item) ->
@@ -913,7 +928,7 @@ handle_call({rpop, Key}, _From, State) ->
                           [] ->
                             throw(not_found)
                         end
-                end) of
+                end, {keep, undefined}) of
       {ok, {delete, Value}} ->
         _ = eleveldb:delete(State#state.db, Key, []),
         {ok, Value};
@@ -923,7 +938,7 @@ handle_call({rpop, Key}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({rpop_lpush, Key, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Key, Key]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
            fun(Item) ->
@@ -934,9 +949,9 @@ handle_call({rpop_lpush, Key, Key}, _From, State) ->
                      _ ->
                        throw(not_found)
                    end
-           end),
+           end, undefined),
   {reply, Reply, stamp(Key, State)};
-handle_call({rpop_lpush, Source, Destination}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, _From, State) ->
   Reply =
     case update(State#state.db, Source, list,
                 fun(Item) ->
@@ -948,7 +963,7 @@ handle_call({rpop_lpush, Source, Destination}, _From, State) ->
                           [] ->
                             throw(not_found)
                         end
-                end) of
+                end, undefined) of
       {ok, {delete, Value}} ->
         _ = eleveldb:delete(State#state.db, Source, []),
         update(State#state.db, Destination, list, linkedlist,
@@ -964,7 +979,7 @@ handle_call({rpop_lpush, Source, Destination}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp([Destination, Source], State)};
-handle_call({rpush, Key, Values}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
            fun(Item) ->
@@ -972,7 +987,7 @@ handle_call({rpush, Key, Values}, _From, State) ->
                     Item#edis_item{value = lists:append(Item#edis_item.value, Values)}}
            end, []),
   {reply, Reply, stamp(Key, State)};
-handle_call({rpush_x, Key, Value}, _From, State) ->
+handle_call(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
            fun(Item) ->
@@ -981,9 +996,10 @@ handle_call({rpush_x, Key, Value}, _From, State) ->
                                      lists:reverse(
                                        [Value|
                                           lists:reverse(Item#edis_item.value)])}}
-           end),
+           end, 0),
   {reply, Reply, stamp(Key, State)};
-handle_call({sadd, Key, Members}, _From, State) ->
+%% -- Sets -----------------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"SADD">>, args = [Key, Members]}, _From, State) ->
   Reply =
     update(State#state.db, Key, set, hashtable,
            fun(Item) ->
@@ -993,7 +1009,7 @@ handle_call({sadd, Key, Members}, _From, State) ->
                     Item#edis_item{value = NewValue}}
            end, gb_sets:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call({scard, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SCARD">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, set, Key) of
       #edis_item{value = Value} -> {ok, gb_sets:size(Value)};
@@ -1001,7 +1017,7 @@ handle_call({scard, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({sdiff, [Key]}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SDIFF">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, set, Key) of
       #edis_item{value = Value} -> {ok, gb_sets:to_list(Value)};
@@ -1009,7 +1025,7 @@ handle_call({sdiff, [Key]}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({sdiff, [Key | Keys]}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SDIFF">>, args = [Key | Keys]}, _From, State) ->
   Reply =
     case get_item(State#state.db, set, Key) of
       #edis_item{value = Value} ->
@@ -1026,8 +1042,8 @@ handle_call({sdiff, [Key | Keys]}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({sdiff_store, Destination, Keys}, From, State) ->
-    case handle_call({sdiff, Keys}, From, State) of
+handle_call(#edis_command{cmd = <<"SDIFFSTORE">>, args = [Destination | Keys]}, From, State) ->
+    case handle_call(#edis_command{cmd = <<"SDIFF">>, args = Keys}, From, State) of
       {reply, {ok, []}, NewState} ->
         _ = eleveldb:delete(State#state.db, Destination, []),
         {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
@@ -1046,7 +1062,7 @@ handle_call({sdiff_store, Destination, Keys}, From, State) ->
       ErrorReply ->
         ErrorReply
     end;
-handle_call({sinter, Keys}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SINTER">>, args = Keys}, _From, State) ->
   Reply =
     try gb_sets:intersection(
           [case get_item(State#state.db, set, Key) of
@@ -1060,8 +1076,8 @@ handle_call({sinter, Keys}, _From, State) ->
       _:Error -> {error, Error}
     end,
   {reply, Reply, stamp(Keys, State)};
-handle_call({sinter_store, Destination, Keys}, From, State) ->
-    case handle_call({sinter, Keys}, From, State) of
+handle_call(#edis_command{cmd = <<"SINTERSTORE">>, args = [Destination | Keys]}, From, State) ->
+    case handle_call(#edis_command{cmd = <<"SINTER">>, args = Keys}, From, State) of
       {reply, {ok, []}, NewState} ->
         _ = eleveldb:delete(State#state.db, Destination, []),
         {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
@@ -1080,7 +1096,7 @@ handle_call({sinter_store, Destination, Keys}, From, State) ->
       ErrorReply ->
         ErrorReply
     end;
-handle_call({sismember, Key, Member}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SISMEMBER">>, args = [Key, Member]}, _From, State) ->
   Reply =
     case get_item(State#state.db, set, Key) of
       #edis_item{value = Value} -> {ok, gb_sets:is_element(Member, Value)};
@@ -1088,7 +1104,7 @@ handle_call({sismember, Key, Member}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({smembers, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SMEMBERS">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, set, Key) of
       #edis_item{value = Value} -> {ok, gb_sets:to_list(Value)};
@@ -1096,7 +1112,7 @@ handle_call({smembers, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({smove, Source, Destination, Member}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SMOVE">>, args = [Source, Destination, Member]}, _From, State) ->
   Reply =
     case update(State#state.db, Source, set,
                 fun(Item) ->
@@ -1110,7 +1126,7 @@ handle_call({smove, Source, Destination, Member}, _From, State) ->
                               _ -> {true, Item#edis_item{value = NewValue}}
                             end
                         end
-                end) of
+                end, false) of
       {ok, delete} ->
         _ = eleveldb:delete(State#state.db, Source, []),
         update(State#state.db, Destination, set, hashtable,
@@ -1128,7 +1144,7 @@ handle_call({smove, Source, Destination, Member}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp([Source, Destination], State)};
-handle_call({spop, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SPOP">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, set,
                 fun(Item) ->
@@ -1137,7 +1153,7 @@ handle_call({spop, Key}, _From, State) ->
                           0 -> {{delete, Member}, Item#edis_item{value = NewValue}};
                           _ -> {Member, Item#edis_item{value = NewValue}}
                         end
-                end) of
+                end, undefined) of
       {ok, {delete, Member}} ->
         _ = eleveldb:delete(State#state.db, Key, []),
         {ok, Member};
@@ -1145,7 +1161,7 @@ handle_call({spop, Key}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({srand_member, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SRANDMEMBER">>, args = [Key]}, _From, State) ->
   _ = random:seed(erlang:now()),
   Reply =
     case get_item(State#state.db, set, Key) of
@@ -1162,7 +1178,7 @@ handle_call({srand_member, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({srem, Key, Members}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SREM">>, args = [Key | Members]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, set,
                 fun(Item) ->
@@ -1176,7 +1192,7 @@ handle_call({srem, Key, Members}, _From, State) ->
                             {gb_sets:size(Item#edis_item.value) - N,
                              Item#edis_item{value = NewValue}}
                         end
-                end) of
+                end, 0) of
       {ok, {delete, Count}} ->
         _ = eleveldb:delete(State#state.db, Key, []),
         {ok, Count};
@@ -1184,7 +1200,7 @@ handle_call({srem, Key, Members}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({sunion, Keys}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SUNION">>, args = Keys}, _From, State) ->
   Reply =
     try gb_sets:union(
           [case get_item(State#state.db, set, Key) of
@@ -1198,8 +1214,8 @@ handle_call({sunion, Keys}, _From, State) ->
       _:Error -> {error, Error}
     end,
   {reply, Reply, stamp(Keys, State)};
-handle_call({sunion_store, Destination, Keys}, From, State) ->
-    case handle_call({sunion, Keys}, From, State) of
+handle_call(#edis_command{cmd = <<"SUNIONSTORE">>, args = [Destination | Keys]}, From, State) ->
+    case handle_call(#edis_command{cmd = <<"SUNION">>, args = Keys}, From, State) of
       {reply, {ok, []}, NewState} ->
         _ = eleveldb:delete(State#state.db, Destination, []),
         {reply, {ok, 0}, stamp([Destination|Keys], NewState)};
@@ -1218,7 +1234,8 @@ handle_call({sunion_store, Destination, Keys}, From, State) ->
       ErrorReply ->
         ErrorReply
     end;
-handle_call({zadd, Key, SMs}, _From, State) ->
+%% -- ZSets -----------------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"ZADD">>, args = [Key, SMs]}, _From, State) ->
   Reply =
     update(State#state.db, Key, zset, skiplist,
            fun(Item) ->
@@ -1228,7 +1245,7 @@ handle_call({zadd, Key, SMs}, _From, State) ->
                     Item#edis_item{value = NewValue}}
            end, zsets:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call({zcard, Key}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZCARD">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:size(Value)};
@@ -1236,7 +1253,7 @@ handle_call({zcard, Key}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zcount, Key, Min, Max}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZCOUNT">>, args = [Key, Min, Max]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:count(Min, Max, Value)};
@@ -1244,7 +1261,7 @@ handle_call({zcount, Key, Min, Max}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zincr, Key, Increment, Member}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZINCRBY">>, args = [Key, Increment, Member]}, _From, State) ->
   Reply =
     update(State#state.db, Key, zset, skiplist,
            fun(Item) ->
@@ -1257,7 +1274,7 @@ handle_call({zincr, Key, Increment, Member}, _From, State) ->
                     Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
            end, zsets:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call({zinter_store, Destination, WeightedKeys, Aggregate}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZINTERSTORE">>, args = [Destination, WeightedKeys, Aggregate]}, _From, State) ->
   Reply =
     try weighted_intersection(
           Aggregate,
@@ -1290,7 +1307,7 @@ handle_call({zinter_store, Destination, WeightedKeys, Aggregate}, _From, State) 
         {error, Error}
     end,
   {reply, Reply, stamp([Destination|[Key || {Key, _} <- WeightedKeys]], State)};
-handle_call({zrange, Key, Start, Stop}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop | Options]}, _From, State) ->
   Reply =
     try
       case get_item(State#state.db, zset, Key) of
@@ -1312,7 +1329,13 @@ handle_call({zrange, Key, Start, Stop}, _From, State) ->
             end,
           case StopPos of
             StopPos when StopPos < StartPos -> {ok, []};
-            StopPos -> {ok, zsets:range(StartPos, StopPos, Value)}
+            StopPos -> {ok,
+                        case lists:member(with_scores, Options) of
+                          true ->
+                            lists:flatmap(fun tuple_to_list/1, zsets:range(StartPos, StopPos, Value));
+                          false ->
+                            [Member || {_Score, Member} <- zsets:range(StartPos, StopPos, Value)]
+                        end}
           end;
         not_found -> {ok, []};
         {error, Reason} -> {error, Reason}
@@ -1321,7 +1344,7 @@ handle_call({zrange, Key, Start, Stop}, _From, State) ->
       _:empty -> {ok, []}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrange_by_score, Key, Min, Max}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [Key, Min, Max | _Options]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value)};
@@ -1329,7 +1352,7 @@ handle_call({zrange_by_score, Key, Min, Max}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrank, Key, Member}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZRANK">>, args = [Key, Member]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} ->
@@ -1341,7 +1364,7 @@ handle_call({zrank, Key, Member}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrem, Key, Members}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZREM">>, args = [Key | Members]}, _From, State) ->
   Reply =
     case update(State#state.db, Key, zset,
                 fun(Item) ->
@@ -1355,7 +1378,7 @@ handle_call({zrem, Key, Members}, _From, State) ->
                             {zsets:size(Item#edis_item.value) - N,
                              Item#edis_item{value = NewValue}}
                         end
-                end) of
+                end, 0) of
       {ok, {delete, Count}} ->
         _ = eleveldb:delete(State#state.db, Key, []),
         {ok, Count};
@@ -1363,21 +1386,24 @@ handle_call({zrem, Key, Members}, _From, State) ->
         OtherReply
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrem_range_by_rank, Key, Start, Stop}, From, State) ->
-  case handle_call({zrange, Key, Start, Stop}, From, State) of
+handle_call(#edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [Key, Start, Stop]}, From, State) ->
+  case handle_call(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}, From, State) of
     {reply, {ok, SMs}, NewState} ->
-      handle_call({zrem, Key, [Member || {_Score, Member} <- SMs]}, From, NewState);
+      handle_call(#edis_command{cmd = <<"ZREM">>,
+                                args = [Key | [Member || {_Score, Member} <- SMs]]}, From, NewState);
     OtherReply ->
       OtherReply
   end;
-handle_call({zrem_range_by_score, Key, Min, Max}, From, State) ->
-  case handle_call({zrange_by_score, Key, Min, Max}, From, State) of
+handle_call(#edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [Key, Min, Max]}, From, State) ->
+  case handle_call(#edis_command{cmd = <<"ZRANGEBYSCORE">>,
+                                 args = [Key, Min, Max]}, From, State) of
     {reply, {ok, SMs}, NewState} ->
-      handle_call({zrem, Key, [Member || {_Score, Member} <- SMs]}, From, NewState);
+      handle_call(#edis_command{cmd = <<"ZREM">>,
+                                args = [Key | [Member || {_Score, Member} <- SMs]]}, From, NewState);
     OtherReply ->
       OtherReply
   end;
-handle_call({zrev_range, Key, Start, Stop}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZREVRANGE">>, args = [Key, Start, Stop | Options]}, _From, State) ->
   Reply =
     try
       case get_item(State#state.db, zset, Key) of
@@ -1399,7 +1425,14 @@ handle_call({zrev_range, Key, Start, Stop}, _From, State) ->
             end,
           case StopPos of
             StopPos when StopPos < StartPos -> {ok, []};
-            StopPos -> {ok, zsets:range(StartPos, StopPos, Value, backwards)}
+            StopPos -> {ok,
+                        case lists:member(with_scores, Options) of
+                          true ->
+                            lists:flatmap(fun tuple_to_list/1,
+                                          zsets:range(StartPos, StopPos, Value, backwards));
+                          false ->
+                            [Member || {_Score, Member} <- zsets:range(StartPos, StopPos, Value, backwards)]
+                        end}
           end;
         not_found -> {ok, []};
         {error, Reason} -> {error, Reason}
@@ -1408,7 +1441,7 @@ handle_call({zrev_range, Key, Start, Stop}, _From, State) ->
       _:empty -> {ok, []}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrev_range_by_score, Key, Min, Max}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [Key, Min, Max | _Options]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value, backwards)};
@@ -1416,7 +1449,7 @@ handle_call({zrev_range_by_score, Key, Min, Max}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zrev_rank, Key, Member}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZREVRANK">>, args = [Key, Member]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} ->
@@ -1428,7 +1461,7 @@ handle_call({zrev_rank, Key, Member}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zscore, Key, Member}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZSCORE">>, args = [Key, Member]}, _From, State) ->
   Reply =
     case get_item(State#state.db, zset, Key) of
       #edis_item{value = Value} ->
@@ -1440,7 +1473,7 @@ handle_call({zscore, Key, Member}, _From, State) ->
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({zunion_store, Destination, WeightedKeys, Aggregate}, _From, State) ->
+handle_call(#edis_command{cmd = <<"ZUNIONSTORE">>, args = [Destination, WeightedKeys, Aggregate]}, _From, State) ->
   Reply =
     try weighted_union(
           Aggregate,
@@ -1473,6 +1506,45 @@ handle_call({zunion_store, Destination, WeightedKeys, Aggregate}, _From, State) 
         {error, Error}
     end,
   {reply, Reply, stamp([Destination|[Key || {Key, _} <- WeightedKeys]], State)};
+%% -- Server ---------------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"DBSIZE">>}, _From, State) ->
+  %%TODO: We need to 
+  Now = edis_util:now(),
+  Size = eleveldb:fold(
+           State#state.db,
+           fun({_Key, Bin}, Acc) ->
+                   case erlang:binary_to_term(Bin) of
+                     #edis_item{expire = Expire} when Expire >= Now ->
+                       Acc + 1;
+                     _ ->
+                       Acc
+                   end
+           end, 0, [{fill_cache, false}]),
+  {reply, {ok, Size}, State};
+handle_call(#edis_command{cmd = <<"FLUSHDB">>}, _From, State) ->
+  ok = eleveldb:destroy(edis_config:get(dir) ++ "/edis-" ++ integer_to_list(State#state.index), []),
+  case init(State#state.index) of
+    {ok, NewState} ->
+      {reply, ok, NewState};
+    {stop, Reason} ->
+      {reply, {error, Reason}, State}
+  end;
+handle_call(#edis_command{cmd = <<"INFO">>}, _From, State) ->
+  Version =
+    case lists:keyfind(edis, 1, application:loaded_applications()) of
+      false -> "0";
+      {edis, _Desc, V} -> V
+    end,
+  {ok, Stats} = eleveldb:status(State#state.db, <<"leveldb.stats">>),
+  {reply, {ok,
+           iolist_to_binary(
+             [io_lib:format("edis_version: ~s~n", [Version]),
+              io_lib:format("last_save: ~p~n", [State#state.last_save]),
+              io_lib:format("db_stats: ~s~n", [Stats])])}, State}; %%TODO: add info
+handle_call(#edis_command{cmd = <<"LASTSAVE">>}, _From, State) ->
+  {reply, {ok, erlang:round(State#state.last_save)}, State};
+handle_call(#edis_command{cmd = <<"SAVE">>}, _From, State) ->
+  {reply, ok, State#state{last_save = edis_util:timestamp()}};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
@@ -1625,18 +1697,34 @@ update(Db, Key, Type, Fun) ->
   try
     {Res, NewItem} =
       case get_item(Db, Type, Key) of
-        not_found ->
-          throw(not_found);
-        {error, Reason} ->
-          throw(Reason);
-        Item ->
-          Fun(Item)
+        not_found -> throw(not_found);
+        {error, Reason} -> throw(Reason);
+        Item -> Fun(Item)
       end,
     case eleveldb:put(Db, Key, erlang:term_to_binary(NewItem), []) of
       ok -> {ok, Res};
       {error, Reason2} -> {error, Reason2}
     end
   catch
+    _:Error ->
+      {error, Error}
+  end.
+
+update(Db, Key, Type, Fun, ResultIfNotFound) ->
+  try
+    {Res, NewItem} =
+      case get_item(Db, Type, Key) of
+        not_found -> throw(not_found);
+        {error, Reason} -> throw(Reason);
+        Item -> Fun(Item)
+      end,
+    case eleveldb:put(Db, Key, erlang:term_to_binary(NewItem), []) of
+      ok -> {ok, Res};
+      {error, Reason2} -> {error, Reason2}
+    end
+  catch
+    _:not_found ->
+      ResultIfNotFound;
     _:Error ->
       {error, Error}
   end.
