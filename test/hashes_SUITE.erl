@@ -10,7 +10,7 @@ all() ->
 
 init_per_testcase(TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
-    erldis_client:sr_scall(Client,[<<"flushdb">>]),
+    ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
 	
 	NewConfig = lists:keystore(client,1,Config,{client,Client}),
 	NewConfig.

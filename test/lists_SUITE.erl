@@ -11,7 +11,8 @@ init_per_testcase(TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
 
     erldis_client:sr_scall(Client,[<<"flushdb">>]),
-	true = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
+	
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
 
 	NewConfig = lists:keystore(client,1,Config,{client,Client}),
 	NewConfig.
@@ -43,20 +44,20 @@ push_llen_lindex(Config) ->
 	<<"e">> = erldis_client:sr_scall(Client,[<<"lindex">>,<<"mylist">>,<<"-3">>]),
 	nil = erldis_client:sr_scall(Client,[<<"lindex">>,<<"mylist">>,<<"100">>]),
 	nil = erldis_client:sr_scall(Client,[<<"lindex">>,<<"mylist">>,<<"-100">>]),
-			
-	{error,"ERR Operation against a key holding the wrong kind of value"} = erldis_client:sr_scall(Client,[<<"lpush">>,<<"string">>,<<"a">>]),
-	{error,"ERR wrong number of arguments for 'LPUSH' command"} = erldis_client:sr_scall(Client,[<<"lpush">>,<<"mylist">>]),
+		   
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lpush">>,<<"string">>,<<"a">>]),
+	{error,<<"ERR wrong number of arguments for 'LPUSH' command">>} = erldis_client:sr_scall(Client,[<<"lpush">>,<<"mylist">>]),
 	
-	{error,"ERR Operation against a key holding the wrong kind of value"} = erldis_client:sr_scall(Client,[<<"rpush">>,<<"string">>,<<"a">>]),
-	{error,"ERR wrong number of arguments for 'RPUSH' command"} = erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"rpush">>,<<"string">>,<<"a">>]),
+	{error,<<"ERR wrong number of arguments for 'RPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>]),
 	
 	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lindex">>,<<"string">>,<<"1">>]),
 	{error,<<"ERR wrong number of arguments for 'LINDEX' command">>} = erldis_client:sr_scall(Client,[<<"lindex">>,<<"mylist">>]),
 	{error,<<"ERR wrong number of arguments for 'LINDEX' command">>} = erldis_client:sr_scall(Client,[<<"lindex">>,<<"mylist">>,<<"4">>,<<"5">>]),
 	
-	{error,"ERR Operation against a key holding the wrong kind of value"} = erldis_client:sr_scall(Client,[<<"llen">>,<<"string">>]),	
-	{error,"ERR wrong number of arguments for 'LLEN' command"} = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist">>,<<"a">>]),
-	{error,"ERR wrong number of arguments for 'LLEN' command"} = erldis_client:sr_scall(Client,[<<"llen">>]).
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"llen">>,<<"string">>]),	
+	{error,<<"ERR wrong number of arguments for 'LLEN' command">>} = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist">>,<<"a">>]),
+	{error,<<"ERR wrong number of arguments for 'LLEN' command">>} = erldis_client:sr_scall(Client,[<<"llen">>]).
 	
 del(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
@@ -65,9 +66,8 @@ del(Config) ->
 	true = erldis_client:sr_scall(Client,[<<"del">>,<<"mylist">>]),
 	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"mylist">>]).
 	
+%% Create a long list and check every single element with LINDEX
 long_list(Config) ->
-	%% Create a long list and check every single element with LINDEX
-	
 	{client,Client} = lists:keyfind(client, 1, Config),
 	
 	Elements = [edis_util:integer_to_binary(E)
@@ -80,5 +80,5 @@ long_list(Config) ->
     %% Check elements with positive and negative index
     [{E,E} = 
      {erldis:lindex(Client,<<"mylist">>,E),
-      erldis:lindex(Client,<<"mylist">>,edis_util:integer_to_binary(-1000+edis_util:binary_to_integer(E)))}
+      erldis:lindex(Client,<<"mylist">>,edis_util:integer_to_binary(-10000+edis_util:binary_to_integer(E)))}
     || E <- Elements].
