@@ -82,7 +82,7 @@ init(Index) ->
     {ok, Ref} ->
       {ok, #state{index = Index, db = Ref, last_save = edis_util:timestamp(),
                   start_time = edis_util:now(), accesses = dict:new(),
-                  blocked_list_ops = orddict:new()}};
+                  blocked_list_ops = dict:new()}};
     {error, Reason} ->
       ?THROW("Couldn't start level db #~p:~b\t~p~n", [Index, Reason]),
       {stop, Reason}
@@ -654,8 +654,7 @@ handle_call(#edis_command{cmd = <<"HVALS">>, args = [Key]}, _From, State) ->
     end,
   {reply, Reply, stamp(Key, State)};
 %% -- Lists ----------------------------------------------------------------------------------------
-handle_call(C = #edis_command{cmd = <<"BLPOP">>, args = Args}, From, State) ->
-  [Timeout | Keys] = lists:reverse(Args),
+handle_call(C = #edis_command{cmd = <<"BLPOP">>, args = Keys, expire = Timeout}, From, State) ->
   Reqs = [C#edis_command{cmd = <<"-INTERNAL-BLPOP">>, args = [Key]} || Key <- Keys],
   case first_that_works(Reqs, From, State) of
     {reply, {error, not_found}, NewState} ->
@@ -680,8 +679,7 @@ handle_call(C = #edis_command{cmd = <<"-INTERNAL-BLPOP">>, args = [Key | Keys]},
     OtherReply ->
       OtherReply
   end;
-handle_call(C = #edis_command{cmd = <<"BRPOP">>, args = Args}, From, State) ->
-  [Timeout | Keys] = lists:reverse(Args),
+handle_call(C = #edis_command{cmd = <<"BRPOP">>, args = Keys, expire = Timeout}, From, State) ->
   Reqs = [C#edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key]} || Key <- Keys],
   case first_that_works(Reqs, From, State) of
     {reply, {error, not_found}, NewState} ->
@@ -706,7 +704,7 @@ handle_call(C = #edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key | Keys]},
     OtherReply ->
       OtherReply
   end;
-handle_call(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination, Timeout]}, From, State) ->
+handle_call(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination], expire = Timeout}, From, State) ->
   Req = C#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]},
   case handle_call(Req, From, State) of
     {reply, {error, not_found}, NewState} ->
@@ -1510,17 +1508,18 @@ handle_call(#edis_command{cmd = <<"ZUNIONSTORE">>, args = [Destination, Weighted
 handle_call(#edis_command{cmd = <<"DBSIZE">>}, _From, State) ->
   %%TODO: We need to 
   Now = edis_util:now(),
-  Size = eleveldb:fold(
-           State#state.db,
-           fun({_Key, Bin}, Acc) ->
-                   case erlang:binary_to_term(Bin) of
-                     #edis_item{expire = Expire} when Expire >= Now ->
-                       Acc + 1;
-                     _ ->
-                       Acc
-                   end
-           end, 0, [{fill_cache, false}]),
-  {reply, {ok, Size}, State};
+  Reply =
+    {ok, eleveldb:fold(
+       State#state.db,
+       fun({_Key, Bin}, Acc) ->
+               case erlang:binary_to_term(Bin) of
+                 #edis_item{expire = Expire} when Expire >= Now ->
+                   Acc + 1;
+                 _ ->
+                   Acc
+               end
+       end, 0, [{fill_cache, false}])},
+  {reply, Reply, State};
 handle_call(#edis_command{cmd = <<"FLUSHDB">>}, _From, State) ->
   ok = eleveldb:destroy(edis_config:get(dir) ++ "/edis-" ++ integer_to_list(State#state.index), []),
   case init(State#state.index) of
@@ -1536,15 +1535,30 @@ handle_call(#edis_command{cmd = <<"INFO">>}, _From, State) ->
       {edis, _Desc, V} -> V
     end,
   {ok, Stats} = eleveldb:status(State#state.db, <<"leveldb.stats">>),
-  {reply, {ok,
-           iolist_to_binary(
-             [io_lib:format("edis_version: ~s~n", [Version]),
-              io_lib:format("last_save: ~p~n", [State#state.last_save]),
-              io_lib:format("db_stats: ~s~n", [Stats])])}, State}; %%TODO: add info
+  Reply =
+    {ok,
+     iolist_to_binary(
+       [io_lib:format("edis_version: ~s~n", [Version]),
+        io_lib:format("last_save: ~p~n", [State#state.last_save]),
+        io_lib:format("db_stats: ~s~n", [Stats])])},
+  {reply, Reply, State}; %%TODO: add info
 handle_call(#edis_command{cmd = <<"LASTSAVE">>}, _From, State) ->
   {reply, {ok, erlang:round(State#state.last_save)}, State};
 handle_call(#edis_command{cmd = <<"SAVE">>}, _From, State) ->
   {reply, ok, State#state{last_save = edis_util:timestamp()}};
+%% -- Transactions ---------------------------------------------------------------------------------
+handle_call(#edis_command{cmd = <<"EXEC">>, args = Commands}, From, State) ->
+  {RevReplies, NewState} =
+    lists:foldl(
+      fun(Command, {AccReplies, AccState}) ->
+              case handle_call(Command#edis_command{expire = undefined}, From, AccState) of
+                {noreply, NextState} -> %% Timed out
+                  {[{ok, undefined}|AccReplies], NextState};
+                {reply, Reply, NextState} ->
+                  {[Reply|AccReplies], NextState}
+              end
+      end, {[], State}, Commands),
+  {reply, {ok, lists:reverse(RevReplies)}, NewState};
 
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
@@ -1579,25 +1593,26 @@ stamp(Key, State) ->
                              State#state.start_time, State#state.accesses)}.
 
 %% @private
+block_list_op(_Key, _Req, _From, undefined, State) -> State;
 block_list_op(Key, Req, From, Timeout, State) ->
   CurrentList =
-      case orddict:find(Key, State#state.blocked_list_ops) of
+      case dict:find(Key, State#state.blocked_list_ops) of
         error -> [];
         {ok, L} -> L
       end,
   State#state{blocked_list_ops =
-                  orddict:store(Key,
-                                lists:reverse([{Timeout, Req, From}|
-                                                   lists:reverse(CurrentList)]),
-                                State#state.blocked_list_ops)}.
+                dict:store(Key,
+                           lists:reverse([{Timeout, Req, From}|
+                                            lists:reverse(CurrentList)]),
+                           State#state.blocked_list_ops)}.
 
 %% @private
 unblock_list_ops(Key, From, State) ->
-  case orddict:find(Key, State#state.blocked_list_ops) of
+  case dict:find(Key, State#state.blocked_list_ops) of
     error -> State;
     {ok, List} ->
       State#state{blocked_list_ops =
-                      orddict:store(
+                      dict:store(
                         Key,
                         lists:filter(
                           fun({_, _, OpFrom}) ->
@@ -1609,19 +1624,19 @@ unblock_list_ops(Key, From, State) ->
 
 check_blocked_list_ops(Key, State) ->
   Now = edis_util:now(),
-  case orddict:find(Key, State#state.blocked_list_ops) of
+  case dict:find(Key, State#state.blocked_list_ops) of
     error -> State;
     {ok, [{Timeout, Req, From = {To, _Tag}}]} when Timeout > Now ->
       case rpc:pinfo(To) of
         undefined -> %% Caller disconnected
-          State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)};
+          State#state{blocked_list_ops = dict:erase(Key, State#state.blocked_list_ops)};
         _ ->
           case handle_call(Req, From, State) of
             {reply, {error, not_found}, NewState} -> %% still have to wait
               NewState;
             {reply, Reply, NewState} ->
               gen_server:reply(From, Reply),
-              NewState#state{blocked_list_ops = orddict:erase(Key, NewState#state.blocked_list_ops)}
+              NewState#state{blocked_list_ops = dict:erase(Key, NewState#state.blocked_list_ops)}
           end
       end;
     {ok, [{Timeout, Req, From = {To, _Tag}} | Rest]} when Timeout > Now ->
@@ -1629,7 +1644,7 @@ check_blocked_list_ops(Key, State) ->
         undefined -> %% Caller disconnected
           check_blocked_list_ops(
             Key, State#state{blocked_list_ops =
-                                 orddict:store(Key, Rest, State#state.blocked_list_ops)});
+                                 dict:store(Key, Rest, State#state.blocked_list_ops)});
         _ ->
           case handle_call(Req, From, State) of
             {reply, {error, not_found}, NewState} -> %% still have to wait
@@ -1638,17 +1653,17 @@ check_blocked_list_ops(Key, State) ->
               gen_server:reply(From, Reply),
               check_blocked_list_ops(
                 Key, NewState#state{blocked_list_ops =
-                                        orddict:store(Key, Rest, NewState#state.blocked_list_ops)})
+                                        dict:store(Key, Rest, NewState#state.blocked_list_ops)})
           end
       end;
     {ok, [_TimedOut]} ->
-      State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)};
+      State#state{blocked_list_ops = dict:erase(Key, State#state.blocked_list_ops)};
     {ok, [_TimedOut|Rest]} ->
       check_blocked_list_ops(
             Key, State#state{blocked_list_ops =
-                                 orddict:store(Key, Rest, State#state.blocked_list_ops)});
+                                 dict:store(Key, Rest, State#state.blocked_list_ops)});
     {ok, []} ->
-      State#state{blocked_list_ops = orddict:erase(Key, State#state.blocked_list_ops)}
+      State#state{blocked_list_ops = dict:erase(Key, State#state.blocked_list_ops)}
   end.
 
 first_that_works([], _From, State) ->

@@ -7,7 +7,8 @@
                        args = []    :: [term()],
                        group        :: keys | strings | hashes | lists | sets | zsets | pub_sub | transactions | connection | server,
                        result_type  :: edis:result_type(),
-                       timeout      :: undefined | infinity | pos_integer()}).
+                       timeout      :: undefined | infinity | pos_integer(),
+                       expire       :: undefined | never | pos_integer()}).
 
 -record(edis_item, {key               :: binary(),
                     type              :: edis_db:item_type(),

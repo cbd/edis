@@ -92,58 +92,12 @@ handle_cast({run, Cmd, Args}, State) ->
   catch
     _:timeout ->
       tcp_multi_bulk(undefined, State);
-    _:not_in_multi ->
-      tcp_err(<<Cmd/binary, " not supported in MULTI">>, State);
-    _:db_in_multi ->
-      tcp_err("Transactions may include just one database", State);
     _:invalid_password ->
       ?WARN("Invalid password.~n", []),
       tcp_err(<<"invalid password">>, State#state{authenticated = false});
-    _:unknown_command ->
-      ?WARN("Unknown command ~s.~n", [Cmd]),
-      tcp_err(["unknown command '", Cmd, "'"], State);
-    _:no_such_key ->
-      ?WARN("No such key for ~s on db #~p~n", [Cmd, State#state.db_index]),
-      tcp_err("no such key", State);
-    _:syntax ->
-      ?WARN("Syntax error for ~s on db #~p~n", [Cmd, State#state.db_index]),
-      tcp_err("syntax error", State);
-    _:not_integer ->
-      ?WARN("The value affected by ~s was not a integer on ~p~n", [Cmd, State#state.db_index]),
-      tcp_err("value is not an integer or out of range", State);
-    _:{not_integer, Field} ->
-      ?WARN("The value affected by ~s's ~s was not a integer on ~p~n", [Cmd, Field, State#state.db_index]),
-      tcp_err([Field, " is not an integer or out of range"], State);
-    _:{not_float, Field} ->
-      ?WARN("The value affected by ~s's ~s was not a float on ~p~n", [Cmd, Field, State#state.db_index]),
-      tcp_err([Field, " is not a double"], State);
-    _:{out_of_range, Field} ->
-      ?WARN("The value affected by ~s's ~s was out of range on ~p~n", [Cmd, Field, State#state.db_index]),
-      tcp_err([Field, " is out of range"], State);
-    _:{is_negative, Field} ->
-      ?WARN("The value affected by ~s's ~s was negative on ~p~n", [Cmd, Field, State#state.db_index]),
-      tcp_err([Field, " is negative"], State);
-    _:not_float ->
-      ?WARN("The value affected by ~s was not a float on ~p~n", [Cmd, State#state.db_index]),
-      tcp_err("value is not a double", State);
-    _:bad_item_type ->
-      ?WARN("Bad type running ~s on db #~p~n", [Cmd, State#state.db_index]),
-      tcp_err("Operation against a key holding the wrong kind of value", State);
-    _:source_equals_destination ->
-      tcp_err("source and destinantion objects are the same", State);
-    _:bad_arg_num ->
-      tcp_err(["wrong number of arguments for '", Cmd, "' command"], State);
-    _:{bad_arg_num, SubCmd} ->
-      tcp_err(["wrong number of arguments for ", SubCmd], State);
-    _:unauthorized ->
-      ?WARN("Unauthorized user trying to do a ~s on ~p~n", [Cmd, State#state.db_index]),
-      tcp_err("operation not permitted", State);
-    _:{error, Reason} ->
-      ?WARN("Error running ~s on db #~p: ~p~n", [Cmd, State#state.db_index, Reason]),
-      tcp_err(Reason, State);
     _:Error ->
-      ?ERROR("Error running ~s on ~p:~n\t~p~n", [Cmd, State#state.db_index, Error]),
-      tcp_err(io_lib:format("~p", [Error]), State)
+      ?ERROR("Error in db ~p: ~p~n", [State#state.db_index, Error]),
+      tcp_err(parse_error(Cmd, Error), State)
   end.
 
 %% @hidden
@@ -348,8 +302,8 @@ parse_command(C = #edis_command{cmd = <<"BRPOP">>, args = Args}) ->
   [Timeout | Keys] = lists:reverse(Args),
   case edis_util:binary_to_integer(Timeout) of
     T when T < 0 -> throw({is_negative, "timeout"});
-    0 -> C#edis_command{args = lists:reverse([infinity | Keys]), timeout = infinity, result_type = multi_bulk, group=lists};
-    T -> C#edis_command{args = lists:reverse([timeout_to_seconds(T) | Keys]), timeout = T * 1000, result_type = multi_bulk, group=lists}
+    0 -> C#edis_command{args = lists:reverse(Keys), timeout = infinity, expire = never, result_type = multi_bulk, group=lists};
+    T -> C#edis_command{args = lists:reverse(Keys), timeout = T * 1000, expire = timeout_to_seconds(T), result_type = multi_bulk, group=lists}
   end;
 parse_command(#edis_command{cmd = <<"BLPOP">>, args = []}) -> throw(bad_arg_num);
 parse_command(#edis_command{cmd = <<"BLPOP">>, args = [_]}) -> throw(bad_arg_num);
@@ -357,14 +311,14 @@ parse_command(C = #edis_command{cmd = <<"BLPOP">>, args = Args}) ->
   [Timeout | Keys] = lists:reverse(Args),
   case edis_util:binary_to_integer(Timeout) of
     T when T < 0 -> throw({is_negative, "timeout"});
-    0 -> C#edis_command{args = lists:reverse([infinity | Keys]), timeout = infinity, result_type = multi_bulk, group=lists};
-    T -> C#edis_command{args = lists:reverse([timeout_to_seconds(T) | Keys]), timeout = T * 1000, result_type = multi_bulk, group=lists}
+    0 -> C#edis_command{args = lists:reverse(Keys), timeout = infinity, expire = never, result_type = multi_bulk, group=lists};
+    T -> C#edis_command{args = lists:reverse(Keys), timeout = T * 1000, expire = timeout_to_seconds(T), result_type = multi_bulk, group=lists}
   end;
 parse_command(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination, Timeout]}) ->
   case edis_util:binary_to_integer(Timeout) of
     T when T < 0 -> throw({is_negative, "timeout"});
-    0 -> C#edis_command{args = [Source, Destination, infinity], timeout = infinity, result_type = bulk, group=lists};
-    T -> C#edis_command{args = [Source, Destination, timeout_to_seconds(T)], timeout = T * 1000, result_type = bulk, group=lists}
+    0 -> C#edis_command{args = [Source, Destination], timeout = infinity, expire = never, result_type = bulk, group=lists};
+    T -> C#edis_command{args = [Source, Destination], timeout = T * 1000, expire = timeout_to_seconds(T), result_type = bulk, group=lists}
   end;
 parse_command(#edis_command{cmd = <<"BRPOPLPUSH">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"LINDEX">>, args = [Key, Index]}) -> 
@@ -560,33 +514,31 @@ parse_command(C = #edis_command{cmd = <<"CONFIG SET">>, args = [Key | Values]}) 
     end,
   C#edis_command{args = [Param, Value],result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"CONFIG SET">>}) -> throw({bad_arg_num, "CONFIG SET"});
-parse_command(C = #edis_command{cmd = <<"CONFIG RESETSTAT">>, args = []}) -> 
-  C#edis_command{result_type=ok,group=server};
+parse_command(C = #edis_command{cmd = <<"CONFIG RESETSTAT">>, args = []}) -> C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"CONFIG RESETSTAT">>}) -> throw({bad_arg_num, "CONFIG RESETSTAT"});
-parse_command(C = #edis_command{cmd = <<"DBSIZE">>, args = []}) -> 
-  C#edis_command{result_type=number,group=server};
+parse_command(C = #edis_command{cmd = <<"DBSIZE">>, args = []}) -> C#edis_command{result_type=number,group=server};
 parse_command(#edis_command{cmd = <<"DBSIZE">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"FLUSHALL">>, args = []}) -> 
-  C#edis_command{result_type=ok,group=server};
+parse_command(C = #edis_command{cmd = <<"FLUSHALL">>, args = []}) ->  C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"FLUSHALL">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"FLUSHDB">>, args = []}) -> 
-  C#edis_command{result_type=ok,group=server};
+parse_command(C = #edis_command{cmd = <<"FLUSHDB">>, args = []}) ->  C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"FLUSHDB">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"INFO">>, args = []}) -> 
-  C#edis_command{result_type=bulk,group=server};
+parse_command(C = #edis_command{cmd = <<"INFO">>, args = []}) -> C#edis_command{result_type=bulk,group=server};
 parse_command(#edis_command{cmd = <<"INFO">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"LASTSAVE">>, args = []}) -> 
-  C#edis_command{result_type=number,group=server};
+parse_command(C = #edis_command{cmd = <<"LASTSAVE">>, args = []}) -> C#edis_command{result_type=number,group=server};
 parse_command(#edis_command{cmd = <<"LASTSAVE">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"MONITOR">>, args = []}) -> 
-  C#edis_command{result_type=ok,group=server};
+parse_command(C = #edis_command{cmd = <<"MONITOR">>, args = []}) -> C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"MONITOR">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"SAVE">>, args = []}) -> 
-  C#edis_command{result_type=ok,group=server};
+parse_command(C = #edis_command{cmd = <<"SAVE">>, args = []}) -> C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"SAVE">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"SHUTDOWN">>, args = []}) -> 
-  C#edis_command{result_type=ok,group=server};
+parse_command(C = #edis_command{cmd = <<"SHUTDOWN">>, args = []}) -> C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"SHUTDOWN">>}) -> throw(bad_arg_num);
+%% -- Transactions ---------------------------------------------------------------------------------
+parse_command(C = #edis_command{cmd = <<"MULTI">>, args = []}) -> C#edis_command{result_type=ok,group=transaction};
+parse_command(#edis_command{cmd = <<"MULTI">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"DISCARD">>, args = []}) -> C#edis_command{result_type=ok,group=transaction};
+parse_command(#edis_command{cmd = <<"DISCARD">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"EXEC">>, args = []}) -> C#edis_command{result_type=multi_result,group=transaction};
+parse_command(#edis_command{cmd = <<"EXEC">>}) -> throw(bad_arg_num);
 %% -- Errors ---------------------------------------------------------------------------------------
 parse_command(#edis_command{cmd = <<"SYNC">>}) -> throw({error, "unsupported command"});
 parse_command(#edis_command{cmd = <<"SLOWLOG">>}) -> throw({error, "unsupported command"});
@@ -595,6 +547,7 @@ parse_command(#edis_command{cmd = <<"SORT">>}) -> throw({error, "unsupported com
 parse_command(_Command) -> throw(unknown_command).
 
 -spec run(#edis_command{}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+%% -- Commands that don't require authorization ----------------------------------------------------
 run(#edis_command{cmd = <<"QUIT">>}, State) ->
   case tcp_ok(State) of
     {noreply, NewState} -> {stop, normal, NewState};
@@ -606,7 +559,9 @@ run(#edis_command{cmd = <<"AUTH">>, args = [Password]}, State) ->
     Password -> tcp_ok(State#state{authenticated = true});
     _ -> throw(invalid_password)
   end;
+%% -- Authorization --------------------------------------------------------------------------------
 run(_, #state{authenticated = false}) -> throw(unauthorized);
+%% -- Connection commands that must be run outside the scope of the current db ---------------------
 run(#edis_command{cmd = <<"SHUTDOWN">>}, State) ->
   _ = spawn(edis, stop, []),
   {stop, normal, State};
@@ -642,6 +597,12 @@ run(#edis_command{cmd = <<"FLUSHALL">>}, State) ->
 run(#edis_command{cmd = <<"MONITOR">>}, State) ->
   ok = edis_db_monitor:add_sup_handler(),
   tcp_ok(State);
+%% -- Transaction commands -------------------------------------------------------------------------
+run(#edis_command{cmd = <<"MULTI">>}, State) ->
+  tcp_ok(State#state{multi_queue = []});
+run(#edis_command{cmd = <<"DISCARD">>}, _State) -> throw(out_of_multi);
+run(#edis_command{cmd = <<"EXEC">>}, _State) -> throw(out_of_multi);
+%% -- All the other commands -----------------------------------------------------------------------
 run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
   Res = case Timeout of
           undefined -> edis_db:run(State#state.db, C);
@@ -651,7 +612,7 @@ run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
     ok -> tcp_ok(State);
     string -> tcp_string(Res, State);
     bulk -> tcp_bulk(Res, State);
-	multi_bulk -> tcp_multi_bulk(Res, State);
+    multi_bulk -> tcp_multi_bulk(Res, State);
     number -> tcp_number(Res, State);
     boolean -> tcp_boolean(Res, State);
     float -> tcp_float(Res, State);
@@ -666,6 +627,7 @@ queue(#edis_command{cmd = <<"QUIT">>}, State) -> %% User may quit even on MULTI 
     {noreply, NewState} -> {stop, normal, NewState};
     Error -> Error
   end;
+queue(#edis_command{cmd = <<"MULTI">>}, _State) -> throw(nested);
 queue(#edis_command{cmd = <<"AUTH">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"SHUTDOWN">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"CONFIG", _/binary>>}, _State) -> throw(not_in_multi);
@@ -673,7 +635,37 @@ queue(#edis_command{cmd = <<"SELECT">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"FLUSHALL">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"MOVE">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"MONITOR">>}, _State) -> throw(not_in_multi);
-queue(C, State) -> State#state{multi_queue = [C|State]}.
+queue(#edis_command{cmd = <<"DISCARD">>}, State) ->
+  tcp_ok(State#state{multi_queue = undefined});
+queue(C = #edis_command{cmd = <<"EXEC">>}, State) ->
+  Commands = lists:reverse(State#state.multi_queue),
+  Replies = edis_db:run(State#state.db, C#edis_command{args = Commands}),
+  Results =
+    lists:zipwith(
+      fun(IC, {error, Error}) -> {error, parse_error(IC#edis_command.cmd, Error)};
+         (IC, {ok, Reply}) -> {IC, Reply}
+      end, Commands, Replies),
+  tcp_multi_result(Results, State#state{multi_queue = undefined});
+queue(C, State) ->
+  tcp_string("QUEUED", State#state{multi_queue = [C|State#state.multi_queue]}).
+
+%% @private
+-spec tcp_multi_result([{edis:result_type() | error, term()} | {error, iodata()}], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_multi_result(Results, State) ->
+  lists:foldl(
+    fun({#edis_command{result_type = ok}, _}, {noreply, AccState}) -> tcp_ok(AccState);
+       ({#edis_command{result_type = string}, Res}, {noreply, AccState}) -> tcp_string(Res, AccState);
+       ({#edis_command{result_type = bulk}, Res}, {noreply, AccState}) -> tcp_bulk(Res, AccState);
+       ({#edis_command{result_type = multi_bulk}, Res}, {noreply, AccState}) -> tcp_multi_bulk(Res, AccState);
+       ({#edis_command{result_type = number}, Res}, {noreply, AccState}) -> tcp_number(Res, AccState);
+       ({#edis_command{result_type = boolean}, Res}, {noreply, AccState}) -> tcp_boolean(Res, AccState);
+       ({#edis_command{result_type = float}, Res}, {noreply, AccState}) -> tcp_float(Res, AccState);
+       ({C = #edis_command{result_type = zrange}, Res}, {noreply, AccState}) ->
+            [_Key, _Min, _Max, ShowScores, Limit] = C#edis_command.args,
+            tcp_zrange(Res, ShowScores, Limit, AccState);
+       ({error, Err}, {noreply, AccState}) -> tcp_err(Err, AccState);
+       (_Result, Error) -> Error
+    end, tcp_send(["*", integer_to_list(erlang:length(Results))], State), Results).
 
 %% @private
 -spec tcp_boolean(boolean(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
@@ -874,3 +866,24 @@ tcp_zrange(Range, ShowScores, Limit, State) ->
 
 timeout_to_seconds(infinity) -> infinity;
 timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
+
+parse_error(Cmd, nested) -> <<Cmd/binary, " calls can not be nested">>;
+parse_error(Cmd, out_of_multi) -> <<Cmd/binary, " without MULTI">>;
+parse_error(Cmd, not_in_multi) -> <<Cmd/binary, " not supported in MULTI">>;
+parse_error(_Cmd, db_in_multi) -> <<"Transactions may include just one database">>;
+parse_error(Cmd, unknown_command) -> <<"unknown command '", Cmd/binary, "'">>;
+parse_error(_Cmd, no_such_key) -> <<"no such key">>;
+parse_error(_Cmd, syntax) -> <<"syntax error">>;
+parse_error(_Cmd, not_integer) -> <<"value is not an integer or out of range">>;
+parse_error(_Cmd, {not_integer, Field}) -> [Field, " is not an integer or out of range"];
+parse_error(_Cmd, {not_float, Field}) -> [Field, " is not a double"];
+parse_error(_Cmd, {out_of_range, Field}) -> [Field, " is out of range"];
+parse_error(_Cmd, {is_negative, Field}) -> [Field, " is negative"];
+parse_error(_Cmd, not_float) -> <<"value is not a double">>;
+parse_error(_Cmd, bad_item_type) -> <<"Operation against a key holding the wrong kind of value">>;
+parse_error(_Cmd, source_equals_destination) -> <<"source and destinantion objects are the same">>;
+parse_error(Cmd, bad_arg_num) -> <<"wrong number of arguments for '", Cmd/binary, "' command">>;
+parse_error(_Cmd, {bad_arg_num, SubCmd}) -> <<"wrong number of arguments for ", SubCmd/binary>>;
+parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
+parse_error(_Cmd, {error, Reason}) -> Reason;
+parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).

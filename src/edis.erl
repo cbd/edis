@@ -12,7 +12,7 @@
 
 -include("edis.hrl").
 
--type result_type() :: ok | string | bulk | number | float | zrange | multi_bulk | boolean.
+-type result_type() :: ok | string | bulk | number | float | zrange | multi_bulk | boolean | multi_result.
 -type command() :: #edis_command{}.
 -export_type([result_type/0, command/0]).
 
