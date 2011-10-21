@@ -288,9 +288,9 @@ llen(Db, Key) ->
 lpop(Db, Key) ->
   make_call(Db, {lpop, Key}).
 
--spec lpush(atom(), binary(), binary()) -> pos_integer().
-lpush(Db, Key, Value) ->
-  make_call(Db, {lpush, Key, Value}).
+-spec lpush(atom(), binary(), [binary()]) -> pos_integer().
+lpush(Db, Key, Values) ->
+  make_call(Db, {lpush, Key, Values}).
 
 -spec lpush_x(atom(), binary(), binary()) -> pos_integer().
 lpush_x(Db, Key, Value) ->
@@ -320,9 +320,9 @@ rpop(Db, Key) ->
 rpop_lpush(Db, Key, Value) ->
   make_call(Db, {rpop_lpush, Key, Value}).
 
--spec rpush(atom(), binary(), binary()) -> pos_integer().
-rpush(Db, Key, Value) ->
-  make_call(Db, {rpush, Key, Value}).
+-spec rpush(atom(), binary(), [binary()]) -> pos_integer().
+rpush(Db, Key, Values) ->
+  make_call(Db, {rpush, Key, Values}).
 
 -spec rpush_x(atom(), binary(), binary()) -> pos_integer().
 rpush_x(Db, Key, Value) ->
@@ -1086,7 +1086,7 @@ handle_call({lindex, Key, Index}, _From, State) ->
             Index when Index >= 0 ->
               {ok, lists:nth(Index + 1, Value)};
             Index ->
-              {ok, lists:nth((-1)*Index, Value)}
+              {ok, lists:nth((-1)*Index, lists:reverse(Value))}
           end
         catch
           _:function_clause ->
@@ -1144,12 +1144,13 @@ handle_call({lpop, Key}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call({lpush, Key, Value}, From, State) ->
+handle_call({lpush, Key, Values}, From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
            fun(Item) ->
-                   {length(Item#edis_item.value) + 1,
-                    Item#edis_item{value = [Value | Item#edis_item.value]}}
+                   {length(Item#edis_item.value) + length(Values),
+                    Item#edis_item{value =
+                                     lists:append(lists:reverse(Values), Item#edis_item.value)}}
            end, []),
   gen_server:reply(From, Reply),
   NewState = check_blocked_list_ops(Key, State),
@@ -1340,15 +1341,12 @@ handle_call({rpop_lpush, Source, Destination}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp([Destination, Source], State)};
-handle_call({rpush, Key, Value}, _From, State) ->
+handle_call({rpush, Key, Values}, _From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
            fun(Item) ->
-                   {length(Item#edis_item.value) + 1,
-                    Item#edis_item{value =
-                                     lists:reverse(
-                                       [Value|
-                                          lists:reverse(Item#edis_item.value)])}}
+                   {length(Item#edis_item.value) + length(Values),
+                    Item#edis_item{value = lists:append(Item#edis_item.value, Values)}}
            end, []),
   {reply, Reply, stamp(Key, State)};
 handle_call({rpush_x, Key, Value}, _From, State) ->

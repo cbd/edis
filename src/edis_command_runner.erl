@@ -343,7 +343,7 @@ parse_command(C = #edis_command{cmd = <<"LLEN">>, args = [_Key]}) -> C;
 parse_command(#edis_command{cmd = <<"LLEN">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"LPOP">>, args = [_Key]}) -> C;
 parse_command(#edis_command{cmd = <<"LPOP">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"LPUSH">>, args = [_Key, _Value]}) -> C;
+parse_command(C = #edis_command{cmd = <<"LPUSH">>, args = [_Key, _Value | _Values]}) -> C;
 parse_command(#edis_command{cmd = <<"LPUSH">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"LPUSHX">>, args = [_Key, _Value]}) -> C;
 parse_command(#edis_command{cmd = <<"LPUSHX">>}) -> throw(bad_arg_num);
@@ -361,7 +361,7 @@ parse_command(C = #edis_command{cmd = <<"RPOP">>, args = [_Key]}) -> C;
 parse_command(#edis_command{cmd = <<"RPOP">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"RPOPLPUSH">>, args = [_Source, _Destination]}) -> C;
 parse_command(#edis_command{cmd = <<"RPOPLPUSH">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"RPUSH">>, args = [_Key, _Value]}) -> C;
+parse_command(C = #edis_command{cmd = <<"RPUSH">>, args = [_Key, _Value | _Values]}) -> C;
 parse_command(#edis_command{cmd = <<"RPUSH">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"RPUSHX">>, args = [_Key, _Value]}) -> C;
 parse_command(#edis_command{cmd = <<"RPUSHX">>}) -> throw(bad_arg_num);
@@ -728,8 +728,8 @@ run(#edis_command{cmd = <<"LPOP">>, args = [Key]}, State) ->
     _:not_found ->
       tcp_bulk(undefined, State)
   end;
-run(#edis_command{cmd = <<"LPUSH">>, args = [Key, Value]}, State) ->
-  tcp_number(edis_db:lpush(State#state.db, Key, Value), State);
+run(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, State) ->
+  tcp_number(edis_db:lpush(State#state.db, Key, Values), State);
 run(#edis_command{cmd = <<"LPUSHX">>, args = [Key, Value]}, State) ->
   try tcp_number(edis_db:lpush_x(State#state.db, Key, Value), State)
   catch
@@ -776,8 +776,8 @@ run(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, State) -
     _:not_found ->
       tcp_bulk(undefined, State)
   end;
-run(#edis_command{cmd = <<"RPUSH">>, args = [Key, Value]}, State) ->
-  tcp_number(edis_db:rpush(State#state.db, Key, Value), State);
+run(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, State) ->
+  tcp_number(edis_db:rpush(State#state.db, Key, Values), State);
 run(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, State) ->
   try edis_db:rpush_x(State#state.db, Key, Value) of
     NewLen -> tcp_number(NewLen, State)
