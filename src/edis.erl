@@ -12,6 +12,10 @@
 
 -include("edis.hrl").
 
+-type result_type() :: ok | string | bulk | number | multi_bulk | boolean.
+-type command() :: #edis_command{}.
+-export_type([result_type/0, command/0]).
+
 -behaviour(application).
 
 -export([start/0, stop/0]).

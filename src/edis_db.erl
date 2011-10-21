@@ -36,19 +36,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Commands ========================================================================================
--export([ping/1, save/1, last_save/1, info/1, flush/0, flush/1, size/1]).
--export([append/3, decr/3, get/2, get_bit/3, get_range/4, get_and_set/3, incr/3, set/2, set/3,
-         set_nx/2, set_nx/3, set_bit/4, set_ex/4, set_range/4, str_len/2]).
--export([del/2, exists/2, expire/3, expire_at/3, keys/2, move/3, encoding/2, idle_time/2, persist/2,
-         random_key/1, rename/3, rename_nx/3, ttl/2, type/2]).
--export([hdel/3, hexists/3, hget/3, hget_all/2, hincr/4, hkeys/2, hlen/2, hset/3, hset/4, hset_nx/4, hvals/2]).
--export([blpop/3, brpop/3, brpop_lpush/4, lindex/3, linsert/5, llen/2, lpop/2, lpush/3, lpush_x/3,
-         lrange/4, lrem/4, lset/4, ltrim/4, rpop/2, rpop_lpush/3, rpush/3, rpush_x/3]).
--export([sadd/3, scard/2, sdiff/2, sdiff_store/3, sinter/2, sinter_store/3, sismember/3, smembers/2,
-         smove/4, spop/2, srand_member/2, srem/3, sunion/2, sunion_store/3]).
--export([zadd/3, zcard/2, zcount/4, zincr/4, zinter_store/4, zrange/4, zrange_by_score/4, zrank/3,
-         zrem/3, zrem_range_by_rank/4, zrem_range_by_score/4, zrev_range/4, zrev_range_by_score/4,
-         zrev_rank/3, zscore/3, zunion_store/4]).
+-export([run/2, run/3]).
 
 %% =================================================================================================
 %% External functions
@@ -64,389 +52,24 @@ process(Index) ->
 %% =================================================================================================
 %% Commands
 %% =================================================================================================
--spec size(atom()) -> non_neg_integer().
-size(Db) ->
-  make_call(Db, size).
-
--spec flush() -> ok.
-flush() ->
-  lists:foreach(
-    fun flush/1, [process(Index) || Index <- lists:seq(0, edis_config:get(databases) - 1)]).
-
--spec flush(atom()) -> ok.
-flush(Db) ->
-  make_call(Db, flush).
-
--spec ping(atom()) -> pong.
-ping(Db) ->
-  make_call(Db, ping).
-
--spec save(atom()) -> ok.
-save(Db) ->
-  make_call(Db, save).
-
--spec last_save(atom()) -> ok.
-last_save(Db) ->
-  make_call(Db, last_save).
-
--spec info(atom()) -> [{atom(), term()}].
-info(Db) ->
-  make_call(Db, info).
-
--spec append(atom(), binary(), binary()) -> pos_integer().
-append(Db, Key, Value) ->
-  make_call(Db, {append, Key, Value}).
-
--spec decr(atom(), binary(), integer()) -> integer().
-decr(Db, Key, Decrement) ->
-  make_call(Db, {decr, Key, Decrement}).
-
--spec get(atom(), binary()|[binary()]) -> undefined | binary().
-get(Db, Key) when is_binary(Key) ->
-  [Value] = get(Db, [Key]),
-  Value;
-get(Db, Keys) ->
-  make_call(Db, {get, Keys}).
-
--spec get_bit(atom(), binary(), non_neg_integer()) -> 1|0.
-get_bit(Db, Key, Offset) ->
-  make_call(Db, {get_bit, Key, Offset}).
-
--spec get_range(atom(), binary(), integer(), integer()) -> binary().
-get_range(Db, Key, Start, End) ->
-  make_call(Db, {get_range, Key, Start, End}).
-
--spec get_and_set(atom(), binary(), binary()) -> undefined | binary().
-get_and_set(Db, Key, Value) ->
-  make_call(Db, {get_and_set, Key, Value}).
-
--spec incr(atom(), binary(), integer()) -> integer().
-incr(Db, Key, Increment) ->
-  make_call(Db, {incr, Key, Increment}).
-
--spec set(atom(), binary(), binary()) -> ok.
-set(Db, Key, Value) ->
-  set(Db, [{Key, Value}]).
-
--spec set(atom(), [{binary(), binary()}]) -> ok.
-set(Db, KVs) ->
-  make_call(Db, {set, KVs}).
-
--spec set_nx(atom(), binary(), binary()) -> ok.
-set_nx(Db, Key, Value) ->
-  set_nx(Db, [{Key, Value}]).
-
--spec set_nx(atom(), [{binary(), binary()}]) -> ok.
-set_nx(Db, KVs) ->
-  make_call(Db, {set_nx, KVs}).
-
--spec set_bit(atom(), binary(), non_neg_integer(), 1|0) -> 1|0.
-set_bit(Db, Key, Offset, Bit) ->
-  make_call(Db, {set_bit, Key, Offset, Bit}).
-
--spec set_ex(atom(), binary(), pos_integer(), binary()) -> ok.
-set_ex(Db, Key, Seconds, Value) ->
-  make_call(Db, {set_ex, Key, Seconds, Value}).
-
--spec set_range(atom(), binary(), pos_integer(), binary()) -> non_neg_integer().
-set_range(Db, Key, Offset, Value) ->
-  make_call(Db, {set_range, Key, Offset, Value}).
-
--spec str_len(atom(), binary()) -> non_neg_integer().
-str_len(Db, Key) ->
-  make_call(Db, {str_len, Key}).
-
--spec del(atom(), binary()) -> non_neg_integer().
-del(Db, Keys) ->
-  make_call(Db, {del, Keys}).
-
--spec exists(atom(), binary()) -> boolean().
-exists(Db, Key) ->
-  make_call(Db, {exists, Key}).
-
--spec expire(atom(), binary(), pos_integer()) -> boolean().
-expire(Db, Key, Seconds) ->
-  expire_at(Db, Key, edis_util:now() + Seconds).
-
--spec expire_at(atom(), binary(), pos_integer()) -> boolean().
-expire_at(Db, Key, Timestamp) ->
-  make_call(Db, {expire_at, Key, Timestamp}).
-
--spec keys(atom(), binary()) -> [binary()].
-keys(Db, Pattern) ->
-  make_call(Db, {keys, Pattern}).
-
--spec move(atom(), binary(), atom()) -> boolean().
-move(Db, Key, NewDb) ->
-  make_call(Db, {move, Key, NewDb}).
-
--spec encoding(atom(), binary()) -> undefined | item_encoding().
-encoding(Db, Key) ->
-  make_call(Db, {encoding, Key}).
-
--spec idle_time(atom(), binary()) -> undefined | non_neg_integer().
-idle_time(Db, Key) ->
-  make_call(Db, {idle_time, Key}).
-
--spec persist(atom(), binary()) -> boolean().
-persist(Db, Key) ->
-  make_call(Db, {persist, Key}).
-
--spec random_key(atom()) -> undefined | binary().
-random_key(Db) ->
-  make_call(Db, random_key).
-
--spec rename(atom(), binary(), binary()) -> ok.
-rename(Db, Key, NewKey) ->
-  make_call(Db, {rename, Key, NewKey}).
-
--spec rename_nx(atom(), binary(), binary()) -> ok.
-rename_nx(Db, Key, NewKey) ->
-  make_call(Db, {rename_nx, Key, NewKey}).
-
--spec ttl(atom(), binary()) -> undefined | pos_integer().
-ttl(Db, Key) ->
-  make_call(Db, {ttl, Key}).
-
--spec type(atom(), binary()) -> item_type().
-type(Db, Key) ->
-  make_call(Db, {type, Key}).
-
--spec hdel(atom(), binary(), [binary()]) -> non_neg_integer().
-hdel(Db, Key, Fields) ->
-  make_call(Db, {hdel, Key, Fields}).
-
--spec hexists(atom(), binary(), binary()) -> boolean().
-hexists(Db, Key, Field) ->
-  make_call(Db, {hexists, Key, Field}).
-
--spec hget(atom(), binary(), binary() | [binary()]) -> undefined | binary() | [undefined | binary()].
-hget(Db, Key, Fields) when is_list(Fields) ->
-  make_call(Db, {hget, Key, Fields});
-hget(Db, Key, Field) ->
-  [Res] = make_call(Db, {hget, Key, [Field]}),
-  Res.
-
--spec hget_all(atom(), binary()) -> [{binary(), binary()}].
-hget_all(Db, Key) ->
-  make_call(Db, {hget_all, Key}).
-
--spec hincr(atom(), binary(), binary(), integer()) -> inserted | updated.
-hincr(Db, Key, Field, Increment) ->
-  make_call(Db, {hincr, Key, Field, Increment}).
-
--spec hkeys(atom(), binary()) -> [binary()].
-hkeys(Db, Key) ->
-  make_call(Db, {hkeys, Key}).
-
--spec hlen(atom(), binary()) -> non_neg_integer().
-hlen(Db, Key) ->
-  make_call(Db, {hlen, Key}).
-
--spec hset(atom(), binary(), [{binary(), binary()}]) -> inserted | updated.
-hset(Db, Key, FVs) ->
-  make_call(Db, {hset, Key, FVs}).
-
--spec hset(atom(), binary(), binary(), binary()) -> inserted | updated.
-hset(Db, Key, Field, Value) ->
-  hset(Db, Key, [{Field, Value}]).
-
--spec hset_nx(atom(), binary(), binary(), binary()) -> ok.
-hset_nx(Db, Key, Field, Value) ->
-  make_call(Db, {hset_nx, Key, Field, Value}).
-
--spec hvals(atom(), binary()) -> [binary()].
-hvals(Db, Key) ->
-  make_call(Db, {hvals, Key}).
-
--spec blpop(atom(), [binary()], infinity | non_neg_integer()) -> {binary(), binary()}.
-blpop(Db, Keys, Timeout) ->
-  make_call(Db, {blpop, Keys, timeout_to_seconds(Timeout)}, timeout_to_ms(Timeout)).
-
--spec brpop(atom(), [binary()], infinity | non_neg_integer()) -> {binary(), binary()}.
-brpop(Db, Keys, Timeout) ->
-  make_call(Db, {brpop, Keys, timeout_to_seconds(Timeout)}, timeout_to_ms(Timeout)).
-
--spec brpop_lpush(atom(), binary(), binary(), infinity | non_neg_integer()) -> binary().
-brpop_lpush(Db, Source, Destination, Timeout) ->
-  make_call(Db, {brpop_lpush, Source, Destination, timeout_to_seconds(Timeout)},
-            timeout_to_ms(Timeout)).
-
--spec lindex(atom(), binary(), integer()) -> undefined | binary().
-lindex(Db, Key, Index) ->
-  make_call(Db, {lindex, Key, Index}).
-
--spec linsert(atom(), binary(), before|'after', binary(), binary()) -> -1 | non_neg_integer().
-linsert(Db, Key, Position, Pivot, Value) ->
-  make_call(Db, {linsert, Key, Position, Pivot, Value}).
-
--spec llen(atom(), binary()) -> non_neg_integer().
-llen(Db, Key) ->
-  make_call(Db, {llen, Key}).
-
--spec lpop(atom(), binary()) -> binary().
-lpop(Db, Key) ->
-  make_call(Db, {lpop, Key}).
-
--spec lpush(atom(), binary(), [binary()]) -> pos_integer().
-lpush(Db, Key, Values) ->
-  make_call(Db, {lpush, Key, Values}).
-
--spec lpush_x(atom(), binary(), binary()) -> pos_integer().
-lpush_x(Db, Key, Value) ->
-  make_call(Db, {lpush_x, Key, Value}).
-
--spec lrange(atom(), binary(), integer(), integer()) -> [binary()].
-lrange(Db, Key, Start, Stop) ->
-  make_call(Db, {lrange, Key, Start, Stop}).
-
--spec lrem(atom(), binary(), integer(), binary()) -> ok.
-lrem(Db, Key, Count, Value) ->
-  make_call(Db, {lrem, Key, Count, Value}).
-
--spec lset(atom(), binary(), integer(), binary()) -> ok.
-lset(Db, Key, Index, Value) ->
-  make_call(Db, {lset, Key, Index, Value}).
-
--spec ltrim(atom(), binary(), integer(), integer()) -> ok.
-ltrim(Db, Key, Start, Stop) ->
-  make_call(Db, {ltrim, Key, Start, Stop}).
-
--spec rpop(atom(), binary()) -> binary().
-rpop(Db, Key) ->
-  make_call(Db, {rpop, Key}).
-
--spec rpop_lpush(atom(), binary(), binary()) -> binary().
-rpop_lpush(Db, Key, Value) ->
-  make_call(Db, {rpop_lpush, Key, Value}).
-
--spec rpush(atom(), binary(), [binary()]) -> pos_integer().
-rpush(Db, Key, Values) ->
-  make_call(Db, {rpush, Key, Values}).
-
--spec rpush_x(atom(), binary(), binary()) -> pos_integer().
-rpush_x(Db, Key, Value) ->
-  make_call(Db, {rpush_x, Key, Value}).
-
--spec sadd(atom(), binary(), [binary()]) -> non_neg_integer().
-sadd(Db, Key, Members) ->
-  make_call(Db, {sadd, Key, Members}).
-
--spec scard(atom(), binary()) -> non_neg_integer().
-scard(Db, Key) ->
-  make_call(Db, {scard, Key}).
-
--spec sdiff(atom(), [binary()]) -> [binary()].
-sdiff(Db, Keys) ->
-  make_call(Db, {sdiff, Keys}).
-
--spec sdiff_store(atom(), binary(), [binary()]) -> non_neg_integer().
-sdiff_store(Db, Destination, Keys) ->
-  make_call(Db, {sdiff_store, Destination, Keys}).
-
--spec sinter(atom(), [binary()]) -> [binary()].
-sinter(Db, Keys) ->
-  make_call(Db, {sinter, Keys}).
-
--spec sinter_store(atom(), binary(), [binary()]) -> non_neg_integer().
-sinter_store(Db, Destination, Keys) ->
-  make_call(Db, {sinter_store, Destination, Keys}).
-
--spec sismember(atom(), binary(), binary()) -> [binary()].
-sismember(Db, Key, Member) ->
-  make_call(Db, {sismember, Key, Member}).
-
--spec smembers(atom(), binary()) -> [binary()].
-smembers(Db, Key) ->
-  make_call(Db, {smembers, Key}).
-
--spec smove(atom(), binary(), binary(), binary()) -> non_neg_integer().
-smove(Db, Source, Destination, Key) ->
-  make_call(Db, {smove, Source, Destination, Key}).
-
--spec spop(atom(), binary()) -> binary().
-spop(Db, Key) ->
-  make_call(Db, {spop, Key}).
-
--spec srand_member(atom(), binary()) -> undefined | binary().
-srand_member(Db, Key) ->
-  make_call(Db, {srand_member, Key}).
-
--spec srem(atom(), binary(), [binary()]) -> non_neg_integer().
-srem(Db, Key, Members) ->
-  make_call(Db, {srem, Key, Members}).
-
--spec sunion(atom(), [binary()]) -> [binary()].
-sunion(Db, Keys) ->
-  make_call(Db, {sunion, Keys}).
-
--spec sunion_store(atom(), binary(), [binary()]) -> non_neg_integer().
-sunion_store(Db, Destination, Keys) ->
-  make_call(Db, {sunion_store, Destination, Keys}).
-
--spec zadd(atom(), binary(), [{float(), binary()}]) -> non_neg_integer().
-zadd(Db, Key, SMs) ->
-  make_call(Db, {zadd, Key, SMs}).
-
--spec zcard(atom(), binary()) -> non_neg_integer().
-zcard(Db, Key) ->
-  make_call(Db, {zcard, Key}).
-
--spec zcount(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
-zcount(Db, Key, Min, Max) ->
-  make_call(Db, {zcount, Key, Min, Max}).
-
--spec zincr(atom(), binary(), float(), binary()) -> float().
-zincr(Db, Key, Increment, Member) ->
-  make_call(Db, {zincr, Key, Increment, Member}).
-
--spec zinter_store(atom(), binary(), [{binary(), float()}], zsets:aggregate()) -> non_neg_integer().
-zinter_store(Db, Destination, WeightedKeys, Aggregate) ->
-  make_call(Db, {zinter_store, Destination, WeightedKeys, Aggregate}).
-
--spec zunion_store(atom(), binary(), [{binary(), float()}], zsets:aggregate()) -> non_neg_integer().
-zunion_store(Db, Destination, WeightedKeys, Aggregate) ->
-  make_call(Db, {zunion_store, Destination, WeightedKeys, Aggregate}).
-
--spec zrange(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
-zrange(Db, Key, Start, Stop) ->
-  make_call(Db, {zrange, Key, Start, Stop}).
-
--spec zrange_by_score(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
-zrange_by_score(Db, Key, Min, Max) ->
-  make_call(Db, {zrange_by_score, Key, Min, Max}).
-
--spec zrank(atom(), binary(), binary()) -> undefined | non_neg_integer().
-zrank(Db, Key, Member) ->
-  make_call(Db, {zrank, Key, Member}).
-
--spec zrem(atom(), binary(), [binary()]) -> non_neg_integer().
-zrem(Db, Key, Members) ->
-  make_call(Db, {zrem, Key, Members}).
-
--spec zrem_range_by_rank(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
-zrem_range_by_rank(Db, Key, Start, Stop) ->
-  make_call(Db, {zrem_range_by_rank, Key, Start, Stop}).
-
--spec zrem_range_by_score(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
-zrem_range_by_score(Db, Key, Min, Max) ->
-  make_call(Db, {zrem_range_by_score, Key, Min, Max}).
-
--spec zrev_range(atom(), binary(), integer(), integer()) -> [{float(), binary()}].
-zrev_range(Db, Key, Start, Stop) ->
-  make_call(Db, {zrev_range, Key, Start, Stop}).
-
--spec zrev_range_by_score(atom(), binary(), zsets:limit(float()), zsets:limit(float())) -> non_neg_integer().
-zrev_range_by_score(Db, Key, Min, Max) ->
-  make_call(Db, {zrev_range_by_score, Key, Min, Max}).
-
--spec zrev_rank(atom(), binary(), binary()) -> undefined | non_neg_integer().
-zrev_rank(Db, Key, Member) ->
-  make_call(Db, {zrev_rank, Key, Member}).
-
--spec zscore(atom(), binary(), binary()) -> undefined | non_neg_integer().
-zscore(Db, Key, Member) ->
-  make_call(Db, {zscore, Key, Member}).
+%% @equiv run(Db, Command, ?DEFAULT_TIMEOUT)
+-spec run(atom(), edis:command()) -> term().
+run(Db, Command) ->
+  run(Db, Command, ?DEFAULT_TIMEOUT).
+
+-spec run(atom(), edis:command(), infinity | pos_integer()) -> term().
+run(Db, Command, Timeout) ->
+  ?DEBUG("CALL for ~p: ~p~n", [Db, Command]),
+  try gen_server:call(Db, Command, Timeout) of
+    ok -> ok;
+    {ok, Reply} -> Reply;
+    {error, Error} ->
+      ?THROW("Error trying ~p on ~p:~n\t~p~n", [Command, Db, Error]),
+      throw(Error)
+  catch
+    _:{timeout, _} ->
+      throw(timeout)
+  end.
 
 %% =================================================================================================
 %% Server functions
@@ -472,7 +95,7 @@ handle_call(save, _From, State) ->
 handle_call(last_save, _From, State) ->
   {reply, {ok, State#state.last_save}, State};
 handle_call(ping, _From, State) ->
-  {reply, {ok, pong}, State};
+  {reply, {ok, <<"PONG">>}, State};
 handle_call(info, _From, State) ->
   Version =
     case lists:keyfind(edis, 1, application:loaded_applications()) of
@@ -760,13 +383,13 @@ handle_call({move, Key, NewDb}, _From, State) ->
       {error, Reason} ->
         {error, Reason};
       Item ->
-        try make_call(NewDb, {recv, Item}) of
+        try run(NewDb, #edis_command{cmd = <<"-INTERNAL-RECV">>, args = [Item]}) of
           ok ->
             case eleveldb:delete(State#state.db, Key, []) of
               ok ->
                 {ok, true};
               {error, Reason} ->
-                _ = make_call(NewDb, {del, [Key]}),
+                _ = run(NewDb, #edis_command{cmd = <<"DEL">>, args = [Key]}),
                 {error, Reason}
             end
         catch
@@ -2074,30 +1697,6 @@ key_at(Db, Index) when Index > 0 ->
   catch
     _:{ok, Key} -> {ok, Key}
   end.
-
-%% @private
-make_call(Process, Request) ->
-  make_call(Process, Request, ?DEFAULT_TIMEOUT).
-
-%% @private
-make_call(Process, Request, Timeout) ->
-  ?DEBUG("CALL for ~p: ~p~n", [Process, Request]),
-  try gen_server:call(Process, Request, Timeout) of
-    ok -> ok;
-    {ok, Reply} -> Reply;
-    {error, Error} ->
-      ?THROW("Error trying ~p on ~p:~n\t~p~n", [Request, Process, Error]),
-      throw(Error)
-  catch
-    _:{timeout, _} ->
-      throw(timeout)
-  end.
-
-timeout_to_seconds(infinity) -> infinity;
-timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
-
-timeout_to_ms(infinity) -> infinity;
-timeout_to_ms(Timeout) -> Timeout * 1000.
 
 weighted_intersection(_Aggregate, [{ZSet, Weight}]) ->
   zsets:map(fun(Score, _) -> Score * Weight end, ZSet);

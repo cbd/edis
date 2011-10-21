@@ -85,35 +85,38 @@ handle_cast({run, Cmd, Args}, State) ->
     ok = edis_db_monitor:notify(OriginalCommand),
     run(Command, State)
   catch
+    _:invalid_password ->
+      ?WARN("Invalid password.~n", []),
+      tcp_err(<<"invalid password">>, State#state{authenticated = false});
     _:unknown_command ->
-      ?ERROR("Unknown command ~s.~n", [Cmd]),
+      ?WARN("Unknown command ~s.~n", [Cmd]),
       tcp_err(["unknown command '", Cmd, "'"], State);
     _:no_such_key ->
-      ?ERROR("No such key for ~s on db #~p~n", [Cmd, State#state.db_index]),
+      ?WARN("No such key for ~s on db #~p~n", [Cmd, State#state.db_index]),
       tcp_err("no such key", State);
     _:syntax ->
-      ?ERROR("Syntax error for ~s on db #~p~n", [Cmd, State#state.db_index]),
+      ?WARN("Syntax error for ~s on db #~p~n", [Cmd, State#state.db_index]),
       tcp_err("syntax error", State);
     _:not_integer ->
-      ?ERROR("The value affected by ~s was not a integer on ~p~n", [Cmd, State#state.db_index]),
+      ?WARN("The value affected by ~s was not a integer on ~p~n", [Cmd, State#state.db_index]),
       tcp_err("value is not an integer or out of range", State);
     _:{not_integer, Field} ->
-      ?ERROR("The value affected by ~s's ~s was not a integer on ~p~n", [Cmd, Field, State#state.db_index]),
+      ?WARN("The value affected by ~s's ~s was not a integer on ~p~n", [Cmd, Field, State#state.db_index]),
       tcp_err([Field, " is not an integer or out of range"], State);
     _:{not_float, Field} ->
-      ?ERROR("The value affected by ~s's ~s was not a float on ~p~n", [Cmd, Field, State#state.db_index]),
+      ?WARN("The value affected by ~s's ~s was not a float on ~p~n", [Cmd, Field, State#state.db_index]),
       tcp_err([Field, " is not a double"], State);
     _:{out_of_range, Field} ->
-      ?ERROR("The value affected by ~s's ~s was out of range on ~p~n", [Cmd, Field, State#state.db_index]),
+      ?WARN("The value affected by ~s's ~s was out of range on ~p~n", [Cmd, Field, State#state.db_index]),
       tcp_err([Field, " is out of range"], State);
     _:{is_negative, Field} ->
-      ?ERROR("The value affected by ~s's ~s was negative on ~p~n", [Cmd, Field, State#state.db_index]),
+      ?WARN("The value affected by ~s's ~s was negative on ~p~n", [Cmd, Field, State#state.db_index]),
       tcp_err([Field, " is negative"], State);
     _:not_float ->
-      ?ERROR("The value affected by ~s was not a float on ~p~n", [Cmd, State#state.db_index]),
+      ?WARN("The value affected by ~s was not a float on ~p~n", [Cmd, State#state.db_index]),
       tcp_err("value is not a double", State);
     _:bad_item_type ->
-      ?ERROR("Bad type running ~s on db #~p~n", [Cmd, State#state.db_index]),
+      ?WARN("Bad type running ~s on db #~p~n", [Cmd, State#state.db_index]),
       tcp_err("Operation against a key holding the wrong kind of value", State);
     _:source_equals_destination ->
       tcp_err("source and destinantion objects are the same", State);
@@ -125,7 +128,7 @@ handle_cast({run, Cmd, Args}, State) ->
       ?WARN("Unauthorized user trying to do a ~s on ~p~n", [Cmd, State#state.db_index]),
       tcp_err("operation not permitted", State);
     _:{error, Reason} ->
-      ?ERROR("Error running ~s on db #~p: ~p~n", [Cmd, State#state.db_index, Reason]),
+      ?WARN("Error running ~s on db #~p: ~p~n", [Cmd, State#state.db_index, Reason]),
       tcp_err(Reason, State);
     _:Error ->
       ?ERROR("Error running ~s on ~p:~n\t~p~n", [Cmd, State#state.db_index, Error]),
@@ -135,14 +138,14 @@ handle_cast({run, Cmd, Args}, State) ->
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
 handle_info(#edis_command{db = 0} = Command, State) ->
-  tcp_ok(io_lib:format("~p ~s ~s", [Command#edis_command.timestamp,
-                                    Command#edis_command.cmd,
-                                    edis_util:join(Command#edis_command.args, <<" ">>)]), State);
+  tcp_string(io_lib:format("~p ~s ~s", [Command#edis_command.timestamp,
+                                        Command#edis_command.cmd,
+                                        edis_util:join(Command#edis_command.args, <<" ">>)]), State);
 handle_info(#edis_command{} = Command, State) ->
-  tcp_ok(io_lib:format("~p (db ~p) ~s ~s", [Command#edis_command.timestamp,
-                                            Command#edis_command.db,
-                                            Command#edis_command.cmd,
-                                            edis_util:join(Command#edis_command.args, <<" ">>)]), State);
+  tcp_string(io_lib:format("~p (db ~p) ~s ~s", [Command#edis_command.timestamp,
+                                                Command#edis_command.db,
+                                                Command#edis_command.cmd,
+                                                edis_util:join(Command#edis_command.args, <<" ">>)]), State);
 handle_info({gen_event_EXIT, _Handler, Reason}, State) ->
   ?INFO("Monitor deactivated. Reason: ~p~n", [Reason]),
   {noreply, State, hibernate};
@@ -311,8 +314,8 @@ parse_command(C = #edis_command{cmd = <<"BRPOP">>, args = Args}) ->
   [Timeout | Keys] = lists:reverse(Args),
   case edis_util:binary_to_integer(Timeout) of
     T when T < 0 -> throw({is_negative, "timeout"});
-    0 -> C#edis_command{args = lists:reverse([infinity | Keys])};
-    T -> C#edis_command{args = lists:reverse([T | Keys])}
+    0 -> C#edis_command{args = lists:reverse([infinity | Keys]), timeout = infinity};
+    T -> C#edis_command{args = lists:reverse([timeout_to_seconds(T) | Keys]), timeout = T * 1000}
   end;
 parse_command(#edis_command{cmd = <<"BLPOP">>, args = []}) -> throw(bad_arg_num);
 parse_command(#edis_command{cmd = <<"BLPOP">>, args = [_]}) -> throw(bad_arg_num);
@@ -320,14 +323,14 @@ parse_command(C = #edis_command{cmd = <<"BLPOP">>, args = Args}) ->
   [Timeout | Keys] = lists:reverse(Args),
   case edis_util:binary_to_integer(Timeout) of
     T when T < 0 -> throw({is_negative, "timeout"});
-    0 -> C#edis_command{args = lists:reverse([infinity | Keys])};
-    T -> C#edis_command{args = lists:reverse([T | Keys])}
+    0 -> C#edis_command{args = lists:reverse([infinity | Keys]), timeout = infinity};
+    T -> C#edis_command{args = lists:reverse([timeout_to_seconds(T) | Keys]), timeout = T * 1000}
   end;
 parse_command(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination, Timeout]}) ->
   case edis_util:binary_to_integer(Timeout) of
     T when T < 0 -> throw({is_negative, "timeout"});
-    0 -> C#edis_command{args = [Source, Destination, infinity]};
-    T -> C#edis_command{args = [Source, Destination, T]}
+    0 -> C#edis_command{args = [Source, Destination, infinity], timeout = infinity};
+    T -> C#edis_command{args = [Source, Destination, timeout_to_seconds(T)], timeout = T * 1000}
   end;
 parse_command(#edis_command{cmd = <<"BRPOPLPUSH">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"LINDEX">>, args = [Key, Index]}) -> C#edis_command{args = [Key, edis_util:binary_to_integer(Index, 0)]};
@@ -507,7 +510,7 @@ parse_command(_Command) -> throw(unknown_command).
 
 -spec run(#edis_command{}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 %% -- Connection -----------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"QUIT">>}, State) ->
+run(#edis_command{cmd = <<"QUIT">>}, State) -> %% You can quit even if you're in MULTI
   case tcp_ok(State) of
     {noreply, NewState} -> {stop, normal, NewState};
     Error -> Error
@@ -516,428 +519,24 @@ run(#edis_command{cmd = <<"AUTH">>, args = [Password]}, State) ->
   case edis_config:get(requirepass) of
     undefined -> tcp_ok(State);
     Password -> tcp_ok(State#state{authenticated = true});
-    _ -> tcp_err(<<"invalid password">>, State#state{authenticated = false})
+    _ -> throw(invalid_password)
   end;
 run(_, #state{authenticated = false}) -> throw(unauthorized);
 run(#edis_command{cmd = <<"SELECT">>, args = [DbIndex]}, State) ->
   tcp_ok(State#state{db = edis_db:process(DbIndex)});
-run(#edis_command{cmd = <<"PING">>}, State) ->
-  pong = edis_db:ping(State#state.db),
-  tcp_ok(<<"PONG">>, State);
-run(#edis_command{cmd = <<"ECHO">>, args = [Word]}, State) ->
-  tcp_bulk(Word, State);
-%% -- Strings --------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"APPEND">>, args = [Key, Value]}, State) ->
-  tcp_number(edis_db:append(State#state.db, Key, Value), State);
-run(#edis_command{cmd = <<"DECR">>, args = [Key]}, State) ->
-  tcp_number(edis_db:decr(State#state.db, Key, 1), State);
-run(#edis_command{cmd = <<"DECRBY">>, args = [Key, Decrement]}, State) ->
-  tcp_number(edis_db:decr(State#state.db, Key, Decrement), State);
-run(#edis_command{cmd = <<"GET">>, args = [Key]}, State) ->
-  tcp_bulk(edis_db:get(State#state.db, Key), State);
-run(#edis_command{cmd = <<"GETBIT">>, args = [Key, Offset]}, State) ->
-  tcp_number(edis_db:get_bit(State#state.db, Key, Offset), State);
-run(#edis_command{cmd = <<"GETRANGE">>, args = [Key, Start, End]}, State) ->
-  tcp_bulk(edis_db:get_range(State#state.db, Key, Start, End), State);
-run(#edis_command{cmd = <<"GETSET">>, args = [Key, Value]}, State) ->
-  tcp_bulk(edis_db:get_and_set(State#state.db, Key, Value), State);
-run(#edis_command{cmd = <<"INCR">>, args = [Key]}, State) ->
-  tcp_number(edis_db:incr(State#state.db, Key, 1), State);
-run(#edis_command{cmd = <<"INCRBY">>, args = [Key, Increment]}, State) ->
-  tcp_number(edis_db:incr(State#state.db, Key, Increment), State);
-run(#edis_command{cmd = <<"MGET">>, args = Keys}, State) ->
-  tcp_multi_bulk(edis_db:get(State#state.db, Keys), State);
-run(#edis_command{cmd = <<"MSET">>, args = KVs}, State) ->
-  ok = edis_db:set(State#state.db, KVs),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"MSETNX">>, args = KVs}, State) ->
-  try edis_db:set_nx(State#state.db, KVs) of
-    ok -> tcp_boolean(true, State)
-  catch
-    _:already_exists ->
-      tcp_boolean(false, State)
-  end;
-run(#edis_command{cmd = <<"SET">>, args = [Key, Value]}, State) ->
-  ok = edis_db:set(State#state.db, Key, Value),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"SETBIT">>, args = [Key, Offset, Bit]}, State) ->
-  tcp_number(edis_db:set_bit(State#state.db, Key, Offset, Bit), State);
-run(#edis_command{cmd = <<"SETEX">>, args = [Key, Seconds, Value]}, State) ->
-  ok = edis_db:set_ex(State#state.db, Key, Seconds, Value),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"SETNX">>, args = [Key, Value]}, State) ->
-  try edis_db:set_nx(State#state.db, Key, Value) of
-    ok -> tcp_boolean(true, State)
-  catch
-    _:already_exists ->
-      tcp_boolean(false, State)
-  end;
-run(#edis_command{cmd = <<"SETRANGE">>, args = [Key, Offset, Value]}, State) ->
-  tcp_number(edis_db:set_range(State#state.db, Key, Offset, Value), State);
-run(#edis_command{cmd = <<"STRLEN">>, args = [Key]}, State) ->
-  tcp_number(edis_db:str_len(State#state.db, Key), State);
-%% -- Keys -----------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"DEL">>, args = Keys}, State) ->
-  tcp_number(edis_db:del(State#state.db, Keys), State);
-run(#edis_command{cmd = <<"EXISTS">>, args = [Key]}, State) ->
-  tcp_boolean(edis_db:exists(State#state.db, Key), State);
-run(#edis_command{cmd = <<"EXPIRE">>, args = [Key, Seconds]}, State) ->
-  tcp_boolean(edis_db:expire(State#state.db, Key, Seconds), State);
-run(#edis_command{cmd = <<"EXPIREAT">>, args = [Key, Timestamp]}, State) ->
-  tcp_boolean(edis_db:expire_at(State#state.db, Key, Timestamp), State);
-run(#edis_command{cmd = <<"KEYS">>, args = [Pattern]}, State) ->
-  tcp_multi_bulk(edis_db:keys(State#state.db, Pattern), State);
-run(#edis_command{cmd = <<"MOVE">>, db = CurrentDb, args = [Key, DbIndex]}, State) ->
-  tcp_boolean(edis_db:move(CurrentDb, Key, DbIndex), State);
-run(#edis_command{cmd = <<"OBJECT REFCOUNT">>, args = [Key]}, State) ->
-  %%XXX: Not *really* implemented
-  case edis_db:exists(State#state.db, Key) of
-    true -> tcp_number(1, State);
-    false -> tcp_bulk(undefined, State)
-  end;
-run(#edis_command{cmd = <<"OBJECT ENCODING">>, args = [Key]}, State) ->
-  Reply =
-      case edis_db:encoding(State#state.db, Key) of
-        undefined -> undefined;
-        Encoding -> atom_to_binary(Encoding, utf8)
-      end,
-  tcp_bulk(Reply, State);
-run(#edis_command{cmd = <<"OBJECT IDLETIME">>, args = [Key]}, State) ->
-  tcp_number(edis_db:idle_time(State#state.db, Key), State);
-run(#edis_command{cmd = <<"PERSIST">>, args = [Key]}, State) ->
-  tcp_boolean(edis_db:persist(State#state.db, Key), State);
-run(#edis_command{cmd = <<"RANDOMKEY">>}, State) ->
-  tcp_bulk(edis_db:random_key(State#state.db), State);
-run(#edis_command{cmd = <<"RENAME">>, args = [Key, NewKey]}, State) ->
-  try edis_db:rename(State#state.db, Key, NewKey) of
-    ok -> tcp_ok(State)
-  catch
-    _:not_found ->
-      throw(no_such_key)
-  end;
-run(#edis_command{cmd = <<"RENAMENX">>, args = [Key, NewKey]}, State) ->
-  try edis_db:rename_nx(State#state.db, Key, NewKey) of
-      ok -> tcp_number(1, State)
-  catch
-    _:already_exists ->
-      tcp_number(0, State);
-    _:not_found ->
-      throw(no_such_key)
-  end;
-run(#edis_command{cmd = <<"TTL">>, args = [Key]}, State) ->
-  try edis_db:ttl(State#state.db, Key) of
-    undefined -> tcp_number(-1, State);
-    Secs -> tcp_number(Secs, State)
-  catch
-    _:not_found ->
-      tcp_number(-1, State)
-  end;
-run(#edis_command{cmd = <<"TYPE">>, args = [Key]}, State) ->
-  try edis_db:type(State#state.db, Key) of
-    Type -> tcp_ok(atom_to_binary(Type, utf8), State)
-  catch
-    _:not_found ->
-      tcp_ok(<<"none">>, State)
-  end;
+run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
+  Res = case Timeout of
+          undefined -> edis_db:run(State#state.db, C);
+          Timeout -> edis_db:run(State#state.db, C, Timeout)
+        end,
+  case ResType of
+    ok -> tcp_ok(State);
+    string -> tcp_string(Res, State);
+    bulk -> tcp_bulk(Res, State);
+    number -> tcp_number(Res, State);
+    boolean -> tcp_boolean(Res, State)
+  end.
 
-%% -- Hashes ---------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"HDEL">>, args = [Key | Fields]}, State) ->
-  tcp_number(edis_db:hdel(State#state.db, Key, Fields), State);
-run(#edis_command{cmd = <<"HEXISTS">>, args = [Key, Field]}, State) ->
-  tcp_boolean(edis_db:hexists(State#state.db, Key, Field), State);
-run(#edis_command{cmd = <<"HGET">>, args = [Key, Field]}, State) ->
-  tcp_bulk(edis_db:hget(State#state.db, Key, Field), State);
-run(#edis_command{cmd = <<"HGETALL">>, args = [Key]}, State) ->
-  tcp_multi_bulk(lists:flatmap(fun tuple_to_list/1, edis_db:hget_all(State#state.db, Key)), State);
-run(#edis_command{cmd = <<"HINCRBY">>, args = [Key, Field, Increment]}, State) ->
-  try 
-    tcp_number(edis_db:hincr(State#state.db, Key, Field, Increment), State)
-  catch
-    _:not_integer -> throw({not_integer, "hash value"})
-  end;
-run(#edis_command{cmd = <<"HKEYS">>, args = [Key]}, State) ->
-  tcp_multi_bulk(edis_db:hkeys(State#state.db, Key), State);
-run(#edis_command{cmd = <<"HLEN">>, args = [Key]}, State) ->
-  tcp_number(edis_db:hlen(State#state.db, Key), State);
-run(#edis_command{cmd = <<"HMGET">>, args = [Key | Fields]}, State) ->
-  tcp_multi_bulk(edis_db:hget(State#state.db, Key, Fields), State);
-run(#edis_command{cmd = <<"HMSET">>, args = [Key, FVs]}, State) ->
-  _ = edis_db:hset(State#state.db, Key, FVs),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"HSET">>, args = [Key, Field, Value]}, State) ->
-  case edis_db:hset(State#state.db, Key, Field, Value) of
-    inserted ->
-      tcp_number(1, State);
-    updated ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"HSETNX">>, args = [Key, Field, Value]}, State) ->
-  try edis_db:hset_nx(State#state.db, Key, Field, Value) of
-    ok -> tcp_boolean(true, State)
-  catch
-    _:already_exists ->
-      tcp_boolean(false, State)
-  end;
-run(#edis_command{cmd = <<"HVALS">>, args = [Key]}, State) ->
-  tcp_multi_bulk(edis_db:hvals(State#state.db, Key), State);
-%% -- Lists ----------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"BRPOP">>, args = Args}, State) ->
-  [Timeout | Keys] = lists:reverse(Args),
-  try
-    {Key, Value} = edis_db:brpop(State#state.db, lists:reverse(Keys), Timeout),
-    tcp_multi_bulk([Key, Value], State)
-  catch
-    _:timeout ->
-      tcp_bulk(undefined, State);
-    _:not_integer ->
-      throw({not_integer, "timeout"})
-  end;
-run(#edis_command{cmd = <<"BLPOP">>, args = Args}, State) ->
-  [Timeout | Keys] = lists:reverse(Args),
-  try
-    {Key, Value} = edis_db:blpop(State#state.db, lists:reverse(Keys), Timeout),
-    tcp_multi_bulk([Key, Value], State)
-  catch
-    _:timeout ->
-      tcp_bulk(undefined, State);
-    _:not_integer ->
-      throw({not_integer, "timeout"})
-  end;
-run(#edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination, Timeout]}, State) ->
-  try tcp_bulk(edis_db:brpop_lpush(State#state.db, Source, Destination, Timeout), State)
-  catch
-    _:timeout ->
-      tcp_bulk(undefined, State);
-    _:not_integer ->
-      throw({not_integer, "timeout"})
-  end;
-run(#edis_command{cmd = <<"LINDEX">>, args = [Key, Index]}, State) ->
-  tcp_bulk(edis_db:lindex(State#state.db, Key, Index), State);
-run(#edis_command{cmd = <<"LINSERT">>, args = [Key, Position, Pivot, Value]}, State) ->
-  try tcp_number(edis_db:linsert(State#state.db, Key, Position, Pivot, Value), State)
-  catch
-    _:not_found ->
-      tcp_number(-1, State)
-  end;
-run(#edis_command{cmd = <<"LLEN">>, args = [Key]}, State) ->
-  tcp_number(edis_db:llen(State#state.db, Key), State);
-run(#edis_command{cmd = <<"LPOP">>, args = [Key]}, State) ->
-  try edis_db:lpop(State#state.db, Key) of
-    Value -> tcp_bulk(Value, State)
-  catch
-    _:not_found ->
-      tcp_bulk(undefined, State)
-  end;
-run(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, State) ->
-  tcp_number(edis_db:lpush(State#state.db, Key, Values), State);
-run(#edis_command{cmd = <<"LPUSHX">>, args = [Key, Value]}, State) ->
-  try tcp_number(edis_db:lpush_x(State#state.db, Key, Value), State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"LRANGE">>, args = [Key, Start, Stop]}, State) ->
-  tcp_multi_bulk(edis_db:lrange(State#state.db, Key, Start, Stop), State);
-run(#edis_command{cmd = <<"LREM">>, args = [Key, Count, Value]}, State) ->
-  try tcp_number(edis_db:lrem(State#state.db, Key, Count, Value), State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"LSET">>, args = [Key, Index, Value]}, State) ->
-  try edis_db:lset(State#state.db, Key, Index, Value) of
-    ok ->
-      tcp_ok(State)
-  catch
-    _:not_found ->
-      throw(no_such_key);
-    _:out_of_range ->
-      throw({out_of_range, "index"})
-  end;
-run(#edis_command{cmd = <<"LTRIM">>, args = [Key, Start, Stop]}, State) ->
-  try edis_db:ltrim(State#state.db, Key, Start, Stop) of
-    ok ->
-      tcp_ok(State)
-  catch
-    _:not_found ->
-      tcp_ok(State)
-  end;
-run(#edis_command{cmd = <<"RPOP">>, args = [Key]}, State) ->
-  try edis_db:rpop(State#state.db, Key) of
-    Value -> tcp_bulk(Value, State)
-  catch
-    _:not_found ->
-      tcp_bulk(undefined, State)
-  end;
-run(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, State) ->
-  try edis_db:rpop_lpush(State#state.db, Source, Destination) of
-    Value -> tcp_bulk(Value, State)
-  catch
-    _:not_found ->
-      tcp_bulk(undefined, State)
-  end;
-run(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, State) ->
-  tcp_number(edis_db:rpush(State#state.db, Key, Values), State);
-run(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, State) ->
-  try edis_db:rpush_x(State#state.db, Key, Value) of
-    NewLen -> tcp_number(NewLen, State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-%% -- Sets -----------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"SADD">>, args = [Key, Members]}, State) ->
-  tcp_number(edis_db:sadd(State#state.db, Key, Members), State);
-run(#edis_command{cmd = <<"SCARD">>, args = [Key]}, State) ->
-  tcp_number(edis_db:scard(State#state.db, Key), State);
-run(#edis_command{cmd = <<"SDIFF">>, args = Keys}, State) ->
-  tcp_multi_bulk(edis_db:sdiff(State#state.db, Keys), State);
-run(#edis_command{cmd = <<"SDIFFSTORE">>, args = [Destination | Keys]}, State) ->
-  tcp_number(edis_db:sdiff_store(State#state.db, Destination, Keys), State);
-run(#edis_command{cmd = <<"SINTER">>, args = Keys}, State) ->
-  tcp_multi_bulk(edis_db:sinter(State#state.db, Keys), State);
-run(#edis_command{cmd = <<"SINTERSTORE">>, args = [Destination | Keys]}, State) ->
-  tcp_number(edis_db:sinter_store(State#state.db, Destination, Keys), State);
-run(#edis_command{cmd = <<"SISMEMBER">>, args = [Key, Member]}, State) ->
-  tcp_boolean(edis_db:sismember(State#state.db, Key, Member), State);
-run(#edis_command{cmd = <<"SMEMBERS">>, args = [Key]}, State) ->
-  tcp_multi_bulk(edis_db:smembers(State#state.db, Key), State);
-run(#edis_command{cmd = <<"SMOVE">>, args = [Source, Destination, Member]}, State) ->
-  try tcp_boolean(edis_db:smove(State#state.db, Source, Destination, Member), State)
-  catch
-    _:not_found -> tcp_boolean(false, State)
-  end;
-run(#edis_command{cmd = <<"SPOP">>, args = [Key]}, State) ->
-  try tcp_bulk(edis_db:spop(State#state.db, Key), State)
-  catch
-    _:not_found -> tcp_bulk(undefined, State)
-  end;
-run(#edis_command{cmd = <<"SRANDMEMBER">>, args = [Key]}, State) ->
-  tcp_bulk(edis_db:srand_member(State#state.db, Key), State);
-run(#edis_command{cmd = <<"SREM">>, args = [Key | Members]}, State) ->
-  try tcp_number(edis_db:srem(State#state.db, Key, Members), State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"SUNION">>, args = Keys}, State) ->
-  tcp_multi_bulk(edis_db:sunion(State#state.db, Keys), State);
-run(#edis_command{cmd = <<"SUNIONSTORE">>, args = [Destination | Keys]}, State) ->
-  tcp_number(edis_db:sunion_store(State#state.db, Destination, Keys), State);
-
-%% -- Sets -----------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"ZADD">>, args = [Key, SMs]}, State) ->
-  tcp_number(edis_db:zadd(State#state.db, Key, SMs), State);
-run(#edis_command{cmd = <<"ZCARD">>, args = [Key]}, State) ->
-  tcp_number(edis_db:zcard(State#state.db, Key), State);
-run(#edis_command{cmd = <<"ZCOUNT">>, args = [Key, Min, Max]}, State) ->
-  try tcp_number(edis_db:zcount(State#state.db, Key, Min, Max), State)
-  catch
-    _:not_float ->
-      throw({not_float, "min or max"})
-  end;
-run(#edis_command{cmd = <<"ZINCRBY">>, args = [Key, Increment, Member]}, State) ->
-  tcp_float(edis_db:zincr(State#state.db, Key, Increment, Member), State);
-run(#edis_command{cmd = <<"ZINTERSTORE">>, args = [Destination, WeightedKeys, Aggregate]}, State) ->
-  tcp_number(
-    edis_db:zinter_store(State#state.db, Destination, WeightedKeys, Aggregate),
-    State);
-run(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}, State) ->
-  tcp_multi_bulk(
-    [Member || {_Score, Member} <- edis_db:zrange(State#state.db, Key, Start, Stop)], State);
-run(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop, with_scores]}, State) ->
-  Reply =
-      lists:flatten(
-        [[Member, Score] || {Score, Member} <- edis_db:zrange(State#state.db, Key, Start, Stop)]),
-  tcp_multi_bulk(Reply, State);
-run(#edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [Key, Min, Max, ShowScores, Limit]}, State) ->
-  tcp_zrange(edis_db:zrange_by_score(State#state.db, Key, Min, Max), ShowScores, Limit, State);
-run(#edis_command{cmd = <<"ZRANK">>, args = [Key, Member]}, State) ->
-  tcp_number(edis_db:zrank(State#state.db, Key, Member), State);
-run(#edis_command{cmd = <<"ZREM">>, args = [Key | Members]}, State) ->
-  try tcp_number(edis_db:zrem(State#state.db, Key, Members), State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [Key, Start, Stop]}, State) ->
-  try tcp_number(edis_db:zrem_range_by_rank(State#state.db, Key, Start, Stop), State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [Key, Min, Max]}, State) ->
-  try tcp_number(edis_db:zrem_range_by_score(State#state.db, Key, Min, Max), State)
-  catch
-    _:not_found ->
-      tcp_number(0, State)
-  end;
-run(#edis_command{cmd = <<"ZREVRANGE">>, args = [Key, Start, Stop]}, State) ->
-  tcp_multi_bulk(
-    [Member || {_Score, Member} <- edis_db:zrev_range(State#state.db, Key, Start, Stop)], State);
-run(#edis_command{cmd = <<"ZREVRANGE">>, args = [Key, Start, Stop, with_scores]}, State) ->
-  tcp_multi_bulk(
-    lists:flatten(
-      [[Member, Score] ||
-       {Score, Member} <- edis_db:zrev_range(State#state.db, Key, Start, Stop)]), State);
-run(#edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [Key, Min, Max, ShowScores, Limit]}, State) ->
-  tcp_zrange(edis_db:zrev_range_by_score(State#state.db, Key, Min, Max), ShowScores, Limit, State);
-run(#edis_command{cmd = <<"ZREVRANK">>, args = [Key, Member]}, State) ->
-  tcp_number(edis_db:zrev_rank(State#state.db, Key, Member), State);
-run(#edis_command{cmd = <<"ZSCORE">>, args = [Key, Member]}, State) ->
-  tcp_float(edis_db:zscore(State#state.db, Key, Member), State);
-run(#edis_command{cmd = <<"ZUNIONSTORE">>, args = [Destination, WeightedKeys, Aggregate]}, State) ->
-  tcp_number(edis_db:zunion_store(State#state.db, Destination, WeightedKeys, Aggregate), State);
-%% -- Server ---------------------------------------------------------------------------------------
-run(#edis_command{cmd = <<"CONFIG GET">>, args = [Pattern]}, State) ->
-  Configs = edis_config:get(Pattern),
-  Lines = lists:flatten(
-            [[atom_to_binary(K, utf8),
-              case V of
-                undefined -> undefined;
-                V when is_binary(V) -> V;
-                V -> erlang:iolist_to_binary(io_lib:format("~p", [V]))
-              end] || {K, V} <- Configs]),
-  tcp_multi_bulk(Lines, State);
-run(#edis_command{cmd = <<"CONFIG SET">>, args = [Param, Value]}, State) ->
-  try edis_config:set(Param, Value) of
-    ok -> tcp_ok(State)
-  catch
-    _:invalid_param ->
-      throw({error, io_lib:format("Invalid argument '~p' for CONFIG SET '~p'", [Value, Param])});
-    _:unsupported_param ->
-      throw({error, io_lib:format("Unsupported CONFIG parameter '~p'", [Param])})
-  end;
-run(#edis_command{cmd = <<"CONFIG RESETSTAT">>}, State) ->
-  %%TODO: Reset the statistics
-  tcp_ok(State);
-run(#edis_command{cmd = <<"DBSIZE">>}, State) ->
-  tcp_number(edis_db:size(State#state.db), State);
-run(#edis_command{cmd = <<"FLUSHALL">>}, State) ->
-  ok = edis_db:flush(),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"FLUSHDB">>}, State) ->
-  ok = edis_db:flush(State#state.db),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"INFO">>}, State) ->
-  Info = edis_db:info(State#state.db),
-  tcp_bulk(lists:map(fun({K,V}) when is_binary(V) ->
-                             io_lib:format("~p:~s~n", [K, V]);
-                        ({K,V}) ->
-                             io_lib:format("~p:~p~n", [K, V])
-                     end, Info), State);
-run(#edis_command{cmd = <<"LASTSAVE">>}, State) ->
-  Ts = edis_db:last_save(State#state.db),
-  tcp_number(erlang:round(Ts), State);
-run(#edis_command{cmd = <<"MONITOR">>}, State) ->
-  ok = edis_db_monitor:add_sup_handler(),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"SAVE">>}, State) ->
-  ok = edis_db:save(State#state.db),
-  tcp_ok(State);
-run(#edis_command{cmd = <<"SHUTDOWN">>}, State) ->
-  _ = spawn(edis, stop, []),
-  {stop, normal, State}.
 
 %% @private
 -spec tcp_boolean(boolean(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
@@ -993,10 +592,11 @@ tcp_err(Message, State) ->
 %% @private
 -spec tcp_ok(state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_ok(State) ->
-  tcp_ok("OK", State).
+  tcp_string("OK", State).
+
 %% @private
--spec tcp_ok(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
-tcp_ok(Message, State) ->
+-spec tcp_string(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_string(Message, State) ->
   tcp_send(["+", Message], State).
 
 
@@ -1134,3 +734,6 @@ tcp_zrange(Range, ShowScores, Limit, State) ->
         lists:flatten([[Member, Score] || {Score, Member} <- lists:sublist(Range, Off+1, Lim)])
     end,
   tcp_multi_bulk(Reply, State).
+
+timeout_to_seconds(infinity) -> infinity;
+timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.

@@ -4,7 +4,9 @@
                                     :: float(),
                        db           :: non_neg_integer(),
                        cmd          :: binary(),
-                       args = []    :: [term()]}).
+                       args = []    :: [term()],
+                       result_type  :: edis:result_type(),
+                       timeout      :: undefined | infinity | pos_integer()}).
 
 -record(edis_item, {key               :: binary(),
                     type              :: edis_db:item_type(),
