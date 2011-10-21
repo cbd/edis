@@ -1086,7 +1086,7 @@ handle_call({lindex, Key, Index}, _From, State) ->
             Index when Index >= 0 ->
               {ok, lists:nth(Index + 1, Value)};
             Index ->
-              {ok, lists:nth((-1)*Index, Value)}
+              {ok, lists:nth((-1)*Index, lists:reverse(Value))}
           end
         catch
           _:function_clause ->
