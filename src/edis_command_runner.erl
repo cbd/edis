@@ -651,6 +651,7 @@ run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
     ok -> tcp_ok(State);
     string -> tcp_string(Res, State);
     bulk -> tcp_bulk(Res, State);
+	multi_bulk -> tcp_multi_bulk(Res, State);
     number -> tcp_number(Res, State);
     boolean -> tcp_boolean(Res, State);
     float -> tcp_float(Res, State);

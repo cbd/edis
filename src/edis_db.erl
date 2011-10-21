@@ -629,8 +629,8 @@ handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, FVs]}, _From, State) -
                 end, {false, Item}, FVs)
       end, dict:new()),
   {reply, Reply, stamp(Key, State)};
-handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, Field, Value]}, From, State) ->
-  handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, {Field, Value}]}, From, State);
+handle_call(#edis_command{cmd = <<"HSET">>, args = [Key, Field, Value]}, From, State) ->
+  handle_call(#edis_command{cmd = <<"HMSET">>, args = [Key, [{Field, Value}]]}, From, State);
 handle_call(#edis_command{cmd = <<"HSETNX">>, args = [Key, Field, Value]}, _From, State) ->
   Reply =
     update(
