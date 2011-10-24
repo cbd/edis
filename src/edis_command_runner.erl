@@ -21,7 +21,8 @@
                 db_index = 0            :: non_neg_integer(),
                 peerport                :: pos_integer(),
                 authenticated = false   :: boolean(),
-                multi_queue = undefined :: undefined | [{binary(), [binary()]}]}).
+                multi_queue = undefined :: undefined | [{binary(), [binary()]}],
+                watched_keys = []       :: [{binary(), undefined | non_neg_integer()}]}).
 -opaque state() :: #state{}.
 
 -export([start_link/1, stop/1, err/2, run/3]).
@@ -537,6 +538,8 @@ parse_command(C = #edis_command{cmd = <<"DISCARD">>, args = []}) -> C#edis_comma
 parse_command(#edis_command{cmd = <<"DISCARD">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"EXEC">>, args = []}) -> C#edis_command{result_type=multi_result,group=transaction};
 parse_command(#edis_command{cmd = <<"EXEC">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"WATCH">>, args = [_Key|_Keys]}) -> C#edis_command{result_type=ok,group=transaction};
+parse_command(#edis_command{cmd = <<"WATCH">>}) -> throw(bad_arg_num);
 %% -- Errors ---------------------------------------------------------------------------------------
 parse_command(#edis_command{cmd = <<"SYNC">>}) -> throw({error, "unsupported command"});
 parse_command(#edis_command{cmd = <<"SLOWLOG">>}) -> throw({error, "unsupported command"});
@@ -596,10 +599,24 @@ run(#edis_command{cmd = <<"MONITOR">>}, State) ->
   ok = edis_db_monitor:add_sup_handler(),
   tcp_ok(State);
 %% -- Transaction commands -------------------------------------------------------------------------
-run(#edis_command{cmd = <<"MULTI">>}, State) ->
-  tcp_ok(State#state{multi_queue = []});
+run(#edis_command{cmd = <<"MULTI">>}, State) -> tcp_ok(State#state{multi_queue = []});
 run(#edis_command{cmd = <<"DISCARD">>}, _State) -> throw(out_of_multi);
 run(#edis_command{cmd = <<"EXEC">>}, _State) -> throw(out_of_multi);
+run(C = #edis_command{cmd = <<"WATCH">>, args = Keys}, State) ->
+  NewWatchedKeys =
+      lists:foldl(
+        fun(Key, WatchedKeys) ->
+                case lists:keymember(Key, 1, WatchedKeys) of
+                  true -> WatchedKeys;
+                  false ->
+                    LastUpdate =
+                        edis_db:run(State#state.db,
+                                    C#edis_command{cmd = <<"OBJECT LASTUPDATE">>, args = [Key],
+                                                   result_type = number}),
+                    [{Key, LastUpdate}|WatchedKeys]
+                end
+        end, State#state.watched_keys, Keys),
+  tcp_ok(State#state{watched_keys = NewWatchedKeys});
 %% -- All the other commands -----------------------------------------------------------------------
 run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
   Res = case Timeout of
@@ -626,6 +643,7 @@ queue(#edis_command{cmd = <<"QUIT">>}, State) -> %% User may quit even on MULTI 
     Error -> Error
   end;
 queue(#edis_command{cmd = <<"MULTI">>}, _State) -> throw(nested);
+queue(#edis_command{cmd = <<"WATCH">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"AUTH">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"SHUTDOWN">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"CONFIG", _/binary>>}, _State) -> throw(not_in_multi);
@@ -636,14 +654,25 @@ queue(#edis_command{cmd = <<"MONITOR">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"DISCARD">>}, State) ->
   tcp_ok(State#state{multi_queue = undefined});
 queue(C = #edis_command{cmd = <<"EXEC">>}, State) ->
-  Commands = lists:reverse(State#state.multi_queue),
-  Replies = edis_db:run(State#state.db, C#edis_command{args = Commands}),
-  Results =
-    lists:zipwith(
-      fun(IC, {error, Error}) -> {error, parse_error(IC#edis_command.cmd, Error)};
-         (IC, {ok, Reply}) -> {IC, Reply}
-      end, Commands, Replies),
-  tcp_multi_result(Results, State#state{multi_queue = undefined});
+  case lists:any(
+         fun({Key, LastUpdate}) ->
+                 LastUpdate =/=
+                     edis_db:run(State#state.db,
+                                 C#edis_command{cmd = <<"OBJECT LASTUPDATE">>, args = [Key],
+                                                result_type = number})
+         end, State#state.watched_keys) of
+    true ->
+      tcp_bulk(undefined, State#state{multi_queue = undefined, watched_keys = []});
+    false ->
+      Commands = lists:reverse(State#state.multi_queue),
+      Replies = edis_db:run(State#state.db, C#edis_command{args = Commands}),
+      Results =
+          lists:zipwith(
+            fun(IC, {error, Error}) -> {error, parse_error(IC#edis_command.cmd, Error)};
+               (IC, {ok, Reply}) -> {IC, Reply}
+            end, Commands, Replies),
+      tcp_multi_result(Results, State#state{multi_queue = undefined, watched_keys = []})
+  end;
 queue(C, State) ->
   tcp_string("QUEUED", State#state{multi_queue = [C|State#state.multi_queue]}).
 
@@ -869,7 +898,7 @@ timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
 
 parse_error(Cmd, nested) -> <<Cmd/binary, " calls can not be nested">>;
 parse_error(Cmd, out_of_multi) -> <<Cmd/binary, " without MULTI">>;
-parse_error(Cmd, not_in_multi) -> <<Cmd/binary, " not supported in MULTI">>;
+parse_error(Cmd, not_in_multi) -> <<Cmd/binary, " inside MULTI is not allowed">>;
 parse_error(_Cmd, db_in_multi) -> <<"Transactions may include just one database">>;
 parse_error(Cmd, unknown_command) -> <<"unknown command '", Cmd/binary, "'">>;
 parse_error(_Cmd, no_such_key) -> <<"no such key">>;
