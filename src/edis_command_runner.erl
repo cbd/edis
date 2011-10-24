@@ -251,6 +251,14 @@ parse_command(#edis_command{cmd = <<"RENAMENX">>, args = [Key, Key]}) -> throw(s
 parse_command(C = #edis_command{cmd = <<"RENAMENX">>, args = [_Key, _NewKey]}) -> 
   C#edis_command{result_type = boolean, group=keys};
 parse_command(#edis_command{cmd = <<"RENAMENX">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"SORT">>, args = [Key | Options]}) ->
+  case parse_sort_options(Options) of
+    SortOptions = #edis_sort_options{store_in = none} ->
+      C#edis_command{args = [Key, SortOptions], result_type = multi_bulk, group=keys};
+    SortOptions ->
+      C#edis_command{args = [Key, SortOptions], result_type = number, group=keys}
+  end;
+parse_command(#edis_command{cmd = <<"SORT">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"TTL">>, args =[_Key]}) -> 
   C#edis_command{result_type = number, group=keys};
 parse_command(#edis_command{cmd = <<"TTL">>}) -> throw(bad_arg_num);
@@ -541,10 +549,9 @@ parse_command(#edis_command{cmd = <<"EXEC">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"WATCH">>, args = [_Key|_Keys]}) -> C#edis_command{result_type=ok,group=transaction};
 parse_command(#edis_command{cmd = <<"WATCH">>}) -> throw(bad_arg_num);
 %% -- Errors ---------------------------------------------------------------------------------------
-parse_command(#edis_command{cmd = <<"SYNC">>}) -> throw({error, "unsupported command"});
-parse_command(#edis_command{cmd = <<"SLOWLOG">>}) -> throw({error, "unsupported command"});
-parse_command(#edis_command{cmd = <<"SLAVEOF">>}) -> throw({error, "unsupported command"});
-parse_command(#edis_command{cmd = <<"SORT">>}) -> throw({error, "unsupported command"});
+parse_command(#edis_command{cmd = <<"SYNC">>}) -> throw(unsupported);
+parse_command(#edis_command{cmd = <<"SLOWLOG">>}) -> throw(unsupported);
+parse_command(#edis_command{cmd = <<"SLAVEOF">>}) -> throw(unsupported);
 parse_command(_Command) -> throw(unknown_command).
 
 -spec run(#edis_command{}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
@@ -896,6 +903,7 @@ tcp_zrange(Range, ShowScores, Limit, State) ->
 timeout_to_seconds(infinity) -> infinity;
 timeout_to_seconds(Timeout) -> edis_util:now() + Timeout.
 
+parse_error(Cmd, unsupported) -> <<Cmd/binary, " unsupported in this version">>;
 parse_error(Cmd, nested) -> <<Cmd/binary, " calls can not be nested">>;
 parse_error(Cmd, out_of_multi) -> <<Cmd/binary, " without MULTI">>;
 parse_error(Cmd, not_in_multi) -> <<Cmd/binary, " inside MULTI is not allowed">>;
@@ -916,3 +924,35 @@ parse_error(_Cmd, {bad_arg_num, SubCmd}) -> <<"wrong number of arguments for ", 
 parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
 parse_error(_Cmd, {error, Reason}) -> Reason;
 parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
+
+parse_sort_options(Options) ->
+  parse_sort_options(lists:map(fun edis_util:upper/1, Options), Options, #edis_sort_options{}).
+parse_sort_options([], [], SOptions) ->
+  SOptions#edis_sort_options{get = lists:reverse(SOptions#edis_sort_options.get)};
+parse_sort_options([<<"BY">>, _ | Rest], [_, Pattern | Rest2], SOptions) ->
+  parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{by = parse_field_pattern(Pattern)});
+parse_sort_options([<<"LIMIT">>, _, _ | Rest], [_, Offset, Count | Rest2], SOptions) ->
+  parse_sort_options(
+    Rest, Rest2, SOptions#edis_sort_options{limit = {edis_util:binary_to_integer(Offset, 0),
+                                                     edis_util:binary_to_integer(Count, 0)}});
+parse_sort_options([<<"GET">>, _ | Rest], [_, Pattern | Rest2], SOptions) ->
+  parse_sort_options(
+    Rest, Rest2,
+    SOptions#edis_sort_options{get =
+                                   [parse_field_pattern(Pattern)|SOptions#edis_sort_options.get]});
+parse_sort_options([<<"ASC">> | Rest], [_ | Rest2], SOptions) ->
+  parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{direction = asc});
+parse_sort_options([<<"DESC">> | Rest], [_ | Rest2], SOptions) ->
+  parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{direction = desc});
+parse_sort_options([<<"ALPHA">> | Rest], [_ | Rest2], SOptions) ->
+  parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{type = alpha});
+parse_sort_options([<<"STORE">>, _ | Rest], [_, Field | Rest2], SOptions) ->
+  parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{store_in = Field});
+parse_sort_options(_, _, _) -> throw(syntax).
+
+parse_field_pattern(Pattern) ->
+  case binary:split(Pattern, <<"->">>) of
+    [<<"#">>] -> self;
+    [Pattern] -> Pattern;
+    [Key, Field] -> {Key, Field}
+  end.

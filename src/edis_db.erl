@@ -1573,6 +1573,8 @@ handle_call(#edis_command{cmd = <<"EXEC">>, args = Commands}, From, State) ->
       end, {[], State}, Commands),
   {reply, {ok, lists:reverse(RevReplies)}, NewState};
 
+handle_call(#edis_command{}, _From, State) ->
+  {reply, {error, unsupported}, State};
 handle_call(X, _From, State) ->
   {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
