@@ -82,12 +82,10 @@ handle_cast({run, Cmd, Args}, State) ->
                                     db = State#state.db_index,
                                     args = Args},
     Command = parse_command(OriginalCommand),
+    ok = edis_db_monitor:notify(OriginalCommand),
     case State#state.multi_queue of
-      undefined ->
-        ok = edis_db_monitor:notify(OriginalCommand),
-        run(Command, State);
-      _InMulti ->
-        queue(Command, State)
+      undefined -> run(Command, State);
+      _InMulti -> queue(Command, State)
     end
   catch
     _:timeout ->
@@ -673,7 +671,9 @@ tcp_boolean(true, State) -> tcp_number(1, State);
 tcp_boolean(false, State) -> tcp_number(0, State).
 
 %% @private
--spec tcp_multi_bulk([binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_multi_bulk(undefined | [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_multi_bulk(undefined, State) ->
+  tcp_bulk(undefined, State);
 tcp_multi_bulk(Lines, State) ->
   lists:foldl(
     fun(Float, {noreply, AccState}) when is_float(Float) ->

@@ -437,7 +437,7 @@ handle_call(#edis_command{cmd = <<"PERSIST">>, args = [Key]}, _From, State) ->
 handle_call(#edis_command{cmd = <<"RANDOMKEY">>}, _From, State) ->
   Reply =
     case eleveldb:is_empty(State#state.db) of
-      true -> undefined;
+      true -> {ok, undefined};
       false ->
         %%TODO: Make it really random... not just on the first xx tops
         %%      BUT we need to keep it O(1)
@@ -670,8 +670,10 @@ handle_call(C = #edis_command{cmd = <<"BLPOP">>, args = Keys, expire = Timeout},
   end;
 handle_call(C = #edis_command{cmd = <<"-INTERNAL-BLPOP">>, args = [Key | Keys]}, From, State) ->
   case handle_call(C#edis_command{cmd = <<"LPOP">>, args = [Key]}, From, State) of
+    {reply, {ok, undefined}, NewState} ->
+      {reply, {error, not_found}, NewState};
     {reply, {ok, Value}, NewState} ->
-      {reply, {ok, {Key, Value}},
+      {reply, {ok, [Key, Value]},
        lists:foldl(
          fun(K, AccState) ->
                  unblock_list_ops(K, From, AccState)
@@ -695,8 +697,10 @@ handle_call(C = #edis_command{cmd = <<"BRPOP">>, args = Keys, expire = Timeout},
   end;
 handle_call(C = #edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key | Keys]}, From, State) ->
   case handle_call(C#edis_command{cmd = <<"RPOP">>, args = [Key]}, From, State) of
+    {reply, {ok, undefined}, NewState} ->
+      {reply, {error, not_found}, NewState};
     {reply, {ok, Value}, NewState} ->
-      {reply, {ok, {Key, Value}},
+      {reply, {ok, [Key, Value]},
        lists:foldl(
          fun(K, AccState) ->
                  unblock_list_ops(K, From, AccState)
@@ -779,7 +783,7 @@ handle_call(#edis_command{cmd = <<"LPOP">>, args = [Key]}, _From, State) ->
         {error, Reason}
     end,
   {reply, Reply, stamp(Key, State)};
-handle_call(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, From, State) ->
+handle_call(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
            fun(Item) ->
@@ -787,9 +791,8 @@ handle_call(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, From, State
                     Item#edis_item{value =
                                      lists:append(lists:reverse(Values), Item#edis_item.value)}}
            end, []),
-  gen_server:reply(From, Reply),
   NewState = check_blocked_list_ops(Key, State),
-  {noreply, stamp(Key, NewState)};
+  {reply, Reply, stamp(Key, NewState)};
 handle_call(#edis_command{cmd = <<"LPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
@@ -962,6 +965,8 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, 
                             throw(not_found)
                         end
                 end, undefined) of
+      {ok, undefined} ->
+        {ok, undefined};
       {ok, {delete, Value}} ->
         _ = eleveldb:delete(State#state.db, Source, []),
         update(State#state.db, Destination, list, linkedlist,
@@ -1739,7 +1744,7 @@ update(Db, Key, Type, Fun, ResultIfNotFound) ->
     end
   catch
     _:not_found ->
-      ResultIfNotFound;
+      {ok, ResultIfNotFound};
     _:Error ->
       {error, Error}
   end.
