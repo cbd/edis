@@ -6,7 +6,7 @@
                             get = [self]    :: [edis_sort_field()],
                             direction = asc :: asc | desc,
                             type = float    :: alpha | float,
-                            store_in = none :: none | binary()}).
+                            store_in        :: undefined | binary()}).
 
 -record(edis_command, {timestamp = edis_util:timestamp()
                                     :: float(),

@@ -509,6 +509,32 @@ handle_call(#edis_command{cmd = <<"TYPE">>, args = [Key]}, _From, State) ->
         {ok, atom_to_binary(Item#edis_item.type, utf8)}
     end,
   {reply, Reply, stamp(Key, read, State)};
+handle_call(#edis_command{cmd = <<"SORT">>, args = [Key, Options = #edis_sort_options{store_in = undefined}]}, _From, State) ->
+  Reply =
+      case get_item(State#state.db, [list, set, zset], Key) of
+        not_found -> {ok, []};
+        {error, Reason} -> {error, Reason};
+        Item -> sort(State#state.db, Item, Options)
+      end,
+  {reply, Reply, stamp(Key, read, State)};
+handle_call(C = #edis_command{cmd = <<"SORT">>, args = [Key, Options = #edis_sort_options{store_in = Destination}]}, From, State) ->
+  case handle_call(C#edis_command{args = [Key, Options#edis_sort_options{store_in = undefined}]}, From, State) of
+    {reply, {ok, []}, NewState} ->
+      {reply, {ok, []}, NewState};
+    {reply, {ok, Sorted}, NewState} ->
+      Reply =
+          case eleveldb:put(NewState#state.db, Destination,
+                            erlang:term_to_binary(
+                              #edis_item{key = Destination, type = list, encoding = linkedlist,
+                                         value = Sorted}), []) of
+            ok -> {ok, erlang:length(Sorted)};
+            {error, Reason} -> {error, Reason}
+          end,
+      {reply, Reply, stamp(Destination, write, NewState)};
+    OtherReply ->
+      OtherReply
+  end;
+
 %% -- Hashes ---------------------------------------------------------------------------------------
 handle_call(#edis_command{cmd = <<"HDEL">>, args = [Key | Fields]}, _From, State) ->
   {Reply, Action} =
@@ -1705,13 +1731,22 @@ exists_item(Db, Key) ->
   end.
 
 %% @private
+get_item(Db, Types, Key) when is_list(Types) ->
+  case get_item(Db, any, Key) of
+    Item = #edis_item{type = T} ->
+      case lists:member(T, Types) of
+        true -> Item;
+        false -> {error, bad_item_type}
+      end;
+    Other ->
+      Other
+  end;
 get_item(Db, Type, Key) ->
   case eleveldb:get(Db, Key, []) of
     {ok, Bin} ->
       Now = edis_util:now(),
       case erlang:binary_to_term(Bin) of
-        Item = #edis_item{type = T, expire = Expire}
-          when Type =:= any orelse T =:= Type ->
+        Item = #edis_item{type = T, expire = Expire} when Type =:= any orelse T =:= Type ->
           case Expire of
             Expire when Expire >= Now ->
               Item;
@@ -1852,3 +1887,6 @@ weighted_union(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
          (Score, AccScore) ->
               lists:Aggregate([Score * Weight, AccScore * AccWeight])
       end, ZSet, AccZSet)).
+
+sort(Db, Item, Options) ->
+  {ok, []}.

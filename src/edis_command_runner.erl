@@ -252,12 +252,8 @@ parse_command(C = #edis_command{cmd = <<"RENAMENX">>, args = [_Key, _NewKey]}) -
   C#edis_command{result_type = boolean, group=keys};
 parse_command(#edis_command{cmd = <<"RENAMENX">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"SORT">>, args = [Key | Options]}) ->
-  case parse_sort_options(Options) of
-    SortOptions = #edis_sort_options{store_in = none} ->
-      C#edis_command{args = [Key, SortOptions], result_type = multi_bulk, group=keys};
-    SortOptions ->
-      C#edis_command{args = [Key, SortOptions], result_type = number, group=keys}
-  end;
+  SortOptions = parse_sort_options(Options),
+  C#edis_command{args = [Key, SortOptions], result_type = sort, group=keys};
 parse_command(#edis_command{cmd = <<"SORT">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"TTL">>, args =[_Key]}) -> 
   C#edis_command{result_type = number, group=keys};
@@ -638,6 +634,7 @@ run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
     number -> tcp_number(Res, State);
     boolean -> tcp_boolean(Res, State);
     float -> tcp_float(Res, State);
+    sort -> tcp_sort(Res, State);
     zrange ->
       [_Key, _Min, _Max, ShowScores, Limit] = C#edis_command.args,
       tcp_zrange(Res, ShowScores, Limit, State)
@@ -705,6 +702,11 @@ tcp_multi_result(Results, State) ->
 -spec tcp_boolean(boolean(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
 tcp_boolean(true, State) -> tcp_number(1, State);
 tcp_boolean(false, State) -> tcp_number(0, State).
+
+%% @private
+-spec tcp_sort(undefined | pos_integer() | [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+tcp_sort(Number, State) when is_integer(Number) -> tcp_number(Number, State);
+tcp_sort(Lines, State) -> tcp_multi_bulk(Lines, State).
 
 %% @private
 -spec tcp_multi_bulk(undefined | [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
