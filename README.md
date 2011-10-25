@@ -10,6 +10,7 @@ Just run `$ make run` and open connections with your favourite redis client.
 * _MULTI_ doesn't support:
   - cross-db commands (i.e. _FLUSHALL_, _SELECT_, _MOVE_)
   - non-db commands (i.e _AUTH_, _CONFIG *_, _SHUTDOWN_, _MONITOR_)
+  - pub/sub commands (i.e. _PUBLISH_, _SUBSCRIBE_, _UNSUBSCRIBE_, _PSUBSCRIBE_, _PUNSUBSCRIBE_)
 
 ### Missing Features
 * Dynamic node configuration (i.e. the _SLAVEOF_ command is not implemented)

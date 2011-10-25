@@ -33,4 +33,6 @@ init([]) ->
                permanent, 1000, supervisor, [edis_client_sup]},
   DbSup = {edis_db_sup, {edis_db_sup, start_link, []},
            permanent, 1000, supervisor, [edis_db_sup]},
-  {ok, {{one_for_one, 5, 10}, [DbSup, ClientSup, ListenerSup]}}.
+  PubSubSup = {edis_pubsub_sup, {edis_pubsub_sup, start_link, []},
+               permanent, 1000, supervisor, [edis_pubsub_sup]},
+  {ok, {{one_for_one, 5, 10}, [PubSubSup, DbSup, ClientSup, ListenerSup]}}.

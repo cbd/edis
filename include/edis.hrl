@@ -8,6 +8,9 @@
                             type = default  :: alpha | default,
                             store_in        :: undefined | binary()}).
 
+-record(edis_message, {channel  :: binary(),
+                       message  :: binary()}).
+
 -record(edis_command, {timestamp = edis_util:timestamp()
                                     :: float(),
                        db           :: non_neg_integer(),

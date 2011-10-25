@@ -535,6 +535,15 @@ parse_command(C = #edis_command{cmd = <<"SAVE">>, args = []}) -> C#edis_command{
 parse_command(#edis_command{cmd = <<"SAVE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"SHUTDOWN">>, args = []}) -> C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"SHUTDOWN">>}) -> throw(bad_arg_num);
+%% -- Pub/Sub --------------------------------------------------------------------------------------
+parse_command(#edis_command{cmd = <<"PSUBSCRIBE">>, args = []}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"PSUBSCRIBE">>}) -> C#edis_command{result_type=number,group=pubsub};
+parse_command(C = #edis_command{cmd = <<"PUBLISH">>, args = [_Channel, _Message]}) -> C#edis_command{result_type=number,group=pubsub};
+parse_command(#edis_command{cmd = <<"PUBLISH">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"PUNSUBSCRIBE">>}) -> C#edis_command{result_type=number,group=pubsub};
+parse_command(#edis_command{cmd = <<"SUBSCRIBE">>, args = []}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"SUBSCRIBE">>}) -> C#edis_command{result_type=number,group=pubsub};
+parse_command(C = #edis_command{cmd = <<"UNSUBSCRIBE">>}) -> C#edis_command{result_type=number,group=pubsub};
 %% -- Transactions ---------------------------------------------------------------------------------
 parse_command(C = #edis_command{cmd = <<"MULTI">>, args = []}) -> C#edis_command{result_type=ok,group=transaction};
 parse_command(#edis_command{cmd = <<"MULTI">>}) -> throw(bad_arg_num);
@@ -620,6 +629,17 @@ run(C = #edis_command{cmd = <<"WATCH">>, args = Keys}, State) ->
                 end
         end, State#state.watched_keys, Keys),
   tcp_ok(State#state{watched_keys = NewWatchedKeys});
+%% -- Pub/Sub commands -----------------------------------------------------------------------------
+run(C = #edis_command{cmd = <<"PSUBSCRIBE">>, args = Patterns}, State) ->
+  throw(unsupported);
+run(#edis_command{cmd = <<"PUBLISH">>, args = [Channel, Message]}, State) ->
+  tcp_number(edis_pubsub:publish(Channel, Message), State);
+run(C = #edis_command{cmd = <<"PUNSUBSCRIBE">>, args = Patterns}, State) ->
+  throw(unsupported);
+run(C = #edis_command{cmd = <<"SUBSCRIBE">>}, State) ->
+  throw(unsupported);
+run(C = #edis_command{cmd = <<"UNSUBSCRIBE">>}, State) ->
+  throw(unsupported);
 %% -- All the other commands -----------------------------------------------------------------------
 run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
   Res = case Timeout of
@@ -655,6 +675,11 @@ queue(#edis_command{cmd = <<"SELECT">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"FLUSHALL">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"MOVE">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"MONITOR">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"PUBLISH">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"SUBSCRIBE">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"UNSUBSCRIBE">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"PSUBSCRIBE">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"PUNSUBSCRIBE">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"DISCARD">>}, State) ->
   tcp_ok(State#state{multi_queue = undefined});
 queue(C = #edis_command{cmd = <<"EXEC">>}, State) ->
