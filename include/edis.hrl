@@ -3,9 +3,9 @@
 -type edis_sort_field() :: self | binary() | {binary(), binary()}.
 -record(edis_sort_options, {by = self       :: edis_sort_field(),
                             limit           :: undefined | {integer(), integer()},
-                            get = [self]    :: [edis_sort_field()],
+                            get = []        :: [edis_sort_field()],
                             direction = asc :: asc | desc,
-                            type = float    :: alpha | float,
+                            type = default  :: alpha | default,
                             store_in        :: undefined | binary()}).
 
 -record(edis_command, {timestamp = edis_util:timestamp()

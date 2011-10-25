@@ -922,7 +922,7 @@ parse_error(_Cmd, not_float) -> <<"value is not a double">>;
 parse_error(_Cmd, bad_item_type) -> <<"Operation against a key holding the wrong kind of value">>;
 parse_error(_Cmd, source_equals_destination) -> <<"source and destinantion objects are the same">>;
 parse_error(Cmd, bad_arg_num) -> <<"wrong number of arguments for '", Cmd/binary, "' command">>;
-parse_error(_Cmd, {bad_arg_num, SubCmd}) -> <<"wrong number of arguments for ", SubCmd/binary>>;
+parse_error(_Cmd, {bad_arg_num, SubCmd}) -> ["wrong number of arguments for ", SubCmd];
 parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
 parse_error(_Cmd, {error, Reason}) -> Reason;
 parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
@@ -930,7 +930,10 @@ parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
 parse_sort_options(Options) ->
   parse_sort_options(lists:map(fun edis_util:upper/1, Options), Options, #edis_sort_options{}).
 parse_sort_options([], [], SOptions) ->
-  SOptions#edis_sort_options{get = lists:reverse(SOptions#edis_sort_options.get)};
+  SOptions#edis_sort_options{get = case SOptions#edis_sort_options.get of
+                                     [] -> [self];
+                                     Patterns -> lists:reverse(Patterns)
+                                   end};
 parse_sort_options([<<"BY">>, _ | Rest], [_, Pattern | Rest2], SOptions) ->
   parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{by = parse_field_pattern(Pattern)});
 parse_sort_options([<<"LIMIT">>, _, _ | Rest], [_, Offset, Count | Rest2], SOptions) ->
