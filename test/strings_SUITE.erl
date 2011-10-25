@@ -25,36 +25,40 @@ connect_erldis(Times) ->
 
 set_and_get(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
-	ok = erldis_client:sr_scall(Client, [<<"set">>,<<"name">>,<<"wrong name">>]),
-	ok = erldis_client:sr_scall(Client, [<<"set">>,<<"name">>,<<"cool name">>]),
-	<<"cool name">> = erldis_client:sr_scall(Client, [<<"get">>,<<"name">>]),
-	nil = erldis_client:sr_scall(Client, [<<"get">>,<<"lastname">>]),
+	ok = erldis_client:sr_scall(Client, [<<"set">>,<<"string">>,<<"foo">>]),
+	ok = erldis_client:sr_scall(Client, [<<"set">>,<<"string">>,<<"bar">>]),
+	<<"bar">> = erldis_client:sr_scall(Client, [<<"get">>,<<"string">>]),
+	nil = erldis_client:sr_scall(Client, [<<"get">>,<<"string2">>]),
 	
 	LongString = list_to_binary(string:copies("abcd",100000)),
 	ok = erldis_client:sr_scall(Client, [<<"set">>,<<"new_string">>,LongString]),
 	LongString = erldis_client:sr_scall(Client, [<<"get">>,<<"new_string">>]),
+
+	%% Try to get a list
+	3  = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,<<"a">>,<<"b">>,<<"c">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client, [<<"get">>,<<"list">>]),
 	
-	{error,<<"ERR wrong number of arguments for 'SET' command">>}  = erldis_client:sr_scall(Client, [<<"set">>,<<"name">>,<<"my">>,<<"name">>]),
-	{error,<<"ERR wrong number of arguments for 'SET' command">>}  = erldis_client:sr_scall(Client, [<<"set">>,<<"name">>]),
+	{error,<<"ERR wrong number of arguments for 'SET' command">>}  = erldis_client:sr_scall(Client, [<<"set">>,<<"string">>,<<"foo">>,<<"bar">>]),
+	{error,<<"ERR wrong number of arguments for 'SET' command">>}  = erldis_client:sr_scall(Client, [<<"set">>,<<"string">>]),
 	{error,<<"ERR wrong number of arguments for 'SET' command">>}  = erldis_client:sr_scall(Client, [<<"set">>]),
 	    
 	{error,<<"ERR wrong number of arguments for 'GET' command">>} = erldis_client:sr_scall(Client, [<<"get">>]),
-	{error,<<"ERR wrong number of arguments for 'GET' command">>} = erldis_client:sr_scall(Client, [<<"get">>,<<"name">>,<<"andLastName">>]).
-    %% TODO
-	%% try to get a set, a hash, a sorted set and a list
+	{error,<<"ERR wrong number of arguments for 'GET' command">>} = erldis_client:sr_scall(Client, [<<"get">>,<<"string">>,<<"string2">>]).
 
 append(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
 	
-	10 = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>,<<"my name is">>]),
-	14 = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>,<<" Tom">>]),
+	3 = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>,<<"foo">>]),
+	7 = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>,<<" bar">>]),
 	
-	{error,<<"ERR wrong number of arguments for 'APPEND' command">>} = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>,<<"Tom">>,<<"Williams">>]),
-	{error,<<"ERR wrong number of arguments for 'APPEND' command">>} = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>]),
-	
-	<<"my name is Tom">> = erldis_client:sr_scall(Client, [<<"get">>,<<"string">>]).
-	%% TODO
-	%% try with a set, a hash, a sorted set and a list
+	<<"foo bar">> = erldis_client:sr_scall(Client, [<<"get">>,<<"string">>]),
+
+	%% Try with a list
+	3  = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,<<"a">>,<<"b">>,<<"c">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"append">>,<<"list">>,<<"foo">>]),
+
+	{error,<<"ERR wrong number of arguments for 'APPEND' command">>} = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>,<<"foo">>,<<"bar">>]),
+	{error,<<"ERR wrong number of arguments for 'APPEND' command">>} = erldis_client:sr_scall(Client,[<<"append">>,<<"string">>]).
 	
 decr(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
