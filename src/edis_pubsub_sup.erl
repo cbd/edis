@@ -36,8 +36,5 @@ reload() ->
 -spec init([]) -> {ok, {{one_for_one, 5, 10}, [supervisor:child_spec()]}}.
 init([]) ->
   ?INFO("Pub/Sub supervisor initialized~n", []),
-  ChannelMgr = {edis_pubsub_channel, {edis_pubsub, start_link, [edis_pubsub_channel]},
-                permanent, brutal_kill, worker, [edis_pubsub]},
-  PatternMgr = {edis_pubsub_pattern, {edis_pubsub, start_link, [edis_pubsub_pattern]},
-                permanent, brutal_kill, worker, [edis_pubsub]},
-  {ok, {{one_for_one, 5, 1}, [ChannelMgr, PatternMgr]}}.
+  Mgr = {edis_pubsub, {edis_pubsub, start_link, []}, permanent, brutal_kill, worker, [edis_pubsub]},
+  {ok, {{one_for_one, 5, 1}, [Mgr]}}.
