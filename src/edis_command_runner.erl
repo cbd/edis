@@ -16,13 +16,14 @@
 
 -include("edis.hrl").
 
--record(state, {socket                  :: port(),
-                db = edis_db:process(0) :: atom(),
-                db_index = 0            :: non_neg_integer(),
-                peerport                :: pos_integer(),
-                authenticated = false   :: boolean(),
-                multi_queue = undefined :: undefined | [{binary(), [binary()]}],
-                watched_keys = []       :: [{binary(), undefined | non_neg_integer()}]}).
+-record(state, {socket                    :: port(),
+                db = edis_db:process(0)   :: atom(),
+                db_index = 0              :: non_neg_integer(),
+                peerport                  :: pos_integer(),
+                authenticated = false     :: boolean(),
+                multi_queue = undefined   :: undefined | [{binary(), [binary()]}],
+                watched_keys = []         :: [{binary(), undefined | non_neg_integer()}],
+                subscriptions = undefined :: undefined | {gb_set(), gb_set()}}).
 -opaque state() :: #state{}.
 
 -export([start_link/1, stop/1, err/2, run/3]).
@@ -72,7 +73,7 @@ init(Socket) ->
 handle_call(X, _From, State) -> {stop, {unexpected_request, X}, {unexpected_request, X}, State}.
 
 %% @hidden
--spec handle_cast(stop | {err, binary()} | {run, binary(), [binary()]}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec handle_cast(stop | {err, binary()} | {run, binary(), [binary()]}, state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 handle_cast(stop, State) ->
   {stop, normal, State};
 handle_cast({err, Message}, State) ->
@@ -84,9 +85,11 @@ handle_cast({run, Cmd, Args}, State) ->
                                     args = Args},
     Command = parse_command(OriginalCommand),
     ok = edis_db_monitor:notify(OriginalCommand),
-    case State#state.multi_queue of
-      undefined -> run(Command, State);
-      _InMulti -> queue(Command, State)
+    case {State#state.multi_queue, State#state.subscriptions} of
+      {undefined, undefined} -> run(Command, State);
+      {undefined, _InPubSub} -> pubsub(Command, State);
+      {_InMulti, undefined} -> queue(Command, State);
+      {_InMulti, _InPubSub} -> throw(invalid_context)
     end
   catch
     _:timeout ->
@@ -101,6 +104,25 @@ handle_cast({run, Cmd, Args}, State) ->
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
+handle_info(#edis_message{} = Message, State = #state{subscriptions = undefined}) ->
+  ?WARN("Unexpected message: ~p~n", [Message]),
+  {noreply, State, hibernate};
+handle_info(#edis_message{} = Message, State) ->
+  {ChannelSet, PatternSet} = State#state.subscriptions,
+  case gb_sets:is_member(Message#edis_message.channel, ChannelSet) of
+    true ->
+      tcp_multi_bulk([<<"message">>, Message#edis_message.channel, Message#edis_message.message], State);
+    false ->
+      case gb_sets:fold(fun(_, true) -> true;
+                           (Pattern, false) ->
+                                re:run(Message#edis_message.channel, Pattern) /= nomatch
+                        end, false, PatternSet) of
+        true ->
+          tcp_multi_bulk([<<"pmessage">>, Message#edis_message.channel, Message#edis_message.message], State);
+        false ->
+          {noreply, State, hibernate}
+      end
+  end;
 handle_info(#edis_command{db = 0} = Command, State) ->
   tcp_string(io_lib:format("~p ~s ~s", [Command#edis_command.timestamp,
                                         Command#edis_command.cmd,
@@ -535,6 +557,17 @@ parse_command(C = #edis_command{cmd = <<"SAVE">>, args = []}) -> C#edis_command{
 parse_command(#edis_command{cmd = <<"SAVE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"SHUTDOWN">>, args = []}) -> C#edis_command{result_type=ok,group=server};
 parse_command(#edis_command{cmd = <<"SHUTDOWN">>}) -> throw(bad_arg_num);
+%% -- Pub/Sub --------------------------------------------------------------------------------------
+parse_command(#edis_command{cmd = <<"PSUBSCRIBE">>, args = []}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"PSUBSCRIBE">>, args = Patterns}) ->
+  C#edis_command{args = lists:map(fun edis_util:glob_to_re/1, Patterns), result_type=number,group=pubsub};
+parse_command(C = #edis_command{cmd = <<"PUBLISH">>, args = [_Channel, _Message]}) -> C#edis_command{result_type=number,group=pubsub};
+parse_command(#edis_command{cmd = <<"PUBLISH">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"PUNSUBSCRIBE">>, args = Patterns}) ->
+  C#edis_command{args = lists:map(fun edis_util:glob_to_re/1, Patterns), result_type=number,group=pubsub};
+parse_command(#edis_command{cmd = <<"SUBSCRIBE">>, args = []}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"SUBSCRIBE">>}) -> C#edis_command{result_type=number,group=pubsub};
+parse_command(C = #edis_command{cmd = <<"UNSUBSCRIBE">>}) -> C#edis_command{result_type=number,group=pubsub};
 %% -- Transactions ---------------------------------------------------------------------------------
 parse_command(C = #edis_command{cmd = <<"MULTI">>, args = []}) -> C#edis_command{result_type=ok,group=transaction};
 parse_command(#edis_command{cmd = <<"MULTI">>}) -> throw(bad_arg_num);
@@ -550,11 +583,11 @@ parse_command(#edis_command{cmd = <<"SLOWLOG">>}) -> throw(unsupported);
 parse_command(#edis_command{cmd = <<"SLAVEOF">>}) -> throw(unsupported);
 parse_command(_Command) -> throw(unknown_command).
 
--spec run(#edis_command{}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec run(#edis_command{}, state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 %% -- Commands that don't require authorization ----------------------------------------------------
 run(#edis_command{cmd = <<"QUIT">>}, State) ->
   case tcp_ok(State) of
-    {noreply, NewState} -> {stop, normal, NewState};
+    {noreply, NewState, hibernate} -> {stop, normal, NewState};
     Error -> Error
   end;
 run(#edis_command{cmd = <<"AUTH">>, args = [Password]}, State) ->
@@ -620,6 +653,18 @@ run(C = #edis_command{cmd = <<"WATCH">>, args = Keys}, State) ->
                 end
         end, State#state.watched_keys, Keys),
   tcp_ok(State#state{watched_keys = NewWatchedKeys});
+%% -- Pub/Sub commands -----------------------------------------------------------------------------
+run(C = #edis_command{cmd = <<"PSUBSCRIBE">>}, State) ->
+  ok = edis_pubsub:add_sup_handler(),
+  pubsub(C, State#state{subscriptions = {gb_sets:empty(), gb_sets:empty()}});
+run(#edis_command{cmd = <<"PUBLISH">>, args = [Channel, Message]}, State) ->
+  ok = edis_pubsub:notify(#edis_message{channel = Channel, message = Message}),
+  tcp_number(edis_pubsub:count_handlers(), State);
+run(#edis_command{cmd = <<"PUNSUBSCRIBE">>}, _State) -> throw(out_of_pubsub);
+run(C = #edis_command{cmd = <<"SUBSCRIBE">>}, State) ->
+  ok = edis_pubsub:add_sup_handler(),
+  pubsub(C, State#state{subscriptions = {gb_sets:empty(), gb_sets:empty()}});
+run(#edis_command{cmd = <<"UNSUBSCRIBE">>}, _State) -> throw(out_of_pubsub);
 %% -- All the other commands -----------------------------------------------------------------------
 run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
   Res = case Timeout of
@@ -640,10 +685,10 @@ run(C = #edis_command{result_type = ResType, timeout = Timeout}, State) ->
       tcp_zrange(Res, ShowScores, Limit, State)
   end.
 
--spec queue(#edis_command{}, state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec queue(#edis_command{}, state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 queue(#edis_command{cmd = <<"QUIT">>}, State) -> %% User may quit even on MULTI block
   case tcp_ok(State) of
-    {noreply, NewState} -> {stop, normal, NewState};
+    {noreply, NewState, hibernate} -> {stop, normal, NewState};
     Error -> Error
   end;
 queue(#edis_command{cmd = <<"MULTI">>}, _State) -> throw(nested);
@@ -655,6 +700,11 @@ queue(#edis_command{cmd = <<"SELECT">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"FLUSHALL">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"MOVE">>}, _State) -> throw(db_in_multi);
 queue(#edis_command{cmd = <<"MONITOR">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"PUBLISH">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"SUBSCRIBE">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"UNSUBSCRIBE">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"PSUBSCRIBE">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"PUNSUBSCRIBE">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"DISCARD">>}, State) ->
   tcp_ok(State#state{multi_queue = undefined});
 queue(C = #edis_command{cmd = <<"EXEC">>}, State) ->
@@ -680,69 +730,137 @@ queue(C = #edis_command{cmd = <<"EXEC">>}, State) ->
 queue(C, State) ->
   tcp_string("QUEUED", State#state{multi_queue = [C|State#state.multi_queue]}).
 
+-spec pubsub(#edis_command{}, state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
+pubsub(#edis_command{cmd = <<"QUIT">>}, State) -> %% User may quit even on PUBSUB block
+  case tcp_ok(State) of
+    {noreply, NewState, hibernate} -> {stop, normal, NewState};
+    Error -> Error
+  end;
+pubsub(#edis_command{cmd = <<"PSUBSCRIBE">>, args = Patterns}, State) ->
+  Subscriptons =
+    lists:foldl(
+      fun(Pattern, {AccChannelSet, AccPatternSet}) ->
+              NextPatternSet = gb_sets:add_element(Pattern, AccPatternSet),
+              tcp_multi_bulk([<<"psubscribe">>, Pattern,
+                              gb_sets:size(AccChannelSet) + gb_sets:size(NextPatternSet)], State),
+              {AccChannelSet, NextPatternSet}
+      end, State#state.subscriptions, Patterns),
+  {noreply, State#state{subscriptions = Subscriptons}, hibernate};
+pubsub(C = #edis_command{cmd = <<"PUNSUBSCRIBE">>, args = []}, State) ->
+  {_ChannelSet, PatternSet} = State#state.subscriptions,
+  pubsub(C#edis_command{args = gb_sets:to_list(PatternSet)}, State);
+pubsub(#edis_command{cmd = <<"PUNSUBSCRIBE">>, args = Patterns}, State) ->
+  {ChannelSet, PatternSet} =
+    lists:foldl(
+      fun(Pattern, {AccChannelSet, AccPatternSet}) ->
+              NextPatternSet = gb_sets:del_element(Pattern, AccPatternSet),
+              tcp_multi_bulk([<<"punsubscribe">>, Pattern,
+                              gb_sets:size(AccChannelSet) + gb_sets:size(NextPatternSet)], State),
+              {AccChannelSet, NextPatternSet}
+      end, State#state.subscriptions, Patterns),
+  case gb_sets:size(ChannelSet) + gb_sets:size(PatternSet) of
+    0 ->
+      ok = edis_pubsub:delete_handler(),
+      {noreply, State#state{subscriptions = undefined}, hibernate};
+    _ ->
+      {noreply, State#state{subscriptions = {ChannelSet, PatternSet}}, hibernate}
+  end;
+pubsub(#edis_command{cmd = <<"SUBSCRIBE">>, args = Channels}, State) ->
+  Subscriptons =
+    lists:foldl(
+      fun(Channel, {AccChannelSet, AccPatternSet}) ->
+              NextChannelSet = gb_sets:add_element(Channel, AccChannelSet),
+              tcp_multi_bulk([<<"subscribe">>, Channel,
+                              gb_sets:size(NextChannelSet) + gb_sets:size(AccPatternSet)], State),
+              {NextChannelSet, AccPatternSet}
+      end, State#state.subscriptions, Channels),
+  {noreply, State#state{subscriptions = Subscriptons}, hibernate};
+pubsub(C = #edis_command{cmd = <<"UNSUBSCRIBE">>, args = []}, State) ->
+  {ChannelSet, _PatternSet} = State#state.subscriptions,
+  pubsub(C#edis_command{args = gb_sets:to_list(ChannelSet)}, State);
+pubsub(#edis_command{cmd = <<"UNSUBSCRIBE">>, args = Channels}, State) ->
+  {ChannelSet, PatternSet} =
+    lists:foldl(
+      fun(Channel, {AccChannelSet, AccPatternSet}) ->
+              NextChannelSet = gb_sets:del_element(Channel, AccChannelSet),
+              tcp_multi_bulk([<<"unsubscribe">>, Channel,
+                              gb_sets:size(NextChannelSet) + gb_sets:size(AccPatternSet)], State),
+              {NextChannelSet, AccPatternSet}
+      end, State#state.subscriptions, Channels),
+  case gb_sets:size(ChannelSet) + gb_sets:size(PatternSet) of
+    0 ->
+      ok = edis_pubsub:delete_handler(),
+      {noreply, State#state{subscriptions = undefined}, hibernate};
+    _ ->
+      {noreply, State#state{subscriptions = {ChannelSet, PatternSet}}, hibernate}
+  end;
+pubsub(_C, _State) -> throw(not_in_pubsub).
+
 %% @private
--spec tcp_multi_result([{edis:result_type() | error, term()} | {error, iodata()}], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_multi_result([{edis:result_type() | error, term()} | {error, iodata()}], state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_multi_result(Results, State) ->
   lists:foldl(
-    fun({#edis_command{result_type = ok}, _}, {noreply, AccState}) -> tcp_ok(AccState);
-       ({#edis_command{result_type = string}, Res}, {noreply, AccState}) -> tcp_string(Res, AccState);
-       ({#edis_command{result_type = bulk}, Res}, {noreply, AccState}) -> tcp_bulk(Res, AccState);
-       ({#edis_command{result_type = multi_bulk}, Res}, {noreply, AccState}) -> tcp_multi_bulk(Res, AccState);
-       ({#edis_command{result_type = number}, Res}, {noreply, AccState}) -> tcp_number(Res, AccState);
-       ({#edis_command{result_type = boolean}, Res}, {noreply, AccState}) -> tcp_boolean(Res, AccState);
-       ({#edis_command{result_type = float}, Res}, {noreply, AccState}) -> tcp_float(Res, AccState);
-       ({C = #edis_command{result_type = zrange}, Res}, {noreply, AccState}) ->
+    fun({#edis_command{result_type = ok}, _}, {noreply, AccState, hibernate}) -> tcp_ok(AccState);
+       ({#edis_command{result_type = string}, Res}, {noreply, AccState, hibernate}) -> tcp_string(Res, AccState);
+       ({#edis_command{result_type = bulk}, Res}, {noreply, AccState, hibernate}) -> tcp_bulk(Res, AccState);
+       ({#edis_command{result_type = multi_bulk}, Res}, {noreply, AccState, hibernate}) -> tcp_multi_bulk(Res, AccState);
+       ({#edis_command{result_type = number}, Res}, {noreply, AccState, hibernate}) -> tcp_number(Res, AccState);
+       ({#edis_command{result_type = boolean}, Res}, {noreply, AccState, hibernate}) -> tcp_boolean(Res, AccState);
+       ({#edis_command{result_type = float}, Res}, {noreply, AccState, hibernate}) -> tcp_float(Res, AccState);
+       ({C = #edis_command{result_type = zrange}, Res}, {noreply, AccState, hibernate}) ->
             [_Key, _Min, _Max, ShowScores, Limit] = C#edis_command.args,
             tcp_zrange(Res, ShowScores, Limit, AccState);
-       ({error, Err}, {noreply, AccState}) -> tcp_err(Err, AccState);
+       ({error, Err}, {noreply, AccState, hibernate}) -> tcp_err(Err, AccState);
        (_Result, Error) -> Error
     end, tcp_send(["*", integer_to_list(erlang:length(Results))], State), Results).
 
 %% @private
--spec tcp_boolean(boolean(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_boolean(boolean(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_boolean(true, State) -> tcp_number(1, State);
 tcp_boolean(false, State) -> tcp_number(0, State).
 
 %% @private
--spec tcp_sort(undefined | pos_integer() | [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_sort(undefined | pos_integer() | [binary()], state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_sort(Number, State) when is_integer(Number) -> tcp_number(Number, State);
 tcp_sort(Lines, State) -> tcp_multi_bulk(Lines, State).
 
 %% @private
--spec tcp_multi_bulk(undefined | [binary()], state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_multi_bulk(undefined | [binary() | float() | integer()], state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_multi_bulk(undefined, State) ->
   tcp_bulk(undefined, State);
 tcp_multi_bulk(Lines, State) ->
   lists:foldl(
-    fun(Float, {noreply, AccState}) when is_float(Float) ->
+    fun(Float, {noreply, AccState, hibernate}) when is_float(Float) ->
             tcp_float(Float, AccState);
-       (Line, {noreply, AccState}) ->
+       (Integer, {noreply, AccState, hibernate}) when is_integer(Integer) ->
+            tcp_number(Integer, AccState);
+       (Line, {noreply, AccState, hibernate}) ->
             tcp_bulk(Line, AccState);
        (_Line, Error) ->
             Error
     end, tcp_send(["*", integer_to_list(erlang:length(Lines))], State), Lines).
 
 %% @private
--spec tcp_bulk(undefined | iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_bulk(undefined | iodata(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_bulk(undefined, State) ->
   tcp_send("$-1", State);
 tcp_bulk(<<>>, State) ->
   tcp_send("$0\r\n", State);
 tcp_bulk(Message, State) ->
   case tcp_send(["$", integer_to_list(iolist_size(Message))], State) of
-    {noreply, NewState} -> tcp_send(Message, NewState);
+    {noreply, NewState, hibernate} -> tcp_send(Message, NewState);
     Error -> Error
   end.
 
 %% @private
--spec tcp_number(undefined | integer(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_number(undefined | integer(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_number(undefined, State) ->
   tcp_bulk(undefined, State);
 tcp_number(Number, State) ->
   tcp_send([":", integer_to_list(Number)], State).
 
 %% @private
--spec tcp_float(undefined | float(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_float(undefined | float(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_float(undefined, State) ->
   tcp_bulk(undefined, State);
 tcp_float(Float, State) ->
@@ -752,28 +870,28 @@ tcp_float(Float, State) ->
   end.
 
 %% @private
--spec tcp_err(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_err(binary(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_err(Message, State) ->
   tcp_send(["-ERR ", Message], State).
 
 %% @private
--spec tcp_ok(state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_ok(state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_ok(State) ->
   tcp_string("OK", State).
 
 %% @private
--spec tcp_string(binary(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_string(binary(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_string(Message, State) ->
   tcp_send(["+", Message], State).
 
 
 %% @private
--spec tcp_send(iodata(), state()) -> {noreply, state()} | {stop, normal | {error, term()}, state()}.
+-spec tcp_send(iodata(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_send(Message, State) ->
   ?CDEBUG(data, "~p << ~s~n", [State#state.peerport, Message]),
   try gen_tcp:send(State#state.socket, [Message, "\r\n"]) of
     ok ->
-      {noreply, State};
+      {noreply, State, hibernate};
     {error, closed} ->
       ?DEBUG("Connection closed~n", []),
       {stop, normal, State};
@@ -910,6 +1028,8 @@ parse_error(Cmd, nested) -> <<Cmd/binary, " calls can not be nested">>;
 parse_error(Cmd, out_of_multi) -> <<Cmd/binary, " without MULTI">>;
 parse_error(Cmd, not_in_multi) -> <<Cmd/binary, " inside MULTI is not allowed">>;
 parse_error(_Cmd, db_in_multi) -> <<"Transactions may include just one database">>;
+parse_error(Cmd, out_of_pubsub) -> <<Cmd/binary, " outside PUBSUB mode is not allowed">>;
+parse_error(_Cmd, not_in_pubsub) -> <<"only (P)SUBSCRIBE / (P)UNSUBSCRIBE / QUIT allowed in this context">>;
 parse_error(Cmd, unknown_command) -> <<"unknown command '", Cmd/binary, "'">>;
 parse_error(_Cmd, no_such_key) -> <<"no such key">>;
 parse_error(_Cmd, syntax) -> <<"syntax error">>;
@@ -922,7 +1042,7 @@ parse_error(_Cmd, not_float) -> <<"value is not a double">>;
 parse_error(_Cmd, bad_item_type) -> <<"Operation against a key holding the wrong kind of value">>;
 parse_error(_Cmd, source_equals_destination) -> <<"source and destinantion objects are the same">>;
 parse_error(Cmd, bad_arg_num) -> <<"wrong number of arguments for '", Cmd/binary, "' command">>;
-parse_error(_Cmd, {bad_arg_num, SubCmd}) -> <<"wrong number of arguments for ", SubCmd/binary>>;
+parse_error(_Cmd, {bad_arg_num, SubCmd}) -> ["wrong number of arguments for ", SubCmd];
 parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
 parse_error(_Cmd, {error, Reason}) -> Reason;
 parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
@@ -930,7 +1050,10 @@ parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
 parse_sort_options(Options) ->
   parse_sort_options(lists:map(fun edis_util:upper/1, Options), Options, #edis_sort_options{}).
 parse_sort_options([], [], SOptions) ->
-  SOptions#edis_sort_options{get = lists:reverse(SOptions#edis_sort_options.get)};
+  SOptions#edis_sort_options{get = case SOptions#edis_sort_options.get of
+                                     [] -> [self];
+                                     Patterns -> lists:reverse(Patterns)
+                                   end};
 parse_sort_options([<<"BY">>, _ | Rest], [_, Pattern | Rest2], SOptions) ->
   parse_sort_options(Rest, Rest2, SOptions#edis_sort_options{by = parse_field_pattern(Pattern)});
 parse_sort_options([<<"LIMIT">>, _, _ | Rest], [_, Offset, Count | Rest2], SOptions) ->

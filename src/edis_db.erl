@@ -1036,7 +1036,7 @@ handle_call(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, _From, State
            end, 0),
   {reply, Reply, stamp(Key, write, State)};
 %% -- Sets -----------------------------------------------------------------------------------------
-handle_call(#edis_command{cmd = <<"SADD">>, args = [Key, Members]}, _From, State) ->
+handle_call(#edis_command{cmd = <<"SADD">>, args = [Key | Members]}, _From, State) ->
   Reply =
     update(State#state.db, Key, set, hashtable,
            fun(Item) ->
@@ -1888,5 +1888,63 @@ weighted_union(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
               lists:Aggregate([Score * Weight, AccScore * AccWeight])
       end, ZSet, AccZSet)).
 
-sort(Db, Item, Options) ->
-  {ok, []}.
+sort(_Db, _Item, #edis_sort_options{limit = {_Off, 0}}) -> {ok, []};
+sort(_Db, _Item, #edis_sort_options{limit = {Off, _Lim}}) when Off < 0 -> {ok, []};
+sort(Db, #edis_item{type = Type, value = Value}, Options) ->
+  Elements =
+    case Type of
+      list -> Value;
+      set -> gb_sets:to_list(Value);
+      zset -> [Member || {_Score, Member} <- zsets:to_list(Value)]
+    end,
+  Mapped =
+    lists:map(fun(Element) ->
+                      {retrieve(Db, Element, Options#edis_sort_options.by), Element}
+              end, Elements),
+  Sorted =
+    case {Options#edis_sort_options.type, Options#edis_sort_options.direction} of
+      {default, asc} -> lists:sort(fun default_sort/2, Mapped);
+      {default, desc} -> lists:reverse(lists:sort(fun default_sort/2, Mapped));
+      {alpha, asc} -> lists:sort(Mapped);
+      {alpha, desc} -> lists:reverse(lists:sort(Mapped))
+    end,
+  Limited =
+    case Options#edis_sort_options.limit of
+      undefined -> Sorted;
+      {Off, _Lim} when Off >= length(Sorted) -> [];
+      {Off, Lim} when Lim < 0 -> lists:nthtail(Off, Sorted);
+      {Off, Lim} -> lists:sublist(Sorted, Off+1, Lim)
+    end,
+  Complete =
+    lists:flatmap(
+      fun({_Map, Element}) ->
+              lists:map(
+                fun(Pattern) -> retrieve(Db, Element, Pattern) end,
+                Options#edis_sort_options.get)
+      end, Limited),
+  {ok, Complete}.
+
+default_sort({_Binary, _}, {undefined, _}) -> true; %% {binary() | atom()} =< atom
+default_sort({undefined, _}, {_Binary, _}) -> false; %% binary() < atom()
+default_sort({Bin1, _}, {Bin2, _}) ->
+  edis_util:binary_to_float(Bin1, undefined) =< edis_util:binary_to_float(Bin2, undefined).
+
+retrieve(_Db, Element, self) -> Element;
+retrieve(Db, Element, {KeyPattern, FieldPattern}) ->
+  Key = binary:replace(KeyPattern, <<"*">>, Element, [global]),
+  Field = binary:replace(FieldPattern, <<"*">>, Element, [global]),
+  case get_item(Db, hash, Key) of
+    not_found -> undefined;
+    {error, _Reason} -> undefined;
+    Item -> case dict:find(Field, Item#edis_item.value) of
+              {ok, Value} -> Value;
+              error -> undefined
+            end
+  end;
+retrieve(Db, Element, Pattern) ->
+  Key = binary:replace(Pattern, <<"*">>, Element, [global]),
+  case get_item(Db, string, Key) of
+    #edis_item{type = string, value = Value} -> Value;
+    not_found -> undefined;
+    {error, _Reason} -> undefined
+  end.

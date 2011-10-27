@@ -10,6 +10,9 @@ Just run `$ make run` and open connections with your favourite redis client.
 * _MULTI_ doesn't support:
   - cross-db commands (i.e. _FLUSHALL_, _SELECT_, _MOVE_)
   - non-db commands (i.e _AUTH_, _CONFIG *_, _SHUTDOWN_, _MONITOR_)
+  - pub/sub commands (i.e. _PUBLISH_, _SUBSCRIBE_, _UNSUBSCRIBE_, _PSUBSCRIBE_, _PUNSUBSCRIBE_)
+* _(P)UNSUBSCRIBE_ commands are not allowed outside _PUBSUB_ mode
+* _PUBLISH_ response is not precise: it's the amount of all clients subscribed to any channel and/or pattern, not just those that will handle the message. On the other hand it runs in _O(1)_ because it's asynchronous, it just dispatches the message.
 
 ### Missing Features
 * Dynamic node configuration (i.e. the _SLAVEOF_ command is not implemented)
