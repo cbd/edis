@@ -13,7 +13,7 @@
 
 -record(edis_command, {timestamp = edis_util:timestamp()
                                     :: float(),
-                       db           :: non_neg_integer(),
+                       db = 0       :: non_neg_integer(),
                        cmd          :: binary(),
                        args = []    :: [term()],
                        group        :: keys | strings | hashes | lists | sets | zsets | pub_sub | transactions | connection | server,

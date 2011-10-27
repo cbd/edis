@@ -7,7 +7,7 @@
 all() ->
  	[push_llen_lindex,del,long_list].
  	
-init_per_testcase(TestCase,Config) ->
+init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
 
     erldis_client:sr_scall(Client,[<<"flushdb">>]),
