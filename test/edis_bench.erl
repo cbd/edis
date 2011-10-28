@@ -12,12 +12,13 @@
 
 -include("edis.hrl").
 
--type option() :: {rounds, pos_integer()} | {extra_args, [term()]} | {outliers, pos_integer()} |
-                  {columns, 80} | {first_col, 1} | {rows, 25} | debug | {constant, number()}.
+-type option() :: {start, pos_integer} | {rounds, pos_integer()} | {extra_args, [term()]} |
+        {outliers, pos_integer()} | {columns, 80} | {first_col, 1} | {rows, 25} |
+        debug | {constant, number()}.
 -export_type([option/0]).
 
 -export([compare/4, compare/3,
-         graph/3, graph/2,
+         graph/4, graph/3, graph/2,
          run/3, run/2, run/1,
          behaviour_info/1]).
 
@@ -72,16 +73,23 @@ compare(Module, Function, MathFunction, Options) ->
   Distances = [case {V, proplists:get_value(constant, Options, 100) * MathFunction(K)} of
                  {error, _} -> 0;
                  {_, 0} -> 0;
-                 {V, M} -> V / M
+                 {V, M} -> M / V
                end || {K, V} <- RawResults],
   WithoutOutliers =
     lists:sublist(
       lists:sort(Distances), 1,
-      proplists:get_value(rounds, Options, 500) - 2 * proplists:get_value(outliers, Options, 50)),
+      proplists:get_value(rounds, Options, 500) - 2 * proplists:get_value(outliers, Options, 20)),
   Avg = lists:sum(WithoutOutliers) / length(WithoutOutliers),
-  graph(Module, Function, MathFunction, Options),
-  io:format("~p~n", [lists:sort(Distances)]),
-  math:sqrt(lists:sum([(Distance - Avg) * (Distance - Avg) / Avg || Distance <- Distances])).
+  case proplists:get_bool(debug, Options) of
+    true -> ?INFO("~p~n", [lists:sort(Distances)]);
+    false -> ok
+  end,
+  do_graph(RawResults, MathFunction, Options),
+  lists:sum([case Distance of
+               Distance when Distance >= Avg -> Distance - Avg;
+               _ -> Avg - Distance
+             end || Distance <- Distances]) / length(Distances).
+%% math:sqrt([(Distance - Avg) * (Distance - Avg) / Avg || Distance <- Distances])).
 
 %% @doc Compares the different runs of Module:Function/1 to a given function.
 %% @equiv compare(Module, Function, []).
@@ -106,20 +114,7 @@ graph(Module, Function, Options) ->
 graph(Module, Function, MathFunction, Options) when is_atom(MathFunction) ->
   graph(Module, Function, fun(X) -> ?MODULE:MathFunction(X) end, Options);
 graph(Module, Function, MathFunction, Options) ->
-  RawData = lists:sublist(run(Module, Function, Options),
-                          proplists:get_value(first_col, Options, 1),
-                          proplists:get_value(columns, Options, 250)),
-  SortedData = lists:keysort(2, [{K, V} || {K, V} <- RawData, V =/= error]),
-  Outliers =
-    [{K, error} || {K, error} <- RawData] ++
-      lists:sublist(lists:reverse(SortedData), 1, proplists:get_value(outliers, Options, 20)),
-  Data = [case lists:member({K,V}, Outliers) of
-            true -> {K, 0, proplists:get_value(constant, Options, 100) * MathFunction(K)};
-            false -> {K, V, proplists:get_value(constant, Options, 100) * MathFunction(K)}
-          end || {K,V} <- RawData],
-  Top = lists:max([V || {_, V, _} <- Data]),
-  Step = erlang:trunc(Top / proplists:get_value(rows, Options, 50)) + 1,
-  do_graph(Top, Step, Data).
+  do_graph(run(Module, Function, Options), MathFunction, Options).
 
 %% ====================================================================
 %% Math functions
@@ -142,7 +137,7 @@ quadratic(N) -> N * N.
 
 %% @doc O(log(n)) comparer
 -spec logarithmic(pos_integer()) -> float().
-logarithmic(N) -> math:log10(N).
+logarithmic(N) -> math:log(N) + 1.
 
 %% @doc O(e^n) comparer
 -spec exponential(pos_integer()) -> float().
@@ -153,8 +148,9 @@ exponential(N) -> math:pow(2.71828182845904523536028747135266249775724709369995,
 %% ====================================================================
 do_run(Module, Function, Options) ->
   ok = try Module:init_per_testcase(Function) catch _:undef -> ok end,
+  Start = proplists:get_value(start, Options, 1),
   try lists:map(fun(N) -> do_run(Module, Function, N, Options) end,
-        lists:seq(1, proplists:get_value(rounds, Options, 500)))
+        lists:seq(Start, Start + proplists:get_value(rounds, Options, 500)))
   after
       try Module:quit_per_testcase(Function) catch _:undef -> ok end
   end.
@@ -177,10 +173,26 @@ do_run(Module, Function, N, Options) ->
       try Module:quit_per_round(Function, Items) catch _:undef -> ok end
   end.
 
-do_graph(Top, _Step, Data) when Top =< 0 ->
+do_graph(Results, MathFunction, Options) ->
+  RawData = lists:sublist(Results,
+                          proplists:get_value(first_col, Options, 1),
+                          proplists:get_value(columns, Options, 250)),
+  SortedData = lists:keysort(2, [{K, V} || {K, V} <- RawData, V =/= error]),
+  Outliers =
+    [{K, error} || {K, error} <- RawData] ++
+      lists:sublist(lists:reverse(SortedData), 1, proplists:get_value(outliers, Options, 20)),
+  Data = [case lists:member({K,V}, Outliers) of
+            true -> {K, 0, proplists:get_value(constant, Options, 100) * MathFunction(K)};
+            false -> {K, V, proplists:get_value(constant, Options, 100) * MathFunction(K)}
+          end || {K,V} <- RawData],
+  Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
+  Step = erlang:trunc(Top / proplists:get_value(rows, Options, 50)) + 1,
+  do_graph({Top, Step}, Data).
+
+do_graph({Top, _Step}, Data) when Top =< 0 ->
   io:format("~s~n", [lists:duplicate(length(Data), $-)]),
   io:format("~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
-do_graph(Top, Step, Data) ->
+do_graph({Top, Step}, Data) ->
   io:format("~s~n",
             [integer_to_list(Top) ++
              lists:map(
@@ -204,4 +216,4 @@ do_graph(Top, Step, Data) ->
                        end;
                   (_) -> $\s
                end, Data)]),
-  do_graph(Top-Step, Step, Data).
+  do_graph({Top-Step, Step}, Data).
