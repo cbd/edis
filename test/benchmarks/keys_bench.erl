@@ -69,7 +69,7 @@ init_per_round(sort_list_n, Keys) ->
     0 -> ok;
     1 -> ok
   end,
-  Pushed = {ok, length(Keys)},
+  Pushed = length(Keys),
   ok;
 init_per_round(sort_list_m, _Keys) ->
   [{ok, Deleted}, {ok, 1000}] =
