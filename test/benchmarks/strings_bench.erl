@@ -16,7 +16,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([append/1, decr/1, decrby/1]).
+-export([append/1, decr/1, decrby/1, get/1]).
 
 %% ====================================================================
 %% External functions
@@ -38,7 +38,8 @@ init_per_testcase(_Function) -> ok.
 quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(append, Keys) ->
+init_per_round(Fun, Keys) when Fun =:= append;
+                               Fun =:= get ->
   [{ok, Deleted} | OkKeys] =
     edis_db:run(
       edis_db:process(0),
@@ -48,8 +49,7 @@ init_per_round(append, Keys) ->
                                            [#edis_command{cmd = <<"APPEND">>,
                                                           args = [<<"test-string">>, <<"X">>],
                                                           result_type = number,
-                                                          group = strings} || _Key <- Keys]
-                            ]}),
+                                                          group = strings} || _Key <- Keys]]}),
   case Deleted of
     0 -> ok;
     1 -> ok
@@ -84,16 +84,23 @@ append([Key|_]) ->
     #edis_command{cmd = <<"APPEND">>, args = [<<"test-string">>, Key],
                   group = strings, result_type = number}).
 
--spec decr([binary()]) -> pos_integer().
+-spec decr([binary()]) -> integer().
 decr(_) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"DECR">>, args = [<<"test-string">>],
                   group = strings, result_type = number}).
 
--spec decrby([binary()]) -> pos_integer().
+-spec decrby([binary()]) -> integer().
 decrby(Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"DECRBY">>, args = [<<"test-string">>, length(Keys)],
                   group = strings, result_type = number}).
+
+-spec get([binary()]) -> binary().
+get(_) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"GET">>, args = [<<"test-string">>],
+                  group = strings, result_type = bulk}).
