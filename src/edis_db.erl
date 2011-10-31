@@ -1025,7 +1025,8 @@ handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, Stat
                    {length(Item#edis_item.value) + length(Values),
                     Item#edis_item{value = lists:append(Item#edis_item.value, Values)}}
            end, []),
-  {reply, Reply, stamp(Key, write, State)};
+  NewState = check_blocked_list_ops(Key, State),
+  {reply, Reply, stamp(Key, write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
