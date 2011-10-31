@@ -745,6 +745,8 @@ handle_call(C = #edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key | Keys]},
 handle_call(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination], expire = Timeout}, From, State) ->
   Req = C#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]},
   case handle_call(Req, From, State) of
+    {reply, {ok, undefined}, NewState} ->
+      {noreply, block_list_op(Source, Req, From, Timeout, NewState)};
     {reply, {error, not_found}, NewState} ->
       {noreply, block_list_op(Source, Req, From, Timeout, NewState)};
     OtherReply ->
