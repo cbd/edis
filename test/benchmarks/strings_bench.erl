@@ -16,7 +16,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([append/1, decr/1, decrby/1, get/1]).
+-export([append/1, decr/1, decrby/1, get/1, getbit/1, getrange/1]).
 
 %% ====================================================================
 %% External functions
@@ -39,7 +39,9 @@ quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
 init_per_round(Fun, Keys) when Fun =:= append;
-                               Fun =:= get ->
+                               Fun =:= get;
+                               Fun =:= getbit;
+                               Fun =:= getrange ->
   [{ok, Deleted} | OkKeys] =
     edis_db:run(
       edis_db:process(0),
@@ -104,3 +106,18 @@ get(_) ->
     edis_db:process(0),
     #edis_command{cmd = <<"GET">>, args = [<<"test-string">>],
                   group = strings, result_type = bulk}).
+
+-spec getbit([binary()]) -> 1 | 0.
+getbit(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"GETBIT">>, args = [<<"test-string">>,
+                                              random:uniform(length(Keys)) - 1],
+                  group = strings, result_type = number}).
+
+-spec getrange([binary()]) -> binary().
+getrange(_) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"GETRANGE">>, args = [<<"test-string">>, 1, -2],
+                  group = strings, result_type = number}).
