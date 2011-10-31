@@ -16,7 +16,8 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([append/1, decr/1, decrby/1, get/1, getbit/1, getrange/1]).
+-export([append/1, decr/1, decrby/1, get/1, getbit/1, getrange/1, getset/1, incr/1, incrby/1,
+         mget/1, mset/1, msetnx/1]).
 
 %% ====================================================================
 %% External functions
@@ -41,7 +42,8 @@ quit_per_testcase(_Function) -> ok.
 init_per_round(Fun, Keys) when Fun =:= append;
                                Fun =:= get;
                                Fun =:= getbit;
-                               Fun =:= getrange ->
+                               Fun =:= getrange;
+                               Fun =:= getset ->
   [{ok, Deleted} | OkKeys] =
     edis_db:run(
       edis_db:process(0),
@@ -60,7 +62,9 @@ init_per_round(Fun, Keys) when Fun =:= append;
     {X,X} -> ok
   end;
 init_per_round(Fun, Keys) when Fun =:= decr;
-                               Fun =:= decrby ->
+                               Fun =:= decrby;
+                               Fun =:= incr;
+                               Fun =:= incrby ->
   [{ok, Deleted} , ok] =
     edis_db:run(
       edis_db:process(0),
@@ -74,6 +78,17 @@ init_per_round(Fun, Keys) when Fun =:= decr;
     0 -> ok;
     1 -> ok
   end;
+init_per_round(mget, Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"MSET">>, args = [{Key, <<"X">>} || Key <- Keys],
+                  result_type = ok, group = strings});
+init_per_round(Fun, Keys) when Fun =:= mset;
+                               Fun =:= msetnx ->
+  _ = edis_db:run(
+        edis_db:process(0),
+        #edis_command{cmd = <<"DEL">>, args = Keys, result_type = ok, group = keys}),
+  ok;
 init_per_round(_Fun, _Keys) -> ok.
 
 -spec quit_per_round(atom(), [binary()]) -> ok.
@@ -121,3 +136,44 @@ getrange(_) ->
     edis_db:process(0),
     #edis_command{cmd = <<"GETRANGE">>, args = [<<"test-string">>, 1, -2],
                   group = strings, result_type = number}).
+
+-spec getset([binary()]) -> binary().
+getset([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"GETSET">>, args = [<<"test-string">>, Key],
+                  group = strings, result_type = bulk}).
+
+-spec incr([binary()]) -> integer().
+incr(_) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"INCR">>, args = [<<"test-string">>],
+                  group = strings, result_type = number}).
+
+-spec incrby([binary()]) -> integer().
+incrby(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"INCRBY">>, args = [<<"test-string">>, length(Keys)],
+                  group = strings, result_type = number}).
+
+-spec mget([binary()]) -> [binary()].
+mget(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"MGET">>, args = Keys, group = strings, result_type = multi_bulk}).
+
+-spec mset([binary()]) -> ok.
+mset(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"MSET">>, args = [{Key, <<"X">>} || Key <- Keys],
+                  result_type = ok, group = strings}).
+
+-spec msetnx([binary()]) -> ok.
+msetnx(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"MSET">>, args = [{Key, <<"X">>} || Key <- Keys],
+                  result_type = ok, group = strings}).
