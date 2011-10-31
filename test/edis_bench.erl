@@ -13,8 +13,8 @@
 -include("edis.hrl").
 
 -type option() :: {start, pos_integer} | {rounds, pos_integer()} | {extra_args, [term()]} |
-        {outliers, pos_integer()} | {columns, 80} | {first_col, 1} | {rows, 25} |
-        debug | {constant, number()}.
+        {outliers, pos_integer()} | {columns, pos_integer()} | {first_col, pos_integer()} |
+        {rows, pos_integer()} | debug | {constant, number()}.
 -export_type([option/0]).
 
 -export([compare/4, compare/3,
@@ -186,15 +186,15 @@ do_graph(Results, MathFunction, Options) ->
             false -> {K, V, proplists:get_value(constant, Options, 100) * MathFunction(K)}
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
-  Step = erlang:trunc(Top / proplists:get_value(rows, Options, 50)) + 1,
+  Step = erlang:trunc(Top / proplists:get_value(rows, Options, 70)) + 1,
   do_graph({Top, Step}, Data).
 
 do_graph({Top, _Step}, Data) when Top =< 0 ->
-  io:format("~s~n", [lists:duplicate(length(Data), $-)]),
-  io:format("~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
+  io:format("      ~s~n", [lists:duplicate(length(Data), $-)]),
+  io:format("      ~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
 do_graph({Top, Step}, Data) ->
-  io:format("~s~n",
-            [integer_to_list(Top) ++
+  io:format("~6w~s~n",
+            [Top,
              lists:map(
                fun({_, V, M}) when Top >= V, V > Top - Step,
                                    Top >= M, M > Top - Step ->
