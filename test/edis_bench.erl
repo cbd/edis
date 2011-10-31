@@ -12,9 +12,9 @@
 
 -include("edis.hrl").
 
--type option() :: {start, pos_integer} | {rounds, pos_integer()} | {extra_args, [term()]} |
-        {outliers, pos_integer()} | {columns, pos_integer()} | {first_col, pos_integer()} |
-        {rows, pos_integer()} | debug | {constant, number()}.
+-type option() :: {start, pos_integer} | {step, pos_integer()} | {rounds, pos_integer()} |
+        {extra_args, [term()]} | {outliers, pos_integer()} | {columns, pos_integer()} |
+        {first_col, pos_integer()} | {rows, pos_integer()} | debug | {constant, number()}.
 -export_type([option/0]).
 
 -export([compare/4, compare/3,
@@ -78,7 +78,7 @@ compare(Module, Function, MathFunction, Options) ->
   WithoutOutliers =
     lists:sublist(
       lists:sort(Distances), 1,
-      proplists:get_value(rounds, Options, 500) - 2 * proplists:get_value(outliers, Options, 20)),
+      proplists:get_value(rounds, Options, 250) - 2 * proplists:get_value(outliers, Options, 20)),
   Avg = lists:sum(WithoutOutliers) / length(WithoutOutliers),
   case proplists:get_bool(debug, Options) of
     true -> ?INFO("~p~n", [lists:sort(Distances)]);
@@ -150,13 +150,17 @@ do_run(Module, Function, Options) ->
   ok = try Module:init_per_testcase(Function) catch _:undef -> ok end,
   Start = proplists:get_value(start, Options, 1),
   try lists:map(fun(N) -> do_run(Module, Function, N, Options) end,
-        lists:seq(Start, Start + proplists:get_value(rounds, Options, 500)))
+        lists:seq(
+                  Start,
+                  Start +proplists:get_value(rounds, Options, 250) *
+                    proplists:get_value(step, Options, 1),
+                  proplists:get_value(step, Options, 1)))
   after
       try Module:quit_per_testcase(Function) catch _:undef -> ok end
   end.
 
 do_run(Module, Function, N, Options) ->
-  Items = lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, N)),
+  Items = lists:reverse(lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, N))),
   ok = try Module:init_per_round(Function, Items) catch _:undef -> ok end,
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
     {Time, _Result} ->
@@ -176,7 +180,8 @@ do_run(Module, Function, N, Options) ->
 do_graph(Results, MathFunction, Options) ->
   RawData = lists:sublist(Results,
                           proplists:get_value(first_col, Options, 1),
-                          proplists:get_value(columns, Options, 250)),
+                          erlang:min(proplists:get_value(columns, Options, 250),
+                                     proplists:get_value(rounds, Options, 250))),
   SortedData = lists:keysort(2, [{K, V} || {K, V} <- RawData, V =/= error]),
   Outliers =
     [{K, error} || {K, error} <- RawData] ++
@@ -199,20 +204,22 @@ do_graph({Top, Step}, Data) ->
                fun({_, V, M}) when Top >= V, V > Top - Step,
                                    Top >= M, M > Top - Step ->
                        case {Top - V, Top - M} of
-                         {Pos, Mos} when Pos < Step/2, Mos < Step/2 -> $¨;  %% both on top
+                         {Pos, Mos} when Pos < Step/2, Mos < Step/2 -> $·;  %% both on top
                          {Pos, Mos} when Pos < Step/2, Mos >= Step/2 -> $=; %% top and bottom
                          {Pos, Mos} when Pos >= Step/2, Mos < Step/2 -> $=; %% top and bottom
-                         {Pos, Mos} when Pos >= Step/2, Mos >= Step/2 -> $_ %% both on bottom
+                         {Pos, Mos} when Pos >= Step/2, Mos >= Step/2 -> $. %% both on bottom
                        end;
                   ({_, V, _M}) when Top >= V, V > Top - Step ->
                        case Top - V of
-                         Pos when Pos < Step/2 -> $¨;
-                         Pos when Pos >= Step/2 -> $_
+                         Pos when Pos < Step/3 -> $¨;
+                         Pos when Pos >= 2*Step/3 -> $_;
+                         _Pos -> $-
                        end;
                   ({_, _V, M}) when Top >= M, M > Top - Step ->
                        case Top - M of
-                         Pos when Pos < Step/2 -> $¨;
-                         Pos when Pos >= Step/2 -> $_
+                         Pos when Pos < Step/3 -> $¨;
+                         Pos when Pos >= 2*Step/3 -> $_;
+                         _Pos -> $-
                        end;
                   (_) -> $\s
                end, Data)]),
