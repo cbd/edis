@@ -5,8 +5,8 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
- 	[push_llen_lindex,del,long_list,
-	 blpop_brpop].
+     [push_llen_lindex,del,long_list,
+	  blpop_brpop,brpoplpush].
  	
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -25,7 +25,13 @@ connect_erldis(Times) ->
 		{ok,Client} -> {ok,Client};
 		_ -> connect_erldis(Times - 1)
 	end.
-	
+
+-spec run_command(pid(),pid(),[binary()|integer()]) -> ok.   
+run_command(Caller,Client, Args) ->
+	Res = erldis_client:scall(Client,Args),
+	Caller ! Res,
+	ok.
+
 push_llen_lindex(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
 	
@@ -119,7 +125,7 @@ blpop_brpop(Config) ->
 	[<<"mylist4">>,<<"a">>] = erldis_client:scall(Client,[<<"blpop">>,<<"mylist3">>,<<"mylist4">>,1]),
 	[<<"mylist4">>,<<"d">>] = erldis_client:scall(Client,[<<"brpop">>,<<"mylist3">>,<<"mylist4">>,1]),
 	
-	0 = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist3">>]),
+	false = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist3">>]),
 	2 = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist4">>]),
 	
 	{error,<<"ERR wrong number of arguments for 'BLPOP' command">>} = erldis_client:sr_scall(Client,[<<"blpop">>]),
@@ -134,6 +140,8 @@ blpop_brpop(Config) ->
 
 brpoplpush(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
+	{ok,Client2} = erldis:connect(localhost,16380),
+	{ok,Client3} = erldis:connect(localhost,16380),
 	
 	%% Normal brpoplpush
 	4 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>,<<"a">>,<<"b">>,<<"c">>,<<"d">>]),
@@ -143,5 +151,65 @@ brpoplpush(Config) ->
 	
 	%% With zero timeout should block indefinitely
 	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
-	ok = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"mylist">>,<<"target">>,0]).
 	
+	spawn(?MODULE, run_command, [self(),Client2,[<<"brpoplpush">>,<<"mylist">>,<<"target">>,0]]),
+	true = erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>,<<"foo">>]),
+	
+	receive
+		[<<"foo">>] -> ok;
+		Resp -> ct:fail(Resp)
+	after 2000 ->
+		ct:fail({error, <<"ERR Timeout">>})
+	end,
+
+	[<<"foo">>] = erldis_client:scall(Client,[<<"lrange">>,<<"target">>,0,-1]),
+	[] = erldis_client:scall(Client,[<<"lrange">>,<<"mylist">>,0,-1]),
+	
+	%% With a client BLPOPing the target list
+    ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	
+	spawn(erldis_client,scall,[Client2,[<<"blpop">>,<<"target">>,0]]),
+	spawn(?MODULE, run_command, [self(),Client3,[<<"brpoplpush">>,<<"mylist">>,<<"target">>,0]]),
+	true = erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>,<<"foo">>]),
+	
+	receive
+		[<<"foo">>] -> ok;
+		Resp2 -> ct:fail(Resp2)
+	after 2000 ->
+		ct:fail("ERR Timeout")
+	end,
+	
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"target">>]),
+	
+	%% With wrong destination type
+	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
+	true = erldis_client:sr_scall(Client,[<<"rpush">>,<<"mylist">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"mylist">>,<<"string">>,1]),
+	
+	%% With wrong source type
+	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
+	true = erldis_client:sr_scall(Client,[<<"rpush">>,<<"target">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"string">>,<<"target">>,1]),
+	
+	%% Linked BRPOPLPUSH
+	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	
+	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list1">>,<<"list2">>,0]]),
+	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list2">>,<<"list3">>,0]]),
+	true = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list1">>,<<"foo">>]),
+	
+	nil = erldis_client:sr_scall(Client,[<<"lrange">>,<<"list1">>,0,-1]),
+	nil = erldis_client:sr_scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
+	<<"foo">> = erldis_client:sr_scall(Client,[<<"lrange">>,<<"list3">>,0,-1]),
+	
+	%% Timeout
+	[] = erldis_client:scall(Client,[<<"brpoplpush">>,<<"list1">>,<<"list2">>,1]),
+	
+	{error,<<"ERR wrong number of arguments for 'BRPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"l1">>,<<"l2">>]),
+	{error,<<"ERR wrong number of arguments for 'BRPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"l1">>]),
+	{error,<<"ERR wrong number of arguments for 'BRPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>]),
+	{error,<<"ERR wrong number of arguments for 'BRPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"l1">>,<<"l2">>,1,1]),
+	{error,<<"ERR timeout is not an integer or out of range">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"l1">>,<<"l2">>,<<"str">>]).
+
