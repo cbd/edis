@@ -833,7 +833,7 @@ tcp_sort(Lines, State) -> tcp_multi_bulk(Lines, State).
 %% @private
 -spec tcp_multi_bulk(undefined | [binary() | float() | integer()], state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_multi_bulk(undefined, State) ->
-  tcp_bulk(undefined, State);
+  tcp_send("*-1", State);
 tcp_multi_bulk(Lines, State) ->
   lists:foldl(
     fun(Float, {noreply, AccState, hibernate}) when is_float(Float) ->
