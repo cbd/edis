@@ -330,7 +330,7 @@ parse_command(C = #edis_command{cmd = <<"BRPOP">>, args = Args}) ->
     0 -> C#edis_command{args = lists:reverse(Keys), timeout = infinity, expire = never, result_type = multi_bulk, group=lists};
     T -> C#edis_command{args = lists:reverse(Keys), timeout = T * 1000, expire = timeout_to_seconds(T), result_type = multi_bulk, group=lists}
   catch
-    _:not_integer -> {not_integer, <<"timeout">>}
+    _:not_integer -> throw({not_integer, <<"timeout">>})
   end;
 parse_command(#edis_command{cmd = <<"BLPOP">>, args = []}) -> throw(bad_arg_num);
 parse_command(#edis_command{cmd = <<"BLPOP">>, args = [_]}) -> throw(bad_arg_num);
@@ -341,7 +341,7 @@ parse_command(C = #edis_command{cmd = <<"BLPOP">>, args = Args}) ->
     0 -> C#edis_command{args = lists:reverse(Keys), timeout = infinity, expire = never, result_type = multi_bulk, group=lists};
     T -> C#edis_command{args = lists:reverse(Keys), timeout = T * 1000, expire = timeout_to_seconds(T), result_type = multi_bulk, group=lists}
   catch
-    _:not_integer -> {not_integer, <<"timeout">>}
+    _:not_integer -> throw({not_integer, <<"timeout">>})
   end;
 parse_command(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination, Timeout]}) ->
   try edis_util:binary_to_integer(Timeout) of
@@ -349,7 +349,7 @@ parse_command(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destinat
     0 -> C#edis_command{args = [Source, Destination], timeout = infinity, expire = never, result_type = bulk, group=lists};
     T -> C#edis_command{args = [Source, Destination], timeout = T * 1000, expire = timeout_to_seconds(T), result_type = bulk, group=lists}
   catch
-    _:not_integer -> {not_integer, <<"timeout">>}
+    _:not_integer -> throw({not_integer, <<"timeout">>})
   end;
 parse_command(#edis_command{cmd = <<"BRPOPLPUSH">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"LINDEX">>, args = [Key, Index]}) -> 
