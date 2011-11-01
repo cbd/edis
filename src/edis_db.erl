@@ -1017,7 +1017,8 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, 
       {error, Reason} ->
         {error, Reason}
     end,
-  {reply, Reply, stamp([Destination, Source], write, State)};
+  NewState = check_blocked_list_ops(Destination, State),
+  {reply, Reply, stamp([Destination, Source], write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
