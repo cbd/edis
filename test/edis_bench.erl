@@ -204,7 +204,7 @@ do_graph({Top, Step}, Data) ->
                fun({_, V, M}) when Top >= V, V > Top - Step,
                                    Top >= M, M > Top - Step ->
                        case {Top - V, Top - M} of
-                         {Pos, Mos} when Pos < Step/2, Mos < Step/2 -> $·;  %% both on top
+                         {Pos, Mos} when Pos < Step/2, Mos < Step/2 -> $";  %% both on top
                          {Pos, Mos} when Pos < Step/2, Mos >= Step/2 -> $=; %% top and bottom
                          {Pos, Mos} when Pos >= Step/2, Mos < Step/2 -> $=; %% top and bottom
                          {Pos, Mos} when Pos >= Step/2, Mos >= Step/2 -> $. %% both on bottom

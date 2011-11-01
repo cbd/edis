@@ -16,9 +16,9 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([del/1, exists/1, expire/1, expireat/1, keys/1, move/1, object_refcount/1,
+-export([del/1, exists/1, expire/1, expireat/1, keys/1, move/1, object_refcount/1, ttl/1, type/1,
          object_encoding/1, object_idletime/1, persist/1, randomkey/1, rename/1, renamenx/1,
-         ttl/1, type/1]).
+         sort_list_n/1, sort_list_m/1, sort_set_n/1, sort_set_m/1, sort_zset_n/1, sort_zset_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -56,6 +56,97 @@ init_per_round(keys, Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"MSET">>, args = [{Key, Key} || Key <- Keys],
                   group = keys, result_type = ok});
+init_per_round(sort_list_n, Keys) ->
+  [{ok, Deleted}, {ok, Pushed}] =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"EXEC">>, group = transaction, result_type = multi_result,
+                    args = [#edis_command{cmd = <<"DEL">>, args = [<<"test-sort">>],
+                                          group = keys, result_type = number},
+                            #edis_command{cmd = <<"LPUSH">>, args = [<<"test-sort">>|Keys],
+                                          result_type = number, group = lists}]}),
+  case Deleted of
+    0 -> ok;
+    1 -> ok
+  end,
+  Pushed = length(Keys),
+  ok;
+init_per_round(sort_list_m, _Keys) ->
+  [{ok, Deleted}, {ok, 1000}] =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"EXEC">>, group = transaction, result_type = multi_result,
+                    args = [#edis_command{cmd = <<"DEL">>, args = [<<"test-sort">>],
+                                          group = keys, result_type = number},
+                            #edis_command{cmd = <<"LPUSH">>,
+                                          args =
+                                            [<<"test-sort">>| [edis_util:integer_to_binary(I) || I <- lists:seq(1, 1000)]],
+                                          result_type = number, group = lists}]}),
+  case Deleted of
+    0 -> ok;
+    1 -> ok
+  end;
+init_per_round(sort_set_n, Keys) ->
+  [{ok, Deleted}, {ok, Pushed}] =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"EXEC">>, group = transaction, result_type = multi_result,
+                    args = [#edis_command{cmd = <<"DEL">>, args = [<<"test-sort">>],
+                                          group = keys, result_type = number},
+                            #edis_command{cmd = <<"SADD">>, args = [<<"test-sort">>|Keys],
+                                          result_type = number, group = lists}]}),
+  case Deleted of
+    0 -> ok;
+    1 -> ok
+  end,
+  Pushed = length(Keys),
+  ok;
+init_per_round(sort_set_m, _Keys) ->
+  [{ok, Deleted}, {ok, 1000}] =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"EXEC">>, group = transaction, result_type = multi_result,
+                    args = [#edis_command{cmd = <<"DEL">>, args = [<<"test-sort">>],
+                                          group = keys, result_type = number},
+                            #edis_command{cmd = <<"SADD">>,
+                                          args =
+                                            [<<"test-sort">>| [edis_util:integer_to_binary(I) || I <- lists:seq(1, 1000)]],
+                                          result_type = number, group = lists}]}),
+  case Deleted of
+    0 -> ok;
+    1 -> ok
+  end;
+init_per_round(sort_zset_n, Keys) ->
+  [{ok, Deleted}, {ok, Pushed}] =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"EXEC">>, group = transaction, result_type = multi_result,
+                    args = [#edis_command{cmd = <<"DEL">>, args = [<<"test-sort">>],
+                                          group = keys, result_type = number},
+                            #edis_command{cmd = <<"ZADD">>,
+                                          args = [<<"test-sort">>, [{1.0, Key} || Key <- Keys]],
+                                          result_type = number, group = lists}]}),
+  case Deleted of
+    0 -> ok;
+    1 -> ok
+  end,
+  Pushed = length(Keys),
+  ok;
+init_per_round(sort_zset_m, _Keys) ->
+  [{ok, Deleted}, {ok, 1000}] =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"EXEC">>, group = transaction, result_type = multi_result,
+                    args = [#edis_command{cmd = <<"DEL">>, args = [<<"test-sort">>],
+                                          group = keys, result_type = number},
+                            #edis_command{cmd = <<"ZADD">>,
+                                          args =
+                                            [<<"test-sort">>, [{1.0 * I, edis_util:integer_to_binary(I)} || I <- lists:seq(1, 1000)]],
+                                          result_type = number, group = lists}]}),
+  case Deleted of
+    0 -> ok;
+    1 -> ok
+  end;
 init_per_round(_Fun, Keys) ->
   edis_db:run(
     edis_db:process(0),
@@ -146,7 +237,7 @@ randomkey(_Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"RANDOMKEY">>, args = [], group = keys, result_type = bulk}).
 
--spec rename([binary(),...]) -> boolean().
+-spec rename([binary(),...]) -> ok.
 rename([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
@@ -160,14 +251,47 @@ renamenx([Key|_]) ->
     #edis_command{cmd = <<"RENAMENX">>, args = [Key, <<"test-new">>],
                   result_type = boolean, group = keys}).
 
--spec ttl([binary(),...]) -> boolean().
+-spec ttl([binary(),...]) -> number().
 ttl([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"TTL">>, args = [Key], result_type = number, group = keys}).
 
--spec type([binary(),...]) -> boolean().
+-spec type([binary(),...]) -> binary().
 type([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"TYPE">>, args = [Key], result_type = string, group = keys}).
+
+-spec sort_list_n([binary(),...]) -> [binary()].
+sort_list_n(Keys) -> sort_n(Keys).
+
+-spec sort_set_n([binary(),...]) -> [binary()].
+sort_set_n(Keys) -> sort_n(Keys).
+
+-spec sort_zset_n([binary(),...]) -> [binary()].
+sort_zset_n(Keys) -> sort_n(Keys).
+
+-spec sort_n([binary(),...]) -> [binary()].
+sort_n(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SORT">>, args = [<<"test-sort">>, #edis_sort_options{}],
+                  result_type = sort, group = keys}).
+
+-spec sort_list_m([binary(),...]) -> [binary()].
+sort_list_m(Keys) -> sort_m(Keys).
+
+-spec sort_set_m([binary(),...]) -> [binary()].
+sort_set_m(Keys) -> sort_m(Keys).
+
+-spec sort_zset_m([binary(),...]) -> [binary()].
+sort_zset_m(Keys) -> sort_m(Keys).
+
+-spec sort_m([binary(),...]) -> [binary()].
+sort_m(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SORT">>,
+                  args = [<<"test-sort">>, #edis_sort_options{limit = {0, length(Keys)}}],
+                  result_type = sort, group = keys}).

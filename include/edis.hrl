@@ -1,12 +1,12 @@
 -include("elog.hrl").
 
 -type edis_sort_field() :: self | binary() | {binary(), binary()}.
--record(edis_sort_options, {by = self       :: edis_sort_field(),
-                            limit           :: undefined | {integer(), integer()},
-                            get = []        :: [edis_sort_field()],
-                            direction = asc :: asc | desc,
-                            type = default  :: alpha | default,
-                            store_in        :: undefined | binary()}).
+-record(edis_sort_options, {by = self         :: edis_sort_field(),
+                            limit = undefined :: undefined | {integer(), integer()},
+                            get = []          :: [edis_sort_field()],
+                            direction = asc   :: asc | desc,
+                            type = default    :: alpha | default,
+                            store_in          :: undefined | binary()}).
 
 -record(edis_message, {channel  :: binary(),
                        message  :: binary()}).
