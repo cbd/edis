@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([hdel/1, hexists/1, hget/1]).
+-export([hdel/1, hexists/1, hget/1, hgetall/1]).
 
 %% ====================================================================
 %% External functions
@@ -40,6 +40,13 @@ init_per_testcase(_Function) -> ok.
 quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
+init_per_round(hgetall, Keys) ->
+  _ =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"HMSET">>, args = [?KEY, [{Key, <<"x">>} || Key <- Keys]],
+                    group = hashes, result_type = ok}),
+  ok;
 init_per_round(_Fun, Keys) ->
   _ =
     edis_db:run(
@@ -74,3 +81,9 @@ hget([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"HGET">>, args = [?KEY, Key], result_type = bulk, group = hashes}).
+
+-spec hgetall([binary()]) -> binary().
+hgetall(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HGETALL">>, args = [?KEY], result_type = multi_bulk, group = hashes}).
