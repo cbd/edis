@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1]).
+-export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1, hkeys/1]).
 
 %% ====================================================================
 %% External functions
@@ -47,7 +47,8 @@ init_per_round(incrby, Keys) ->
                       args = [?KEY, ?KEY, edis_util:integer_to_binary(length(Keys))],
                       result_type = boolean, group = hashes}),
   ok;
-init_per_round(hgetall, Keys) ->
+init_per_round(Fun, Keys) when Fun =:= hgetall;
+                               Fun =:= hkeys ->
   _ =
     edis_db:run(
       edis_db:process(0),
@@ -101,3 +102,9 @@ hincrby(Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"HINCRBY">>, args = [?KEY, ?KEY, length(Keys)],
                   group = hashes, result_type = number}).
+
+-spec hkeys([binary()]) -> binary().
+hkeys(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HKEYS">>, args = [?KEY], result_type = multi_bulk, group = hashes}).
