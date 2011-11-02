@@ -231,7 +231,7 @@ parse_command(C = #edis_command{cmd = <<"STRLEN">>, args = [_Key]}) -> C#edis_co
 parse_command(#edis_command{cmd = <<"STRLEN">>}) -> throw(bad_arg_num);
 %% -- Keys -----------------------------------------------------------------------------------------
 parse_command(#edis_command{cmd = <<"DEL">>, args = []}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"DEL">>}) -> C#edis_command{result_type = number, group=hashes};
+parse_command(C = #edis_command{cmd = <<"DEL">>}) -> C#edis_command{result_type = number, group=keys};
 parse_command(C = #edis_command{cmd = <<"EXISTS">>, args = [_Key]}) -> C#edis_command{result_type = boolean, group=keys};
 parse_command(#edis_command{cmd = <<"EXISTS">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"EXPIRE">>, args = [Key, Seconds]}) -> 

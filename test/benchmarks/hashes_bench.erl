@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([hdel/1]).
+-export([hdel/1, hexists/1]).
 
 %% ====================================================================
 %% External functions
@@ -50,10 +50,21 @@ init_per_round(_Fun, Keys) ->
   ok.
 
 -spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(_, _Keys) -> ok.
+quit_per_round(_, _Keys) ->
+  _ = edis_db:run(
+        edis_db:process(0),
+        #edis_command{cmd = <<"DEL">>, args = [?KEY], group = keys, result_type = number}
+        ),
+  ok.
 
 -spec hdel([binary()]) -> pos_integer().
 hdel(Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"HDEL">>, args = [?KEY | Keys], group = hashes, result_type = number}).
+
+-spec hexists([binary(),...]) -> boolean().
+hexists([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HEXISTS">>, args = [?KEY, Key], result_type = boolean, group = hashes}).
