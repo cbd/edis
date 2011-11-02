@@ -18,7 +18,8 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1]).
+-export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
+         llen/1]).
 
 %% ====================================================================
 %% External functions
@@ -122,3 +123,9 @@ linsert([Key|_]) ->
     edis_db:process(0),
     #edis_command{cmd = <<"LINSERT">>, args = [?KEY, before, Key, <<"x">>],
                   group = lists, result_type = bulk}).
+
+-spec llen([binary()]) -> binary().
+llen(_) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LLEN">>, args = [?KEY], group = lists, result_type = number}).
