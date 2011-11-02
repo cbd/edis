@@ -195,13 +195,14 @@ do_graph(Results, MathFunction, Options) ->
                         (proplists:get_value(k, Options, 100) * MathFunction(K))}
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
-  Step = erlang:trunc(Top / proplists:get_value(rows, Options, 70)) + 1,
-  do_graph({Top, Step}, Data).
+  Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
+  Step = erlang:trunc((Top - Bottom + 1) / proplists:get_value(rows, Options, 70)) + 1,
+  do_graph(Top, Bottom, Step, Data).
 
-do_graph({Top, _Step}, Data) when Top =< 0 ->
+do_graph(Top, Bottom, _Step, Data) when Top =< Bottom ->
   io:format("      ~s~n", [lists:duplicate(length(Data), $-)]),
   io:format("      ~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
-do_graph({Top, Step}, Data) ->
+do_graph(Top, Bottom, Step, Data) ->
   io:format("~6w~s~n",
             [Top,
              lists:map(
@@ -227,4 +228,4 @@ do_graph({Top, Step}, Data) ->
                        end;
                   (_) -> $\s
                end, Data)]),
-  do_graph({Top-Step, Step}, Data).
+  do_graph(Top-Step, Bottom, Step, Data).
