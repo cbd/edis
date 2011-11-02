@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1]).
+-export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1]).
 
 %% ====================================================================
 %% External functions
@@ -114,5 +114,11 @@ lindex(Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LINDEX">>, args = [?KEY, length(Keys)],
-                  timeout = 1000, expire = edis_util:now() + 1,
+                  group = lists, result_type = bulk}).
+
+-spec linsert([binary()]) -> binary().
+linsert([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LINSERT">>, args = [?KEY, before, Key, <<"x">>],
                   group = lists, result_type = bulk}).
