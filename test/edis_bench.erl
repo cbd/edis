@@ -170,7 +170,7 @@ do_run(Module, Function, N, Options) ->
         true -> ?INFO("~p: ~p~n", [N, Time/1000]);
         false -> ok
       end,
-      {N, Time/1000}
+      {N, (Time+1)/1000}
   catch
     _:Error ->
       ?ERROR("Error on ~p:~p (N: ~p):~n\t~p~n", [Module, Function, N, Error]),
