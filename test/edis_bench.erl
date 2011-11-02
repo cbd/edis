@@ -196,7 +196,7 @@ do_graph(Results, MathFunction, Options) ->
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
   Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
-  Step = ((Top - Bottom + 1) / proplists:get_value(rows, Options, 70)) + 1,
+  Step = (Top - Bottom) / proplists:get_value(rows, Options, 70),
   do_graph(Top, Bottom, Step, Data).
 
 do_graph(Top, Bottom, _Step, Data) when Top =< Bottom ->
