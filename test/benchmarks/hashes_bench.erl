@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1, hkeys/1, hlen/1, hmget/1]).
+-export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1, hkeys/1, hlen/1, hmget/1, hmset/1, hset/1]).
 
 %% ====================================================================
 %% External functions
@@ -54,6 +54,16 @@ init_per_round(Fun, Keys) when Fun =:= hgetall;
     edis_db:run(
       edis_db:process(0),
       #edis_command{cmd = <<"HMSET">>, args = [?KEY, [{Key, <<"x">>} || Key <- Keys]],
+                    group = hashes, result_type = ok}),
+  ok;
+init_per_round(Fun, _Keys) when Fun =:= hmget;
+                                Fun =:= hmset ->
+  _ =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"HMSET">>,
+                    args = [?KEY,
+                            [{edis_util:integer_to_binary(Key), <<"x">>} || Key <- lists:seq(1, 5000)]],
                     group = hashes, result_type = ok}),
   ok;
 init_per_round(_Fun, Keys) ->
@@ -122,3 +132,15 @@ hmget(Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"HMGET">>, args = [?KEY | Keys], result_type = multi_bulk, group = hashes}).
 
+-spec hmset([binary()]) -> binary().
+hmset(Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HMSET">>, args = [?KEY, [{Key, <<"y">>} || Key <- Keys]],
+                  result_type = ok, group = hashes}).
+
+-spec hset([binary()]) -> binary().
+hset([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HSET">>, args = [?KEY, Key, Key], result_type = boolean, group = hashes}).
