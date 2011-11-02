@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([hdel/1, hexists/1]).
+-export([hdel/1, hexists/1, hget/1]).
 
 %% ====================================================================
 %% External functions
@@ -68,3 +68,9 @@ hexists([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"HEXISTS">>, args = [?KEY, Key], result_type = boolean, group = hashes}).
+
+-spec hget([binary()]) -> binary().
+hget([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HGET">>, args = [?KEY, Key], result_type = bulk, group = hashes}).
