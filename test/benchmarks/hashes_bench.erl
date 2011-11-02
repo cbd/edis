@@ -18,7 +18,8 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1, hkeys/1, hlen/1, hmget/1, hmset/1, hset/1]).
+-export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1, hkeys/1, hlen/1, hmget/1, hmset/1,
+         hset/1, hsetnx/1]).
 
 %% ====================================================================
 %% External functions
@@ -144,3 +145,13 @@ hset([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"HSET">>, args = [?KEY, Key, Key], result_type = boolean, group = hashes}).
+
+-spec hsetnx([binary()]) -> binary().
+hsetnx([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"HSETNX">>, args = [?KEY,
+                                              case random:uniform(2) of
+                                                1 -> Key;
+                                                2 -> <<Key/binary, "__">>
+                                              end, Key], result_type = boolean, group = hashes}).
