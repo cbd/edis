@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([blpop/1, blpop_nothing/1]).
+-export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1]).
 
 %% ====================================================================
 %% External functions
@@ -40,7 +40,8 @@ init_per_testcase(_Function) -> ok.
 quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(blpop_nothing, Keys) ->
+init_per_round(Fun, Keys) when Fun =:= blpop_nothing;
+                               Fun =:= brpop_nothing ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY | Keys], group = keys, result_type = number}),
@@ -73,5 +74,21 @@ blpop(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"BLPOP">>, args = [?KEY],
+                  timeout = 1000, expire = edis_util:now() + 1,
+                  group = lists, result_type = multi_bulk}, 1000).
+
+-spec brpop_nothing([binary()]) -> timeout.
+brpop_nothing(Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"BRPOP">>, args = Keys,
+                  timeout = 10, expire = edis_util:now(),
+                  group = lists, result_type = multi_bulk}, 10).
+
+-spec brpop([binary()]) -> undefined.
+brpop(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"BRPOP">>, args = [?KEY],
                   timeout = 1000, expire = edis_util:now() + 1,
                   group = lists, result_type = multi_bulk}, 1000).
