@@ -18,7 +18,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1]).
+-export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1]).
 
 %% ====================================================================
 %% External functions
@@ -92,3 +92,11 @@ brpop(_Keys) ->
     #edis_command{cmd = <<"BRPOP">>, args = [?KEY],
                   timeout = 1000, expire = edis_util:now() + 1,
                   group = lists, result_type = multi_bulk}, 1000).
+
+-spec brpoplpush([binary()]) -> undefined.
+brpoplpush(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"BRPOPLPUSH">>, args = [?KEY, <<(?KEY)/binary, "-2">>],
+                  timeout = 1000, expire = edis_util:now() + 1,
+                  group = lists, result_type = bulk}, 1000).
