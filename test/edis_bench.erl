@@ -167,10 +167,10 @@ do_run(Module, Function, N, Options) ->
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
     {Time, _Result} ->
       case proplists:get_bool(debug, Options) of
-        true -> ?INFO("~p: ~p~n", [N, Time]);
+        true -> ?INFO("~p: ~p~n", [N, Time/1000]);
         false -> ok
       end,
-      {N, Time}
+      {N, Time/1000}
   catch
     _:Error ->
       ?ERROR("Error on ~p:~p (N: ~p):~n\t~p~n", [Module, Function, N, Error]),
@@ -196,15 +196,15 @@ do_graph(Results, MathFunction, Options) ->
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
   Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
-  Step = erlang:trunc((Top - Bottom + 1) / proplists:get_value(rows, Options, 70)) + 1,
+  Step = ((Top - Bottom + 1) / proplists:get_value(rows, Options, 70)) + 1,
   do_graph(Top, Bottom, Step, Data).
 
 do_graph(Top, Bottom, _Step, Data) when Top =< Bottom ->
-  io:format("      ~s~n", [lists:duplicate(length(Data), $-)]),
-  io:format("      ~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
+  io:format("       ~s~n", [lists:duplicate(length(Data), $-)]),
+  io:format("       ~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
 do_graph(Top, Bottom, Step, Data) ->
-  io:format("~6w~s~n",
-            [Top,
+  io:format("~7.2.0f~s~n",
+            [Top * 1.0,
              lists:map(
                fun({_, V, M}) when Top >= V, V > Top - Step,
                                    Top >= M, M > Top - Step ->
