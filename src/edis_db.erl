@@ -764,10 +764,10 @@ handle_call(#edis_command{cmd = <<"LINSERT">>, args = [Key, Position, Pivot, Val
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list,
            fun(Item) ->
-                   Value = Item#edis_item.value,
-                   case edis_lists:insert(Value, Position, Pivot, Value) of
-                     Value -> {-1, Item};
-                     NewV -> {edis_lists:length(NewV), Item#edis_item{value = NewV}}
+                   List = Item#edis_item.value,
+                   case edis_lists:insert(Value, Position, Pivot, List) of
+                     List -> {-1, Item};
+                     NewL -> {edis_lists:length(NewL), Item#edis_item{value = NewL}}
                    end
            end, -1),
   {reply, Reply, stamp(Key, write, State)};
