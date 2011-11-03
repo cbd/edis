@@ -1,19 +1,19 @@
 -include("elog.hrl").
 
 -type edis_sort_field() :: self | binary() | {binary(), binary()}.
--record(edis_sort_options, {by = self       :: edis_sort_field(),
-                            limit           :: undefined | {integer(), integer()},
-                            get = []        :: [edis_sort_field()],
-                            direction = asc :: asc | desc,
-                            type = default  :: alpha | default,
-                            store_in        :: undefined | binary()}).
+-record(edis_sort_options, {by = self         :: edis_sort_field(),
+                            limit = undefined :: undefined | {integer(), integer()},
+                            get = []          :: [edis_sort_field()],
+                            direction = asc   :: asc | desc,
+                            type = default    :: alpha | default,
+                            store_in          :: undefined | binary()}).
 
 -record(edis_message, {channel  :: binary(),
                        message  :: binary()}).
 
 -record(edis_command, {timestamp = edis_util:timestamp()
                                     :: float(),
-                       db           :: non_neg_integer(),
+                       db = 0       :: non_neg_integer(),
                        cmd          :: binary(),
                        args = []    :: [term()],
                        group        :: keys | strings | hashes | lists | sets | zsets | pub_sub | transactions | connection | server,

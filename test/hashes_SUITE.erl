@@ -8,7 +8,7 @@ all() ->
 	[hset_hlen,hset_hget,hsetnx,hmset,hkeys,hvals,
 	 hgetall,hdel,hexists,hincrby].
 
-init_per_testcase(TestCase,Config) ->
+init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
     ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
 	

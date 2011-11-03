@@ -745,6 +745,8 @@ handle_call(C = #edis_command{cmd = <<"-INTERNAL-BRPOP">>, args = [Key | Keys]},
 handle_call(C = #edis_command{cmd = <<"BRPOPLPUSH">>, args = [Source, Destination], expire = Timeout}, From, State) ->
   Req = C#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]},
   case handle_call(Req, From, State) of
+    {reply, {ok, undefined}, NewState} ->
+      {noreply, block_list_op(Source, Req, From, Timeout, NewState)};
     {reply, {error, not_found}, NewState} ->
       {noreply, block_list_op(Source, Req, From, Timeout, NewState)};
     OtherReply ->
@@ -1015,7 +1017,8 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, 
       {error, Reason} ->
         {error, Reason}
     end,
-  {reply, Reply, stamp([Destination, Source], write, State)};
+  NewState = check_blocked_list_ops(Destination, State),
+  {reply, Reply, stamp([Destination, Source], write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list, linkedlist,
@@ -1023,7 +1026,8 @@ handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, Stat
                    {length(Item#edis_item.value) + length(Values),
                     Item#edis_item{value = lists:append(Item#edis_item.value, Values)}}
            end, []),
-  {reply, Reply, stamp(Key, write, State)};
+  NewState = check_blocked_list_ops(Key, State),
+  {reply, Reply, stamp(Key, write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.db, Key, list,
