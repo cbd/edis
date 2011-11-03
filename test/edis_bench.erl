@@ -72,7 +72,7 @@ compare(Module, Function, MathFunction, Options) ->
   RawResults = run(Module, Function, Options),
   Distances =
     [case {V, proplists:get_value(x, Options, 0) +
-             (proplists:get_value(k, Options, 100) * MathFunction(K))} of
+             (proplists:get_value(k, Options, 1) * MathFunction(K))} of
        {error, _} -> 0;
        {_, 0} -> 0;
        {V, M} -> M / V
@@ -190,9 +190,9 @@ do_graph(Results, MathFunction, Options) ->
       lists:sublist(lists:reverse(SortedData), 1, proplists:get_value(outliers, Options, 20)),
   Data = [case lists:member({K,V}, Outliers) of
             true -> {K, 0, proplists:get_value(x, Options, 0) +
-                       (proplists:get_value(k, Options, 100) * MathFunction(K))};
+                       (proplists:get_value(k, Options, 1) * MathFunction(K))};
             false -> {K, V, proplists:get_value(x, Options, 0) +
-                        (proplists:get_value(k, Options, 100) * MathFunction(K))}
+                        (proplists:get_value(k, Options, 1) * MathFunction(K))}
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
   Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
