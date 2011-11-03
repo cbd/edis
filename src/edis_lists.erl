@@ -17,8 +17,7 @@
 -export_type([edis_list/1]).
 
 -export([length/1, from_list/1, to_list/1, nth/2, nthtail/2, reverse/1, splitwith/2, insert/4,
-         append/2, push/2, pop/1, sublist/3, filter/2, subtract/2, duplicate/2, replace_head/2,
-         split/2, empty/0]).
+         append/2, push/2, pop/1, sublist/3, filter/2, remove/3, replace_head/2, split/2, empty/0]).
 
 -spec empty() -> edis_list(_).
 empty() -> #edis_list{}.
@@ -89,14 +88,15 @@ sublist(#edis_list{size = S, list = L}, Start, Len) ->
 filter(_Pred, #edis_list{size = 0}) -> #edis_list{};
 filter(Pred, #edis_list{list = L}) -> from_list(lists:filter(Pred, L)).
 
--spec subtract(edis_list(T), edis_list(T)) -> edis_list(T).
-subtract(#edis_list{size = 0}, _) -> #edis_list{};
-subtract(EL0, #edis_list{size = 0}) -> EL0;
-subtract(#edis_list{list = L0}, #edis_list{list = L1}) -> from_list(L0 -- L1).
+-spec remove(T, non_neg_integer(), edis_list(T)) -> edis_list(T).
+remove(_, 0, EL) -> EL;
+remove(_, _, #edis_list{size = 0}) -> empty();
+remove(X, Count, EL) -> remove(X, Count, EL#edis_list.list, EL#edis_list.size, []).
 
-%% @doc return N copies of X
--spec duplicate(non_neg_integer(), T) -> edis_list(T).
-duplicate(N, X) -> #edis_list{size = N, list = lists:duplicate(N, X)}.
+remove(_X, 0, End, Size, RevStart) -> #edis_list{list = lists:reverse(RevStart) ++ End, size = Size};
+remove(_X, _C, [], Size, RevStart) -> #edis_list{list = lists:reverse(RevStart), size = Size};
+remove(X, C, [X|Rest], Size, RevStart) -> remove(X, C-1, Rest, Size-1, RevStart);
+remove(X, C, [Y|Rest], Size, RevStart) -> remove(X, C, Rest, Size, [Y|RevStart]).
 
 %% @doc replaces head element
 -spec replace_head(T0, edis_list(T)) -> edis_list(T0|T).

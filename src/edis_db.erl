@@ -862,13 +862,11 @@ handle_call(#edis_command{cmd = <<"LREM">>, args = [Key, Count, Value]}, _From, 
                                                    Val =/= Value
                                            end, Item#edis_item.value);
                        Count when Count >= 0 ->
-                         edis_list:subtract(
-                           Item#edis_item.value, edis_lists:duplicate(Count, Value));
+                         edis_lists:remove(Value, Count, Item#edis_item.value);
                        Count ->
                          edis_lists:reverse(
-                           edis_lists:subtract(
-                             edis_lists:reverse(Item#edis_item.value),
-                             edis_lists:duplicate((-1)*Count, Value)))
+                           edis_lists:remove(Value, (-1)*Count,
+                             edis_lists:reverse(Item#edis_item.value)))
                      end,
                    {edis_lists:length(Item#edis_item.value) - edis_lists:length(NewV),
                     Item#edis_item{value = NewV}}

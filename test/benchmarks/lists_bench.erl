@@ -19,7 +19,7 @@
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
-         llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1]).
+         llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1]).
 
 %% ====================================================================
 %% External functions
@@ -49,7 +49,8 @@ init_per_round(Fun, Keys) when Fun =:= blpop_nothing;
   ok;
 init_per_round(Fun, Keys) when Fun =:= lindex;
                                Fun =:= lrange_s;
-                               Fun =:= lrange_n ->
+                               Fun =:= lrange_n;
+                               Fun =:= lrem ->
   _ =
     edis_db:run(
       edis_db:process(0),
@@ -167,4 +168,25 @@ lrange_n([Key|_]) ->
     edis_db:process(0),
     #edis_command{cmd = <<"LRANGE">>,
                   args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = lists, result_type = multi_bulk}).
+
+-spec lrem_x([binary()]) -> undefined.
+lrem_x([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LREM">>, args = [?KEY, edis_util:binary_to_integer(Key), <<"x">>],
+                  group = lists, result_type = multi_bulk}).
+
+-spec lrem_y([binary()]) -> undefined.
+lrem_y([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LREM">>, args = [?KEY, edis_util:binary_to_integer(Key), <<"y">>],
+                  group = lists, result_type = multi_bulk}).
+
+-spec lrem_0([binary()]) -> undefined.
+lrem_0(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LREM">>, args = [?KEY, 0, <<"x">>],
                   group = lists, result_type = multi_bulk}).
