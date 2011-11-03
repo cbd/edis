@@ -19,7 +19,7 @@
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
-         llen/1, lpop/1, lpush/1, lpushx/1]).
+         llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1]).
 
 %% ====================================================================
 %% External functions
@@ -47,7 +47,9 @@ init_per_round(Fun, Keys) when Fun =:= blpop_nothing;
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY | Keys], group = keys, result_type = number}),
   ok;
-init_per_round(lindex, Keys) ->
+init_per_round(Fun, Keys) when Fun =:= lindex;
+                               Fun =:= lrange_s;
+                               Fun =:= lrange_n ->
   _ =
     edis_db:run(
       edis_db:process(0),
@@ -135,21 +137,34 @@ lpop(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LPOP">>, args = [?KEY],
-                  timeout = 1000, expire = edis_util:now() + 1,
-                  group = lists, result_type = multi_bulk}, 1000).
+                  group = lists, result_type = multi_bulk}).
 
 -spec lpush([binary()]) -> undefined.
 lpush(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LPUSH">>, args = [?KEY, ?KEY],
-                  timeout = 1000, expire = edis_util:now() + 1,
-                  group = lists, result_type = multi_bulk}, 1000).
+                  group = lists, result_type = multi_bulk}).
 
 -spec lpushx([binary()]) -> undefined.
 lpushx(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LPUSHX">>, args = [?KEY, ?KEY],
-                  timeout = 1000, expire = edis_util:now() + 1,
-                  group = lists, result_type = multi_bulk}, 1000).
+                  group = lists, result_type = multi_bulk}).
+
+-spec lrange_s([binary()]) -> undefined.
+lrange_s([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LRANGE">>,
+                  args = [?KEY, edis_util:binary_to_integer(Key), edis_util:binary_to_integer(Key)],
+                  group = lists, result_type = multi_bulk}).
+
+-spec lrange_n([binary()]) -> undefined.
+lrange_n([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LRANGE">>,
+                  args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = lists, result_type = multi_bulk}).
