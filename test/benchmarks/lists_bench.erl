@@ -19,7 +19,7 @@
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
-         llen/1, lpop/1]).
+         llen/1, lpop/1, lpush/1, lpushx/1]).
 
 %% ====================================================================
 %% External functions
@@ -138,3 +138,18 @@ lpop(_Keys) ->
                   timeout = 1000, expire = edis_util:now() + 1,
                   group = lists, result_type = multi_bulk}, 1000).
 
+-spec lpush([binary()]) -> undefined.
+lpush(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LPUSH">>, args = [?KEY, ?KEY],
+                  timeout = 1000, expire = edis_util:now() + 1,
+                  group = lists, result_type = multi_bulk}, 1000).
+
+-spec lpushx([binary()]) -> undefined.
+lpushx(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LPUSHX">>, args = [?KEY, ?KEY],
+                  timeout = 1000, expire = edis_util:now() + 1,
+                  group = lists, result_type = multi_bulk}, 1000).
