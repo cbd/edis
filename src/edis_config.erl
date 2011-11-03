@@ -13,7 +13,7 @@
 
 -include("edis.hrl").
 
--type config_option() :: listener_port_range | client_timeout | databases | requirepass | dir.
+-type config_option() :: listener_port_range | client_timeout | databases | requirepass | dir | backend.
 
 -spec set(config_option(), term()) -> ok.
 set(listener_port_range, {P1, P2}) when is_integer(P1), is_integer(P2), P1 =< P2 ->
@@ -39,7 +39,7 @@ set(dir, Dir) when is_binary(Dir) ->
   ok = application:set_env(edis, dir, binary_to_list(Dir)),
   edis_db_sup:reload();
 set(dir, Param) ->
-  ?THROW("Invalid password: ~p~n", [Param]),
+  ?THROW("Invalid dir: ~p~n", [Param]),
   throw(invalid_param);
 set(Param, Value) ->
   ?THROW("Unsupported param: ~p: ~p~n", [Param, Value]),
@@ -56,6 +56,8 @@ get(requirepass) ->
   get(requirepass, undefined);
 get(dir) ->
   get(dir, "./db/");
+get(backend) ->
+  get(backend, {edis_eleveldb_backend, [{create_if_missing, true}]});
 get(Pattern) ->
   [{K, V} ||
    {K, V} <- application:get_all_env(edis),

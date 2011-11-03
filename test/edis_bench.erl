@@ -14,7 +14,7 @@
 
 -type option() :: {start, pos_integer} | {step, pos_integer()} | {rounds, pos_integer()} |
         {extra_args, [term()]} | {outliers, pos_integer()} | {columns, pos_integer()} |
-        {first_col, pos_integer()} | {rows, pos_integer()} | debug | {constant, number()}.
+        {first_col, pos_integer()} | {rows, pos_integer()} | debug | {k, number()} | {x, number()}.
 -export_type([option/0]).
 
 -export([compare/4, compare/3,
@@ -70,11 +70,13 @@ compare(Module, Function, MathFunction, Options) when is_atom(MathFunction) ->
   compare(Module, Function, fun(X) -> ?MODULE:MathFunction(X) end, Options);
 compare(Module, Function, MathFunction, Options) ->
   RawResults = run(Module, Function, Options),
-  Distances = [case {V, proplists:get_value(constant, Options, 100) * MathFunction(K)} of
-                 {error, _} -> 0;
-                 {_, 0} -> 0;
-                 {V, M} -> M / V
-               end || {K, V} <- RawResults],
+  Distances =
+    [case {V, proplists:get_value(x, Options, 0) +
+             (proplists:get_value(k, Options, 100) * MathFunction(K))} of
+       {error, _} -> 0;
+       {_, 0} -> 0;
+       {V, M} -> M / V
+     end || {K, V} <- RawResults],
   WithoutOutliers =
     lists:sublist(
       lists:sort(Distances), 1,
@@ -165,10 +167,10 @@ do_run(Module, Function, N, Options) ->
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
     {Time, _Result} ->
       case proplists:get_bool(debug, Options) of
-        true -> ?INFO("~p: ~p~n", [N, Time]);
+        true -> ?INFO("~p: ~p~n", [N, Time/1000]);
         false -> ok
       end,
-      {N, Time}
+      {N, (Time+1)/1000}
   catch
     _:Error ->
       ?ERROR("Error on ~p:~p (N: ~p):~n\t~p~n", [Module, Function, N, Error]),
@@ -187,19 +189,22 @@ do_graph(Results, MathFunction, Options) ->
     [{K, error} || {K, error} <- RawData] ++
       lists:sublist(lists:reverse(SortedData), 1, proplists:get_value(outliers, Options, 20)),
   Data = [case lists:member({K,V}, Outliers) of
-            true -> {K, 0, proplists:get_value(constant, Options, 100) * MathFunction(K)};
-            false -> {K, V, proplists:get_value(constant, Options, 100) * MathFunction(K)}
+            true -> {K, 0, proplists:get_value(x, Options, 0) +
+                       (proplists:get_value(k, Options, 100) * MathFunction(K))};
+            false -> {K, V, proplists:get_value(x, Options, 0) +
+                        (proplists:get_value(k, Options, 100) * MathFunction(K))}
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
-  Step = erlang:trunc(Top / proplists:get_value(rows, Options, 70)) + 1,
-  do_graph({Top, Step}, Data).
+  Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
+  Step = (Top - Bottom) / proplists:get_value(rows, Options, 70),
+  do_graph(Top, Bottom, Step, Data).
 
-do_graph({Top, _Step}, Data) when Top =< 0 ->
-  io:format("      ~s~n", [lists:duplicate(length(Data), $-)]),
-  io:format("      ~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
-do_graph({Top, Step}, Data) ->
-  io:format("~6w~s~n",
-            [Top,
+do_graph(Top, Bottom, _Step, Data) when Top =< Bottom ->
+  io:format("       ~s~n", [lists:duplicate(length(Data), $-)]),
+  io:format("       ~s~n", [lists:map(fun({K, _, _}) -> integer_to_list(K rem 10) end, Data)]);
+do_graph(Top, Bottom, Step, Data) ->
+  io:format("~7.2.0f~s~n",
+            [Top * 1.0,
              lists:map(
                fun({_, V, M}) when Top >= V, V > Top - Step,
                                    Top >= M, M > Top - Step ->
@@ -223,4 +228,4 @@ do_graph({Top, Step}, Data) ->
                        end;
                   (_) -> $\s
                end, Data)]),
-  do_graph({Top-Step, Step}, Data).
+  do_graph(Top-Step, Bottom, Step, Data).
