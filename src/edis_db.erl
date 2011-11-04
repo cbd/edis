@@ -983,34 +983,33 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Key, Key]}, _From, Stat
            end, undefined),
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, _From, State) ->
-  Reply =
-    case update(State#state.backend_mod, State#state.backend_ref, Source, list,
-                fun(Item) ->
-                        case lists:reverse(Item#edis_item.value) of
-                          [Value] ->
-                            {{delete, Value}, Item#edis_item{value = []}};
-                          [Value|Rest] ->
-                            {{keep, Value}, Item#edis_item{value = lists:reverse(Rest)}};
-                          [] ->
-                            throw(not_found)
-                        end
-                end, undefined) of
-      {ok, undefined} ->
-        {ok, undefined};
-      {ok, {delete, Value}} ->
-        _ = (State#state.backend_mod):delete(State#state.backend_ref, Source),
-        update(State#state.backend_mod, State#state.backend_ref, Destination, list, linkedlist,
-                fun(Item) ->
-                        {Value, Item#edis_item{value = [Value | Item#edis_item.value]}}
-                end, []);
-      {ok, {keep, Value}} ->
-        update(State#state.backend_mod, State#state.backend_ref, Destination, list, linkedlist,
-                fun(Item) ->
-                        {Value, Item#edis_item{value = [Value | Item#edis_item.value]}}
-                end, []);
-      {error, Reason} ->
-        {error, Reason}
-    end,
+	Reply = 
+		try
+			{SourceAction,Value} = 
+				case get_item(State#state.backend_mod, State#state.backend_ref, list, Source) of
+					{error, SReason} -> throw(SReason);
+					not_found -> throw(not_found);
+					SourceItem ->
+						case lists:reverse(SourceItem#edis_item.value) of
+							[I] -> 		{{delete, Source},I};
+							[I|Rest] -> {{put, Source, SourceItem#edis_item{value = lists:reverse(Rest)}},I}
+						end
+				end,
+			DestinationAction = 
+				case get_item(State#state.backend_mod, State#state.backend_ref, list, Destination) of
+					{error, DReason} -> throw(DReason);
+					not_found -> {put, Destination, #edis_item{key = Destination, type = list, encoding = hashtable, value = [Value]}};
+					DestinationItem -> {put, Destination, DestinationItem#edis_item{value = [Value|DestinationItem#edis_item.value]}}
+				end,
+			case (State#state.backend_mod):write(State#state.backend_ref,
+												 [SourceAction,DestinationAction]) of
+				ok -> {ok, Value};
+				{error, Reason} -> {error, Reason}
+			end
+		catch
+			_:Error -> 
+				{error, Error}
+		end,
   NewState = check_blocked_list_ops(Destination, State),
   {reply, Reply, stamp([Destination, Source], write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, State) ->
