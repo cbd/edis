@@ -20,7 +20,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
          llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1,
-         lset/1, ltrim/1, rpop/1, rpush/1, rpushx/1]).
+         lset/1, ltrim/1, rpop/1, rpoplpush/1, rpoplpush_self/1, rpush/1, rpushx/1]).
 
 %% ====================================================================
 %% External functions
@@ -235,3 +235,16 @@ rpushx(_Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"RPUSHX">>, args = [?KEY, ?KEY],
                   group = lists, result_type = number}).
+
+-spec rpoplpush([binary()]) -> binary().
+rpoplpush(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"RPOPLPUSH">>, args = [?KEY, <<(?KEY)/binary, "-2">>],
+                  group = lists, result_type = bulk}).
+
+-spec rpoplpush_self([binary()]) -> binary().
+rpoplpush_self(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"RPOPLPUSH">>, args = [?KEY, ?KEY], group = lists, result_type = bulk}).
