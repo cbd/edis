@@ -30,6 +30,7 @@ connect_erldis(Times) ->
 run_command(Caller,Client, Args) ->
 	Res = erldis_client:scall(Client,Args),
 	Caller ! Res,
+	ct:pal("~p~n",[Res]),
 	ok.
 
 push_llen_lindex(Config) ->
@@ -197,12 +198,68 @@ brpoplpush(Config) ->
 	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
 	
 	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list1">>,<<"list2">>,0]]),
-	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list2">>,<<"list3">>,0]]),
-	true = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list1">>,<<"foo">>]),
+	spawn(erldis_client,scall,[Client2,[<<"brpoplpush">>,<<"list2">>,<<"list3">>,0]]),
+	true = erldis_client:sr_scall(Client3,[<<"rpush">>,<<"list1">>,<<"foo">>]),
 	
 	nil = erldis_client:sr_scall(Client,[<<"lrange">>,<<"list1">>,0,-1]),
 	nil = erldis_client:sr_scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
 	<<"foo">> = erldis_client:sr_scall(Client,[<<"lrange">>,<<"list3">>,0,-1]),
+
+    %% With multiple blocked clients
+    ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+    ok = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
+	
+	spawn(?MODULE, run_command, [self(),Client,[<<"brpoplpush">>,<<"mylist">>,<<"string">>,0]]),
+	spawn(?MODULE, run_command, [self(),Client2,[<<"brpoplpush">>,<<"mylist">>,<<"target">>,0]]),
+	true = erldis_client:sr_scall(Client3,[<<"rpush">>,<<"mylist">>,<<"testtest">>]),
+
+	receive
+		[{error,<<"ERR Operation against a key holding the wrong kind of value">>}] -> ok;
+		[<<"testtest">>] -> ok
+	after 2000 ->
+		ct:fail("ERR Timeout")
+	end,
+
+	receive
+		[{error,<<"ERR Operation against a key holding the wrong kind of value">>}] -> ok;
+		[<<"testtest">>] -> ok
+	after 2000 ->
+		ct:fail("ERR Timeout")
+	end,
+	
+	<<"testtest">> = erldis_client:sr_scall(Client,[<<"lrange">>,<<"target">>,0,-1]),
+	
+	%% Circular
+	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	
+	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list1">>,<<"list2">>,0]]),
+	spawn(erldis_client,scall,[Client2,[<<"brpoplpush">>,<<"list2">>,<<"list1">>,0]]),
+	true = erldis_client:sr_scall(Client3,[<<"rpush">>,<<"list1">>,<<"foo">>]),
+	timer:sleep(1000),
+	
+	<<"foo">> = erldis_client:sr_scall(Client3,[<<"lrange">>,<<"list1">>,0,-1]),
+	nil = erldis_client:sr_scall(Client3,[<<"lrange">>,<<"list2">>,0,-1]),
+	
+	%% Self-referential BRPOPLPUSH
+	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list">>,<<"list">>,0]]),
+	true = erldis_client:sr_scall(Client3,[<<"rpush">>,<<"list">>,<<"foo">>]),
+	
+	<<"foo">> = erldis_client:sr_scall(Client3,[<<"lrange">>,<<"list">>,0,-1]),
+	
+	%% Inside a transaction
+	ok = erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	true = erldis_client:sr_scall(Client,[<<"lpush">>,<<"xlist">>,<<"foo">>]),
+	2 = erldis_client:sr_scall(Client,[<<"lpush">>,<<"xlist">>,<<"bar">>]),
+	
+	ok = erldis_client:sr_scall(Client,[<<"multi">>]),
+	queued = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"xlist">>,<<"target">>,1]),
+	queued = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"xlist">>,<<"target">>,1]),
+	queued = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"xlist">>,<<"target">>,1]),
+	queued = erldis_client:scall(Client,[<<"lrange">>,<<"xlist">>,0,-1]),
+	queued = erldis_client:scall(Client,[<<"lrange">>,<<"target">>,0,-1]),
+
+	[<<"foo">>,<<"bar">>,nil,<<"*0">>,<<"*2">>] = erldis_client:scall(Client,[<<"exec">>]),
 	
 	%% Timeout
 	[] = erldis_client:scall(Client,[<<"brpoplpush">>,<<"list1">>,<<"list2">>,1]),
@@ -212,4 +269,3 @@ brpoplpush(Config) ->
 	{error,<<"ERR wrong number of arguments for 'BRPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>]),
 	{error,<<"ERR wrong number of arguments for 'BRPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"l1">>,<<"l2">>,1,1]),
 	{error,<<"ERR timeout is not an integer or out of range">>} = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"l1">>,<<"l2">>,<<"str">>]).
-
