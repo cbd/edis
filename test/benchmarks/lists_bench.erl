@@ -20,7 +20,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
          llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1,
-         lset/1, ltrim/1]).
+         lset/1, ltrim/1, rpop/1, rpush/1, rpushx/1]).
 
 %% ====================================================================
 %% External functions
@@ -142,26 +142,26 @@ llen(_) ->
     edis_db:process(0),
     #edis_command{cmd = <<"LLEN">>, args = [?KEY], group = lists, result_type = number}).
 
--spec lpop([binary()]) -> undefined.
+-spec lpop([binary()]) -> binary().
 lpop(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LPOP">>, args = [?KEY],
-                  group = lists, result_type = multi_bulk}).
+                  group = lists, result_type = bulk}).
 
--spec lpush([binary()]) -> undefined.
+-spec lpush([binary()]) -> integer().
 lpush(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LPUSH">>, args = [?KEY, ?KEY],
-                  group = lists, result_type = multi_bulk}).
+                  group = lists, result_type = number}).
 
--spec lpushx([binary()]) -> undefined.
+-spec lpushx([binary()]) -> integer().
 lpushx(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LPUSHX">>, args = [?KEY, ?KEY],
-                  group = lists, result_type = multi_bulk}).
+                  group = lists, result_type = number}).
 
 -spec lrange_s([binary()]) -> [binary()].
 lrange_s([Key|_]) ->
@@ -214,3 +214,24 @@ ltrim([Key|_]) ->
     edis_db:process(0),
     #edis_command{cmd = <<"LTRIM">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
                   group = lists, result_type = ok}).
+
+-spec rpop([binary()]) -> binary().
+rpop(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"RPOP">>, args = [?KEY],
+                  group = lists, result_type = bulk}).
+
+-spec rpush([binary()]) -> integer().
+rpush(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"RPUSH">>, args = [?KEY, ?KEY],
+                  group = lists, result_type = number}).
+
+-spec rpushx([binary()]) -> integer().
+rpushx(_Keys) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"RPUSHX">>, args = [?KEY, ?KEY],
+                  group = lists, result_type = number}).
