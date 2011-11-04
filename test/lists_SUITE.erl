@@ -30,7 +30,6 @@ connect_erldis(Times) ->
 run_command(Caller,Client, Args) ->
 	Res = erldis_client:scall(Client,Args),
 	Caller ! Res,
-	ct:pal("~p~n",[Res]),
 	ok.
 
 push_llen_lindex(Config) ->
@@ -256,8 +255,8 @@ brpoplpush(Config) ->
 	queued = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"xlist">>,<<"target">>,1]),
 	queued = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"xlist">>,<<"target">>,1]),
 	queued = erldis_client:sr_scall(Client,[<<"brpoplpush">>,<<"xlist">>,<<"target">>,1]),
-	queued = erldis_client:scall(Client,[<<"lrange">>,<<"xlist">>,0,-1]),
-	queued = erldis_client:scall(Client,[<<"lrange">>,<<"target">>,0,-1]),
+	queued = erldis_client:sr_scall(Client,[<<"lrange">>,<<"xlist">>,0,-1]),
+	queued = erldis_client:sr_scall(Client,[<<"lrange">>,<<"target">>,0,-1]),
 
 	[<<"foo">>,<<"bar">>,nil,<<"*0">>,<<"*2">>] = erldis_client:scall(Client,[<<"exec">>]),
 	

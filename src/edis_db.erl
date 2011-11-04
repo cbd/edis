@@ -841,14 +841,14 @@ handle_call(#edis_command{cmd = <<"LRANGE">>, args = [Key, Start, Stop]}, _From,
               Stop -> L + 1 + Stop
             end,
           case StopPos - StartPos + 1 of
-            Len when Len =< 0 -> {ok, edis_lists:empty()};
+            Len when Len =< 0 -> {ok, []};
             Len -> {ok, edis_lists:to_list(edis_lists:sublist(Value, StartPos, Len))}
           end;
-        not_found -> {ok, edis_lists:empty()};
+        not_found -> {ok, []};
         {error, Reason} -> {error, Reason}
       end
     catch
-      _:empty -> {ok, edis_lists:empty()}
+      _:empty -> {ok, []}
     end,
   {reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"LREM">>, args = [Key, Count, Value]}, _From, State) ->
