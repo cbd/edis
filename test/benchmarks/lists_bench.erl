@@ -20,7 +20,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
          llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1,
-         lset/1]).
+         lset/1, ltrim/1]).
 
 %% ====================================================================
 %% External functions
@@ -51,7 +51,8 @@ init_per_round(Fun, Keys) when Fun =:= blpop_nothing;
 init_per_round(Fun, Keys) when Fun =:= lindex;
                                Fun =:= lrange_s;
                                Fun =:= lrange_n;
-                               Fun =:= lrem ->
+                               Fun =:= lrem;
+                               Fun =:= ltrim ->
   _ =
     edis_db:run(
       edis_db:process(0),
@@ -162,7 +163,7 @@ lpushx(_Keys) ->
     #edis_command{cmd = <<"LPUSHX">>, args = [?KEY, ?KEY],
                   group = lists, result_type = multi_bulk}).
 
--spec lrange_s([binary()]) -> undefined.
+-spec lrange_s([binary()]) -> [binary()].
 lrange_s([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
@@ -170,7 +171,7 @@ lrange_s([Key|_]) ->
                   args = [?KEY, edis_util:binary_to_integer(Key), edis_util:binary_to_integer(Key)],
                   group = lists, result_type = multi_bulk}).
 
--spec lrange_n([binary()]) -> undefined.
+-spec lrange_n([binary()]) -> [binary()].
 lrange_n([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
@@ -178,31 +179,38 @@ lrange_n([Key|_]) ->
                   args = [?KEY, 0, edis_util:binary_to_integer(Key)],
                   group = lists, result_type = multi_bulk}).
 
--spec lrem_x([binary()]) -> undefined.
+-spec lrem_x([binary()]) -> integer().
 lrem_x([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LREM">>, args = [?KEY, edis_util:binary_to_integer(Key), <<"x">>],
-                  group = lists, result_type = multi_bulk}).
+                  group = lists, result_type = number}).
 
--spec lrem_y([binary()]) -> undefined.
+-spec lrem_y([binary()]) -> integer().
 lrem_y([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LREM">>, args = [?KEY, edis_util:binary_to_integer(Key), <<"y">>],
-                  group = lists, result_type = multi_bulk}).
+                  group = lists, result_type = number}).
 
--spec lrem_0([binary()]) -> undefined.
+-spec lrem_0([binary()]) -> integer().
 lrem_0(_Keys) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LREM">>, args = [?KEY, 0, <<"x">>],
-                  group = lists, result_type = multi_bulk}).
+                  group = lists, result_type = number}).
 
--spec lset([binary()]) -> binary().
+-spec lset([binary()]) -> ok.
 lset([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"LSET">>,
                   args = [?KEY, erlang:trunc(edis_util:binary_to_integer(Key) / 2), <<"x">>],
-                  group = lists, result_type = number}).
+                  group = lists, result_type = ok}).
+
+-spec ltrim([binary()]) -> ok.
+ltrim([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LTRIM">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = lists, result_type = ok}).
