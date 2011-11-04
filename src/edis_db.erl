@@ -990,16 +990,17 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, 
 					{error, SReason} -> throw(SReason);
 					not_found -> throw(not_found);
 					SourceItem ->
-						case lists:reverse(SourceItem#edis_item.value) of
-							[I] -> 		{{delete, Source},I};
-							[I|Rest] -> {{put, Source, SourceItem#edis_item{value = lists:reverse(Rest)}},I}
+						{I,Rest} = edis_lists:pop(edis_lists:reverse(SourceItem#edis_item.value)),
+						case edis_lists:length(Rest) of
+							0 -> {{delete, Source},I};
+							_ -> {{put, Source, SourceItem#edis_item{value = edis_lists:reverse(Rest)}},I}
 						end
 				end,
 			DestinationAction = 
 				case get_item(State#state.backend_mod, State#state.backend_ref, list, Destination) of
 					{error, DReason} -> throw(DReason);
-					not_found -> {put, Destination, #edis_item{key = Destination, type = list, encoding = hashtable, value = [Value]}};
-					DestinationItem -> {put, Destination, DestinationItem#edis_item{value = [Value|DestinationItem#edis_item.value]}}
+					not_found -> {put, Destination, #edis_item{key = Destination, type = list, encoding = hashtable, value = edis_lists:from_list([Value])}};
+					DestinationItem -> {put, Destination, DestinationItem#edis_item{value = edis_lists:push(Value,DestinationItem#edis_item.value)}}
 				end,
 			case (State#state.backend_mod):write(State#state.backend_ref,
 												 [SourceAction,DestinationAction]) of
