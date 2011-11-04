@@ -19,7 +19,8 @@
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
-         llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1]).
+         llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1,
+         lset/1]).
 
 %% ====================================================================
 %% External functions
@@ -57,6 +58,13 @@ init_per_round(Fun, Keys) when Fun =:= lindex;
       #edis_command{cmd = <<"LPUSH">>,
                     args = [?KEY | [<<"x">> || _ <- lists:seq(1, erlang:max(5000, length(Keys)))]],
                     group = hashes, result_type = ok}),
+  ok;
+init_per_round(lset, Keys) ->
+  _ =
+    edis_db:run(
+      edis_db:process(0),
+      #edis_command{cmd = <<"LPUSH">>, args = [?KEY | [<<"y">> || _ <- Keys]],
+                    group = lists, result_type = number}),
   ok;
 init_per_round(_Fun, Keys) ->
   _ =
@@ -190,3 +198,11 @@ lrem_0(_Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"LREM">>, args = [?KEY, 0, <<"x">>],
                   group = lists, result_type = multi_bulk}).
+
+-spec lset([binary()]) -> binary().
+lset([Key|_]) ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"LSET">>,
+                  args = [?KEY, erlang:trunc(edis_util:binary_to_integer(Key) / 2), <<"x">>],
+                  group = lists, result_type = number}).
