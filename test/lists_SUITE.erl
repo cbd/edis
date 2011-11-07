@@ -128,6 +128,10 @@ blpop_brpop(Config) ->
 	false = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist3">>]),
 	2 = erldis_client:sr_scall(Client,[<<"llen">>,<<"mylist4">>]),
 	
+	%% Extra tests
+	ok = bpop(<<"blpop">>,Client),
+	ok = bpop(<<"brpop">>,Client),
+	
 	{error,<<"ERR wrong number of arguments for 'BLPOP' command">>} = erldis_client:sr_scall(Client,[<<"blpop">>]),
 	{error,<<"ERR wrong number of arguments for 'BLPOP' command">>} = erldis_client:sr_scall(Client,[<<"blpop">>,<<"mylist4">>]),
     {error,<<"ERR timeout is not an integer or out of range">>} = erldis_client:sr_scall(Client,[<<"blpop">>,<<"mylist4">>,<<"mylist3">>]),
@@ -137,6 +141,61 @@ blpop_brpop(Config) ->
 	{error,<<"ERR wrong number of arguments for 'BRPOP' command">>} = erldis_client:sr_scall(Client,[<<"brpop">>,<<"mylist4">>]),
     {error,<<"ERR timeout is not an integer or out of range">>} = erldis_client:sr_scall(Client,[<<"brpop">>,<<"mylist4">>,<<"mylist3">>]),
     {error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"brpop">>,<<"string">>,1]).
+
+bpop(Command,Client) ->	
+	{ok,Client2} = erldis:connect(localhost,16380),
+	%% With single empty list argument
+	spawn(?MODULE, run_command, [self(),Client2,[Command,<<"list">>,2]]),
+	erldis_client:sr_scall(Client,[<<"lpush">>,<<"list">>,<<"foo">>]),
+	receive 
+		[<<"list">>,<<"foo">>] -> ok;
+		Resp -> ct:fail(Resp) 
+	after 2000 -> ct:fail("ERR Timeout")
+	end,
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list">>]),
+	
+	%% With negative timeout
+	{error,<<"ERR timeout is negative">>} = erldis_client:sr_scall(Client,[Command,<<"list">>,-1]),
+	
+	%% With non-integer timeout
+	{error,<<"ERR timeout is not an integer or out of range">>} = erldis_client:sr_scall(Client,[Command,<<"list">>,2.3]),
+	
+	%% With zero timeout should block indefinitely
+	spawn(?MODULE, run_command, [self(),Client2,[Command,<<"list">>,0]]),
+	timer:sleep(1000),
+	erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,<<"bar">>]),
+	receive 
+		[<<"list">>,<<"bar">>] -> ok;
+		Resp2 -> ct:fail(Resp2) 
+	after 2000 -> ct:fail("ERR Timeout")
+	end,
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list">>]),
+	
+	%% Timeout
+	nil = erldis_client:sr_scall(Client,[Command,<<"list">>,<<"list2">>,1]),
+	
+	%% Arguments are empty
+	spawn(?MODULE, run_command, [self(),Client2,[Command,<<"list4">>,<<"list5">>,1]]),
+	erldis_client:sr_scall(Client,[<<"rpush">>,<<"list4">>,<<"bar">>]),
+	receive 
+		[<<"list4">>,<<"bar">>] -> ok;
+		Resp3 -> ct:fail(Resp3) 
+	after 2000 -> ct:fail("ERR Timeout")
+	end,
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list4">>]),
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list5">>]),
+	
+	spawn(?MODULE, run_command, [self(),Client2,[Command,<<"list4">>,<<"list5">>,1]]),
+	erldis_client:sr_scall(Client,[<<"rpush">>,<<"list5">>,<<"buzz">>]),
+	receive 
+		[<<"list5">>,<<"buzz">>] -> ok;
+		Resp4 -> ct:fail(Resp4) 
+	after 2000 -> ct:fail("ERR Timeout")
+	end,
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list4">>]),
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list5">>]),
+	
+	ok.
 
 brpoplpush(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
