@@ -20,7 +20,7 @@
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([sadd/1, scard/1, sdiff/1, sdiffstore/1, sinter_min/1, sinter_n/1, sinter_m/1,
-         sinterstore_min/1, sinterstore_n/1, sinterstore_m/1]).
+         sinterstore_min/1, sinterstore_n/1, sinterstore_m/1, sismember/1]).
 
 %% ====================================================================
 %% External functions
@@ -42,7 +42,10 @@ init_per_testcase(_Function) -> ok.
 quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(scard, Keys) -> sadd(Keys), ok;
+init_per_round(Fun, Keys) when Fun =:= scard;
+                               Fun =:= sismember ->
+  sadd(Keys),
+  ok;
 init_per_round(Fun, Keys) when Fun =:= sinter_min;
                                Fun =:= sinterstore_min ->
   edis_db:run(
@@ -154,3 +157,9 @@ sinterstore_m(Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"SINTERSTORE">>, args = [?KEY | Keys],
                   group = sets, result_type = multi_bulk}).
+
+-spec sismember([binary()]) -> true.
+sismember([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SISMEMBER">>, args = [?KEY, Key], group = sets, result_type = boolean}).
