@@ -150,7 +150,7 @@ to_list(ZSet) ->
 %% @doc Returns the number of elements between Min and Max in ZSet
 -spec count(limit(Scores), limit(Scores), zset(Scores, _Members)) -> non_neg_integer().
 count(Min, Max, ZSet) ->
-  count(Min, Max, iterator(ZSet), 0).
+  count(Min, Max, next(iterator(ZSet)), 0).
 
 %% @equiv range(Start, Stop, ZSet, forward)
 -spec range(non_neg_integer(), non_neg_integer(), zset(Scores, Members)) -> [{Scores, Members}].
@@ -190,9 +190,9 @@ count(_Min, _Max, none, Acc) -> Acc;
 count(Min, Max, {Score, _Member, Iterator}, Acc) ->
   case {check_limit(min, Min, Score, Iterator#zset_iterator.direction),
         check_limit(max, Max, Score, Iterator#zset_iterator.direction)} of
-    {in, in} -> list(Min, Max, next(Iterator), Acc + 1);
+    {in, in} -> count(Min, Max, next(Iterator), Acc + 1);
     {_, out} -> Acc;
-    {out, in} -> list(Min, Max, next(Iterator), Acc)
+    {out, in} -> count(Min, Max, next(Iterator), Acc)
   end.
 
 %% @private

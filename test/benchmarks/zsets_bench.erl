@@ -19,7 +19,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([zadd/1, zadd_one/1, zcard/1]).
+-export([zadd/1, zadd_one/1, zcard/1, zcount_n/1, zcount_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -42,8 +42,16 @@ quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
 init_per_round(Fun, Keys) when Fun =:= zcard;
-                               Fun =:= zadd_one ->
+                               Fun =:= zadd_one;
+                               Fun =:= zcount_n ->
   zadd(Keys),
+  ok;
+init_per_round(Fun, _Keys) when Fun =:= zcount_m ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZADD">>,
+                  args = [?KEY, [{1.0 * I, <<"x">>} || I <- lists:seq(1, 10000)]],
+                  group = sets, result_type = number}),
   ok;
 init_per_round(_Fun, _Keys) ->
   _ = edis_db:run(
@@ -79,3 +87,17 @@ zcard(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZCARD">>, args = [?KEY], group = sets, result_type = number}).
+
+-spec zcount_n([binary()]) -> pos_integer().
+zcount_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZCOUNT">>, args = [?KEY, {inc, 1.0}, {inc, 1.0}],
+                  group = sets, result_type = number}).
+
+-spec zcount_m([binary()]) -> pos_integer().
+zcount_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZCOUNT">>, args = [?KEY, {inc, 1.0}, {inc, edis_util:binary_to_float(Key)}],
+                  group = sets, result_type = number}).
