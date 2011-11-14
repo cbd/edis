@@ -21,7 +21,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([zadd/1, zadd_one/1, zcard/1, zcount_n/1, zcount_m/1, zincrby/1,
          zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1,
-         zrange_n/1, zrange_m/1]).
+         zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -47,7 +47,8 @@ init_per_round(Fun, Keys) when Fun =:= zcard;
                                Fun =:= zadd_one;
                                Fun =:= zcount_n;
                                Fun =:= zincrby;
-                               Fun =:= zrange_n ->
+                               Fun =:= zrange_n;
+                               Fun =:= zrangebyscore_n ->
   zadd(Keys),
   ok;
 init_per_round(Fun, Keys) when Fun =:= zinterstore_min ->
@@ -96,7 +97,8 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_m ->
                   group = zsets, result_type = number}),
   ok;
 init_per_round(Fun, _Keys) when Fun =:= zcount_m;
-                                Fun =:= zrange_m ->
+                                Fun =:= zrange_m;
+                                Fun =:= zrangebyscore_m ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
@@ -197,4 +199,17 @@ zrange_m([Key|_]) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = zsets, result_type = multi_bulk}).
+
+-spec zrangebyscore_n([binary()]) -> [binary()].
+zrangebyscore_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, {exc, 0.0}, {inc, 1.0}], group = zsets, result_type = multi_bulk}).
+
+-spec zrangebyscore_m([binary()]) -> [binary()].
+zrangebyscore_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, {exc, 0.0}, {inc, edis_util:binary_to_float(Key)}],
                   group = zsets, result_type = multi_bulk}).
