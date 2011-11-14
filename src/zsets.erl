@@ -68,7 +68,7 @@ delete_any(Member, ZSet) ->
 %% @doc Returns the size of the zset
 -spec size(zset(any(), any())) -> non_neg_integer().
 size(ZSet) ->
-  edis_gb_trees:size(ZSet#zset.tree).
+  dict:size(ZSet#zset.dict).
 
 %% @equiv iterator(ZSet, forward).
 -spec iterator(zset(Scores, Members)) -> iterator(Scores, Members).
