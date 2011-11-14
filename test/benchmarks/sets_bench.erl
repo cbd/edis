@@ -19,7 +19,8 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([sadd/1, scard/1, sdiff/1, sdiffstore/1]).
+-export([sadd/1, scard/1, sdiff/1, sdiffstore/1, sinter_min/1, sinter_n/1, sinter_m/1,
+         sinterstore_min/1, sinterstore_n/1, sinterstore_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -42,6 +43,30 @@ quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
 init_per_round(scard, Keys) -> sadd(Keys), ok;
+init_per_round(Fun, Keys) when Fun =:= sinter_min;
+                               Fun =:= sinterstore_min ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SADD">>, args = [?KEY2, <<"1">>],
+                  group = sets, result_type = number}),
+  sadd(Keys),
+  ok;
+init_per_round(Fun, Keys) when Fun =:= sinter_n;
+                               Fun =:= sinterstore_n ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SADD">>, args = [?KEY2 | Keys],
+                  group = sets, result_type = number}),
+  sadd(Keys),
+  ok;
+init_per_round(Fun, Keys) when Fun =:= sinter_m;
+                               Fun =:= sinterstore_m ->
+  lists:foreach(fun(Key) ->
+                        edis_db:run(
+                          edis_db:process(0),
+                          #edis_command{cmd = <<"SADD">>, args = [Key, ?KEY, ?KEY2, Key],
+                                        group = sets, result_type = number})
+                end, Keys);
 init_per_round(Fun, Keys) when Fun =:= sdiff;
                                Fun =:= sdiffstore ->
   edis_db:run(
@@ -58,10 +83,10 @@ init_per_round(_Fun, _Keys) ->
   ok.
 
 -spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(_, _Keys) ->
+quit_per_round(_, Keys) ->
   _ = edis_db:run(
         edis_db:process(0),
-        #edis_command{cmd = <<"DEL">>, args = [?KEY], group = keys, result_type = number}
+        #edis_command{cmd = <<"DEL">>, args = [?KEY, ?KEY2 | Keys], group = keys, result_type = number}
         ),
   ok.
 
@@ -89,4 +114,43 @@ sdiffstore(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SDIFFSTORE">>, args = [?KEY, ?KEY, ?KEY2],
+                  group = sets, result_type = multi_bulk}).
+
+-spec sinter_min([binary()]) -> [binary()].
+sinter_min(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SINTER">>, args = [?KEY, ?KEY2], group = sets, result_type = multi_bulk}).
+
+-spec sinter_n([binary()]) -> [binary()].
+sinter_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SINTER">>, args = [?KEY, ?KEY2], group = sets, result_type = multi_bulk}).
+
+-spec sinter_m([binary()]) -> [binary()].
+sinter_m(Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SINTER">>, args = Keys, group = sets, result_type = multi_bulk}).
+
+-spec sinterstore_min([binary()]) -> [binary()].
+sinterstore_min(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SINTERSTORE">>, args = [?KEY, ?KEY, ?KEY2],
+                  group = sets, result_type = multi_bulk}).
+
+-spec sinterstore_n([binary()]) -> [binary()].
+sinterstore_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SINTERSTORE">>, args = [?KEY, ?KEY, ?KEY2],
+                  group = sets, result_type = multi_bulk}).
+
+-spec sinterstore_m([binary()]) -> [binary()].
+sinterstore_m(Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SINTERSTORE">>, args = [?KEY | Keys],
                   group = sets, result_type = multi_bulk}).
