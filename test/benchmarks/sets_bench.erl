@@ -21,7 +21,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([sadd/1, scard/1, sdiff/1, sdiffstore/1, sinter_min/1, sinter_n/1, sinter_m/1,
          sinterstore_min/1, sinterstore_n/1, sinterstore_m/1, sismember/1, smembers/1,
-         smove/1, spop/1, srandmember/1]).
+         smove/1, spop/1, srandmember/1, srem/1]).
 
 %% ====================================================================
 %% External functions
@@ -83,6 +83,13 @@ init_per_round(Fun, Keys) when Fun =:= sdiff;
                   args = [?KEY2 | lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, 100))],
                   group = sets, result_type = number}),
   sadd(Keys),
+  ok;
+init_per_round(Fun, _Keys) when Fun =:= srem ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SADD">>,
+                  args = [?KEY | lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, 10000))],
+                  group = sets, result_type = number}),
   ok;
 init_per_round(_Fun, _Keys) ->
   _ = edis_db:run(
@@ -192,3 +199,9 @@ srandmember(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SRANDMEMBER">>, args = [?KEY], group = sets, result_type = bulk}).
+
+-spec srem([binary()]) -> number().
+srem(Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SREM">>, args = [?KEY | Keys], group = sets, result_type = number}).
