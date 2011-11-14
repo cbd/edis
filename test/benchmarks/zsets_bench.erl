@@ -20,7 +20,8 @@
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([zadd/1, zadd_one/1, zcard/1, zcount_n/1, zcount_m/1, zincrby/1,
-         zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1]).
+         zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1,
+         zrange_n/1, zrange_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -45,7 +46,8 @@ quit_per_testcase(_Function) -> ok.
 init_per_round(Fun, Keys) when Fun =:= zcard;
                                Fun =:= zadd_one;
                                Fun =:= zcount_n;
-                               Fun =:= zincrby ->
+                               Fun =:= zincrby;
+                               Fun =:= zrange_n ->
   zadd(Keys),
   ok;
 init_per_round(Fun, Keys) when Fun =:= zinterstore_min ->
@@ -93,11 +95,12 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_m ->
                          ],
                   group = zsets, result_type = number}),
   ok;
-init_per_round(Fun, _Keys) when Fun =:= zcount_m ->
+init_per_round(Fun, _Keys) when Fun =:= zcount_m;
+                                Fun =:= zrange_m ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
-                  args = [?KEY, [{1.0 * I, <<"x">>} || I <- lists:seq(1, 10000)]],
+                  args = [?KEY, [{1.0 * I, edis_util:integer_to_binary(I)} || I <- lists:seq(1, 10000)]],
                   group = zsets, result_type = number}),
   ok;
 init_per_round(_Fun, _Keys) ->
@@ -182,3 +185,16 @@ zinterstore_m(_Keys) ->
     edis_db:process(0),
     #edis_command{cmd = <<"ZINTERSTORE">>, args = [?KEY, [{?KEY, 1.0}, {?KEY2, 1.0}], sum],
                   group = zsets, result_type = number}).
+
+-spec zrange_n([binary()]) -> [binary()].
+zrange_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, 0, 1], group = zsets, result_type = multi_bulk}).
+
+-spec zrange_m([binary()]) -> [binary()].
+zrange_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = zsets, result_type = multi_bulk}).
