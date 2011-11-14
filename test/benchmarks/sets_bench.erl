@@ -19,7 +19,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([sadd/1, scard/1, sdiff/1]).
+-export([sadd/1, scard/1, sdiff/1, sdiffstore/1]).
 
 %% ====================================================================
 %% External functions
@@ -42,7 +42,8 @@ quit_per_testcase(_Function) -> ok.
 
 -spec init_per_round(atom(), [binary()]) -> ok.
 init_per_round(scard, Keys) -> sadd(Keys), ok;
-init_per_round(sdiff, Keys) ->
+init_per_round(Fun, Keys) when Fun =:= sdiff;
+                               Fun =:= sdiffstore ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SADD">>,
@@ -82,3 +83,10 @@ sdiff(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SDIFF">>, args = [?KEY, ?KEY2], group = sets, result_type = multi_bulk}).
+
+-spec sdiffstore([binary()]) -> [binary()].
+sdiffstore(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SDIFFSTORE">>, args = [?KEY, ?KEY, ?KEY2],
+                  group = sets, result_type = multi_bulk}).
