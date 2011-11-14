@@ -21,7 +21,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([sadd/1, scard/1, sdiff/1, sdiffstore/1, sinter_min/1, sinter_n/1, sinter_m/1,
          sinterstore_min/1, sinterstore_n/1, sinterstore_m/1, sismember/1, smembers/1,
-         smove/1, spop/1, srandmember/1, srem/1]).
+         smove/1, spop/1, srandmember/1, srem/1, sunion/1, sunionstore/1]).
 
 %% ====================================================================
 %% External functions
@@ -76,7 +76,9 @@ init_per_round(Fun, Keys) when Fun =:= sinter_m;
                                         group = sets, result_type = number})
                 end, Keys);
 init_per_round(Fun, Keys) when Fun =:= sdiff;
-                               Fun =:= sdiffstore ->
+                               Fun =:= sdiffstore;
+                               Fun =:= sunion;
+                               Fun =:= sunionstore ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SADD">>,
@@ -205,3 +207,16 @@ srem(Keys) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SREM">>, args = [?KEY | Keys], group = sets, result_type = number}).
+
+-spec sunion([binary()]) -> [binary()].
+sunion(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SUNION">>, args = [?KEY, ?KEY2], group = sets, result_type = multi_bulk}).
+
+-spec sunionstore([binary()]) -> [binary()].
+sunionstore(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"SUNIONSTORE">>, args = [?KEY, ?KEY, ?KEY2],
+                  group = sets, result_type = multi_bulk}).
