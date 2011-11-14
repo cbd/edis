@@ -981,7 +981,7 @@ parse_zstore_command(C) ->
       _ ->
         throw(syntax)
     end,
-  C#edis_command{args = [Destination, lists:zip(Keys, Weights), Aggregate]}.
+  C#edis_command{args = [Destination, lists:zip(Keys, Weights), Aggregate], result_type = number, group = zsets}.
 
 parse_zrange_command(C) ->
   [Key, Min, Max | Options] = C#edis_command.args,

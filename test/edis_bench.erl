@@ -22,7 +22,7 @@
          run/3, run/2, run/1,
          behaviour_info/1]).
 
--export([zero/1, constant/1, linear/1, quadratic/1, logarithmic/1, exponential/1]).
+-export([zero/1, constant/1, linear/1, quadratic/1, logarithmic/1, xlogarithmic/1, exponential/1]).
 
 %% ====================================================================
 %% External functions
@@ -141,6 +141,10 @@ quadratic(N) -> N * N.
 -spec logarithmic(pos_integer()) -> float().
 logarithmic(N) -> math:log(N) + 1.
 
+%% @doc O(n*log(n)) comparer
+-spec xlogarithmic(pos_integer()) -> float().
+xlogarithmic(N) -> N * math:log(N) + 1.
+
 %% @doc O(e^n) comparer
 -spec exponential(pos_integer()) -> float().
 exponential(N) -> math:pow(2.71828182845904523536028747135266249775724709369995, N).
@@ -165,9 +169,9 @@ do_run(Module, Function, N, Options) ->
   Items = lists:reverse(lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, N))),
   ok = try Module:init_per_round(Function, Items) catch _:undef -> ok end,
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
-    {Time, _Result} ->
+    {Time, Result} ->
       case proplists:get_bool(debug, Options) of
-        true -> ?INFO("~p: ~p~n", [N, Time/1000]);
+        true -> ?INFO("~p: ~p~n\t~p~n", [N, Time/1000, Result]);
         false -> ok
       end,
       {N, (Time+1)/1000}

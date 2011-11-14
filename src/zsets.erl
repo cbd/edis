@@ -112,7 +112,8 @@ find(Member, ZSet) ->
 %% @doc Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate
 -spec intersection(fun((Scores1, Scores2) -> Scores3), zset(Scores1, Members), zset(Scores2, Members)) -> zset(Scores3, Members).
 intersection(Aggregate, ZSet1, ZSet2) ->
-  intersection(Aggregate, dict:to_list(ZSet1#zset.dict), dict:to_list(ZSet2#zset.dict), new()).
+  intersection(Aggregate, lists:sort(dict:to_list(ZSet1#zset.dict)),
+               lists:sort(dict:to_list(ZSet2#zset.dict)), new()).
 
 %% @doc Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
 %%      The last argument will be the accumulated result
