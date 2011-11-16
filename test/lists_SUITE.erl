@@ -283,7 +283,7 @@ brpoplpush(Config) ->
 	receive
 		[{error,<<"ERR Operation against a key holding the wrong kind of value">>}] -> ok;
 		[<<"testtest">>] -> ok
-	after 4000 ->
+	after 6000 ->
 		ct:fail("ERR Timeout")
 	end,
 	
@@ -294,10 +294,10 @@ brpoplpush(Config) ->
 	
 	spawn(erldis_client,scall,[Client,[<<"brpoplpush">>,<<"list1">>,<<"list2">>,0]]),
 	spawn(erldis_client,scall,[Client2,[<<"brpoplpush">>,<<"list2">>,<<"list1">>,0]]),
-	true = erldis_client:sr_scall(Client3,[<<"rpush">>,<<"list1">>,<<"foo">>]),
+	true = erldis_client:sr_scall(Client3,[<<"rpush">>,<<"list1">>,<<"foobar">>]),
 	timer:sleep(1000),
 	
-	<<"foo">> = erldis_client:sr_scall(Client3,[<<"lrange">>,<<"list1">>,0,-1]),
+	<<"foobar">> = erldis_client:sr_scall(Client3,[<<"lrange">>,<<"list1">>,0,-1]),
 	nil = erldis_client:sr_scall(Client3,[<<"lrange">>,<<"list2">>,0,-1]),
 	
 	%% Self-referential BRPOPLPUSH
@@ -361,11 +361,11 @@ linsert(Config) ->
 	3 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"xlist">>,<<"a">>,<<"foo">>,<<"bar">>]),
 	4 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"before">>,<<"foo">>,<<"zz">>]),
 	[<<"a">>,<<"zz">>,<<"foo">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"xlist">>,0,-1]),
-	4 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"after">>,<<"a">>,<<"yy">>]),
+	5 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"after">>,<<"a">>,<<"yy">>]),
 	[<<"a">>,<<"yy">>,<<"zz">>,<<"foo">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"xlist">>,0,-1]),
 	-1 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"after">>,<<"bad">>,<<"yy">>]),
 	[<<"a">>,<<"yy">>,<<"zz">>,<<"foo">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"xlist">>,0,-1]),
-	5 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"after">>,<<"yy">>,<<"xx">>]),
+	6 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"after">>,<<"yy">>,<<"xx">>]),
 	-1 = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"before">>,<<"bad">>,<<"yy">>]),
 	
 	{error,<<"ERR wrong number of arguments for 'LINSERT' command">>} = erldis_client:sr_scall(Client,[<<"linsert">>,<<"xlist">>,<<"after">>,<<"a">>,<<"b">>,<<"c">>]),
