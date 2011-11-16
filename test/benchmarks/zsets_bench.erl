@@ -21,7 +21,7 @@
          quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([zadd/1, zadd_one/1, zcard/1, zcount_n/1, zcount_m/1, zincrby/1,
          zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1,
-         zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1]).
+         zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1, zrank/1]).
 
 %% ====================================================================
 %% External functions
@@ -103,6 +103,13 @@ init_per_round(Fun, _Keys) when Fun =:= zcount_m;
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
                   args = [?KEY, [{1.0 * I, edis_util:integer_to_binary(I)} || I <- lists:seq(1, 10000)]],
+                  group = zsets, result_type = number}),
+  ok;
+init_per_round(Fun, Keys) when Fun =:= zrank->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZADD">>,
+                  args = [?KEY, [{edis_util:binary_to_float(Key), Key} || Key <- Keys]],
                   group = zsets, result_type = number}),
   ok;
 init_per_round(_Fun, _Keys) ->
@@ -213,3 +220,9 @@ zrangebyscore_m([Key|_]) ->
     edis_db:process(0),
     #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, {exc, 0.0}, {inc, edis_util:binary_to_float(Key)}],
                   group = zsets, result_type = multi_bulk}).
+
+-spec zrank([binary()]) -> number().
+zrank([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZRANK">>, args = [?KEY, Key], group = zsets, result_type = number}).
