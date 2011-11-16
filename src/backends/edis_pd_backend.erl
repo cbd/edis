@@ -52,7 +52,10 @@ fold(#ref{}, Fun, InitValue) ->
 is_empty(#ref{}) -> [] =:= erlang:get().
 
 -spec destroy(ref()) -> ok | {error, term()}.
-destroy(#ref{}) -> erlang:erase().
+destroy(#ref{}) ->
+  lists:foreach(fun({K,V}) when is_atom(K) -> erlang:put(K, V);
+                   (_) -> ok
+                end, erlang:erase()).
 
 -spec status(ref()) -> {ok, binary()} | error.
 status(#ref{}) -> {ok, iolist_to_binary(io_lib:format("~p~n", [erlang:process_info(self(), dictionary)]))}.
