@@ -22,7 +22,8 @@
 -export([zadd/1, zadd_one/1, zcard/1, zcount_n/1, zcount_m/1, zincrby/1,
          zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1,
          zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1, zrank/1,
-         zrem/1, zrem_one/1]).
+         zrem/1, zrem_one/1, zremrangebyrank_n/1, zremrangebyrank_m/1,
+         zremrangebyscore_n/1, zremrangebyscore_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -49,7 +50,9 @@ init_per_round(Fun, Keys) when Fun =:= zcard;
                                Fun =:= zcount_n;
                                Fun =:= zincrby;
                                Fun =:= zrange_n;
-                               Fun =:= zrangebyscore_n ->
+                               Fun =:= zrangebyscore_n;
+                               Fun =:= zremrangebyrank_n;
+                               Fun =:= zremrangebyscore_n ->
   zadd(Keys),
   ok;
 init_per_round(Fun, Keys) when Fun =:= zinterstore_min ->
@@ -100,7 +103,9 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_m ->
 init_per_round(Fun, _Keys) when Fun =:= zcount_m;
                                 Fun =:= zrange_m;
                                 Fun =:= zrem;
-                                Fun =:= zrangebyscore_m ->
+                                Fun =:= zrangebyscore_m;
+                                Fun =:= zremrangebyrank_m;
+                                Fun =:= zremrangebyscore_m ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
@@ -205,23 +210,22 @@ zrange_n(_Keys) ->
     #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, 0, 1], group = zsets, result_type = multi_bulk}).
 
 -spec zrange_m([binary()]) -> [binary()].
-zrange_m([Key|_]) ->
+zrange_m(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
-                  group = zsets, result_type = multi_bulk}).
+    #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, -20, -10], group = zsets, result_type = multi_bulk}).
 
 -spec zrangebyscore_n([binary()]) -> [binary()].
 zrangebyscore_n(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, {exc, 0.0}, {inc, 1.0}], group = zsets, result_type = multi_bulk}).
+    #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, neg_infinity, {inc, 1.0}], group = zsets, result_type = multi_bulk}).
 
 -spec zrangebyscore_m([binary()]) -> [binary()].
 zrangebyscore_m([Key|_]) ->
   catch edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, {exc, 0.0}, {inc, edis_util:binary_to_float(Key)}],
+    #edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [?KEY, neg_infinity, {inc, edis_util:binary_to_float(Key)}],
                   group = zsets, result_type = multi_bulk}).
 
 -spec zrank([binary()]) -> number().
@@ -241,3 +245,30 @@ zrem(Keys) ->
   catch edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZREM">>, args = [?KEY | Keys], group = zsets, result_type = number}).
+
+-spec zremrangebyrank_n([binary()]) -> number().
+zremrangebyrank_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [?KEY, -20, -10], group = zsets, result_type = number}).
+
+-spec zremrangebyrank_m([binary()]) -> [binary()].
+zremrangebyrank_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = zsets, result_type = multi_bulk}).
+
+-spec zremrangebyscore_n([binary()]) -> number().
+zremrangebyscore_n([Key|_]) ->
+  L = edis_util:binary_to_float(Key),
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [?KEY, {inc, L}, {inc, L}], group = zsets, result_type = number}).
+
+-spec zremrangebyscore_m([binary()]) -> [binary()].
+zremrangebyscore_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [?KEY, {exc, 0.0}, {inc, edis_util:binary_to_float(Key)}],
+                  group = zsets, result_type = multi_bulk}).
