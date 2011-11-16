@@ -270,5 +270,6 @@ zremrangebyscore_n([Key|_]) ->
 zremrangebyscore_m([Key|_]) ->
   catch edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [?KEY, {exc, 0.0}, {inc, edis_util:binary_to_float(Key)}],
+    #edis_command{cmd = <<"ZREMRANGEBYSCORE">>,
+                  args = [?KEY, neg_infinity, {inc, edis_util:binary_to_float(Key)}],
                   group = zsets, result_type = multi_bulk}).
