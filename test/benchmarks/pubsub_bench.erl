@@ -16,7 +16,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([psubscribe/1, publish/1]).
+-export([psubscribe/1, publish/1, punsubscribe/1]).
 
 %% ====================================================================
 %% External functions
@@ -69,13 +69,22 @@ quit_per_round(publish, Keys) ->
   wait_for_handlers(0);
 quit_per_round(_Fun, _Keys) -> ok.
 
--spec psubscribe([binary()]) -> {[binary()], gb_set()}.
+-spec psubscribe([binary()]) -> {[term()], gb_set()}.
 psubscribe(Patterns) ->
-      lists:foldl(
-      fun(Pattern, {_Result, AccPatternSet}) ->
-              NextPatternSet = gb_sets:add_element(Pattern, AccPatternSet),
-              {[<<"psubscribe">>, Pattern, gb_sets:size(NextPatternSet)], NextPatternSet}
-      end, {nothing, gb_sets:empty()}, Patterns).
+  lists:foldl(
+    fun(Pattern, {_Result, AccPatternSet}) ->
+            NextPatternSet = gb_sets:add_element(Pattern, AccPatternSet),
+            {[<<"psubscribe">>, Pattern, gb_sets:size(NextPatternSet)], NextPatternSet}
+    end, {nothing, gb_sets:empty()}, Patterns).
+
+-spec punsubscribe([binary()]) -> {[term()], gb_set()}.
+punsubscribe(Patterns) ->
+  InitialState = psubscribe(lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, 10000))),
+  lists:foldl(
+    fun(Pattern, {_Result, AccPatternSet}) ->
+            NextPatternSet = gb_sets:del_element(Pattern, AccPatternSet),
+            {[<<"psubscribe">>, Pattern, gb_sets:size(NextPatternSet)], NextPatternSet}
+    end, InitialState, Patterns).
 
 -spec publish([binary()]) -> non_neg_integer().
 publish([Key|_]) ->
