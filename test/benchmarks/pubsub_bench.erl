@@ -16,7 +16,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([psubscribe/1, publish/1, punsubscribe/1]).
+-export([psubscribe/1, publish/1, punsubscribe/1, subscribe/1, unsubscribe/1]).
 
 %% ====================================================================
 %% External functions
@@ -90,6 +90,23 @@ punsubscribe(Patterns) ->
 publish([Key|_]) ->
   edis_pubsub:notify(#edis_message{channel = Key, message = Key}),
   edis_pubsub:count_handlers().
+
+-spec subscribe([binary()]) -> {[term()], gb_set()}.
+subscribe(Channels) ->
+  lists:foldl(
+    fun(Channel, {_Result, AccChannelSet}) ->
+            NextChannelSet = gb_sets:add_element(Channel, AccChannelSet),
+            {[<<"subscribe">>, Channel, gb_sets:size(NextChannelSet)], NextChannelSet}
+    end, {nothing, gb_sets:empty()}, Channels).
+
+-spec unsubscribe([binary()]) -> {[term()], gb_set()}.
+unsubscribe(Channels) ->
+  InitialState = subscribe(lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, 10000))),
+  lists:foldl(
+    fun(Channel, {_Result, AccChannelSet}) ->
+            NextChannelSet = gb_sets:del_element(Channel, AccChannelSet),
+            {[<<"subscribe">>, Channel, gb_sets:size(NextChannelSet)], NextChannelSet}
+    end, InitialState, Channels).
 
 wait_for_handlers(N) ->
   case edis_pubsub:count_handlers() of
