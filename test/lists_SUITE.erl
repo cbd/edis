@@ -7,7 +7,7 @@
 all() ->
      [push_llen_lindex,del,long_list,
 	  blpop_brpop,brpoplpush,lpushx_rpushx,
-	  linsert,rpoplpush,lpop_rpop].
+	  linsert,rpoplpush,lpop_rpop,lrange].
  	
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -438,3 +438,26 @@ lpop_rpop(Config) ->
 	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lpop">>,<<"string">>]),
 	{error,<<"ERR wrong number of arguments for 'RPOP' command">>} = erldis_client:sr_scall(Client,[<<"rpop">>]),
 	{error,<<"ERR wrong number of arguments for 'LPOP' command">>} = erldis_client:sr_scall(Client,[<<"lpop">>,<<"list1">>,<<"list2">>]).
+
+lrange(Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	%% Basic
+	8 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list1">>,0,1,2,3,4,5,6,7]),
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,1,-2]),
+	[<<"5">>,<<"6">>,<<"7">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,-3,-1]),
+	[<<"4">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,4,4]),
+	%% Inverted indexes
+	[] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,6,4]),
+	%% Out of range indexes including the full list
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,-1000,1000]),
+	%% Out of range negative end index
+	[<<"0">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,0,-8]),
+	[] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,0,-9]),
+	%% Non existing key
+	[] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,1]),
+	
+	[{error,<<"ERR Operation against a key holding the wrong kind of value">>}] = erldis_client:scall(Client,[<<"lrange">>,<<"string">>,0,1]),
+	{error,<<"ERR wrong number of arguments for 'LRANGE' command">>} = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0]),
+	{error,<<"ERR wrong number of arguments for 'LRANGE' command">>} = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>]),
+	{error,<<"ERR wrong number of arguments for 'LRANGE' command">>} = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,1,3]).
