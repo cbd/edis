@@ -68,7 +68,7 @@ delete_any(Member, ZSet) ->
 %% @doc Returns the size of the zset
 -spec size(zset(any(), any())) -> non_neg_integer().
 size(ZSet) ->
-  edis_gb_trees:size(ZSet#zset.tree).
+  dict:size(ZSet#zset.dict).
 
 %% @equiv iterator(ZSet, forward).
 -spec iterator(zset(Scores, Members)) -> iterator(Scores, Members).
@@ -112,7 +112,8 @@ find(Member, ZSet) ->
 %% @doc Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate
 -spec intersection(fun((Scores1, Scores2) -> Scores3), zset(Scores1, Members), zset(Scores2, Members)) -> zset(Scores3, Members).
 intersection(Aggregate, ZSet1, ZSet2) ->
-  intersection(Aggregate, dict:to_list(ZSet1#zset.dict), dict:to_list(ZSet2#zset.dict), new()).
+  intersection(Aggregate, lists:sort(dict:to_list(ZSet1#zset.dict)),
+               lists:sort(dict:to_list(ZSet2#zset.dict)), new()).
 
 %% @doc Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
 %%      The last argument will be the accumulated result
@@ -150,7 +151,7 @@ to_list(ZSet) ->
 %% @doc Returns the number of elements between Min and Max in ZSet
 -spec count(limit(Scores), limit(Scores), zset(Scores, _Members)) -> non_neg_integer().
 count(Min, Max, ZSet) ->
-  count(Min, Max, iterator(ZSet), 0).
+  count(Min, Max, next(iterator(ZSet)), 0).
 
 %% @equiv range(Start, Stop, ZSet, forward)
 -spec range(non_neg_integer(), non_neg_integer(), zset(Scores, Members)) -> [{Scores, Members}].
@@ -190,9 +191,9 @@ count(_Min, _Max, none, Acc) -> Acc;
 count(Min, Max, {Score, _Member, Iterator}, Acc) ->
   case {check_limit(min, Min, Score, Iterator#zset_iterator.direction),
         check_limit(max, Max, Score, Iterator#zset_iterator.direction)} of
-    {in, in} -> list(Min, Max, next(Iterator), Acc + 1);
+    {in, in} -> count(Min, Max, next(Iterator), Acc + 1);
     {_, out} -> Acc;
-    {out, in} -> list(Min, Max, next(Iterator), Acc)
+    {out, in} -> count(Min, Max, next(Iterator), Acc)
   end.
 
 %% @private

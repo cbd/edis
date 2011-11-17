@@ -750,16 +750,11 @@ handle_call(#edis_command{cmd = <<"LINDEX">>, args = [Key, Index]}, _From, State
   Reply =
     case get_item(State#state.backend_mod, State#state.backend_ref, list, Key) of
       #edis_item{value = Value} ->
-        try
-          case Index of
-            Index when Index >= 0 ->
-              {ok, lists:nth(Index + 1, Value)};
-            Index ->
-              {ok, lists:nth((-1)*Index, lists:reverse(Value))}
-          end
-        catch
-          _:function_clause ->
-            {ok, undefined}
+        case Index of
+          Index when Index >= 0 ->
+            {ok, edis_lists:nth(Index + 1, Value)};
+          Index ->
+            {ok, edis_lists:nth((-1)*Index, edis_lists:reverse(Value))}
         end;
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
@@ -769,24 +764,17 @@ handle_call(#edis_command{cmd = <<"LINSERT">>, args = [Key, Position, Pivot, Val
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list,
            fun(Item) ->
-                   case {lists:splitwith(fun(Val) ->
-                                                Val =/= Pivot
-                                        end, Item#edis_item.value), Position} of
-                     {{_, []}, _} -> %% Value was not found
-                       {-1, Item};
-                     {{Before, After}, before} ->
-                       {length(Item#edis_item.value) + 1,
-                        Item#edis_item{value = lists:append(Before, [Value|After])}};
-                     {{Before, [Pivot|After]}, 'after'} ->
-                       {length(Item#edis_item.value) + 1,
-                        Item#edis_item{value = lists:append(Before, [Pivot, Value|After])}}
+                   List = Item#edis_item.value,
+                   case edis_lists:insert(Value, Position, Pivot, List) of
+                     List -> {-1, Item};
+                     NewL -> {edis_lists:length(NewL), Item#edis_item{value = NewL}}
                    end
            end, -1),
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"LLEN">>, args = [Key]}, _From, State) ->
   Reply =
     case get_item(State#state.backend_mod, State#state.backend_ref, list, Key) of
-      #edis_item{value = Value} -> {ok, length(Value)};
+      #edis_item{value = Value} -> {ok, edis_lists:length(Value)};
       not_found -> {ok, 0};
       {error, Reason} -> {error, Reason}
     end,
@@ -795,13 +783,14 @@ handle_call(#edis_command{cmd = <<"LPOP">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.backend_mod, State#state.backend_ref, Key, list,
                 fun(Item) ->
-                        case Item#edis_item.value of
-                          [Value] ->
-                            {{delete, Value}, Item#edis_item{value = []}};
-                          [Value|Rest] ->
-                            {{keep, Value}, Item#edis_item{value = Rest}};
-                          [] ->
-                            throw(not_found)
+                        try
+                          {Elem, NewV} = edis_lists:pop(Item#edis_item.value),
+                          case edis_lists:length(NewV) of
+                            0 -> {{delete, Elem}, Item#edis_item{value = NewV}};
+                            _ -> {{keep, Elem}, Item#edis_item{value = NewV}}
+                          end
+                        catch
+                          _:empty -> throw(not_found)
                         end
                 end, {keep, undefined}) of
       {ok, {delete, Value}} ->
@@ -817,18 +806,18 @@ handle_call(#edis_command{cmd = <<"LPUSH">>, args = [Key | Values]}, _From, Stat
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list, linkedlist,
            fun(Item) ->
-                   {length(Item#edis_item.value) + length(Values),
-                    Item#edis_item{value =
-                                     lists:append(lists:reverse(Values), Item#edis_item.value)}}
-           end, []),
+                   NewList = edis_lists:from_list(lists:reverse(Values)),
+                   {edis_lists:length(Item#edis_item.value) + edis_lists:length(NewList),
+                    Item#edis_item{value = edis_lists:append(NewList, Item#edis_item.value)}}
+           end, edis_lists:empty()),
   NewState = check_blocked_list_ops(Key, State),
   {reply, Reply, stamp(Key, write, NewState)};
 handle_call(#edis_command{cmd = <<"LPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list,
            fun(Item) ->
-                   {length(Item#edis_item.value) + 1,
-                    Item#edis_item{value = [Value | Item#edis_item.value]}}
+                   {edis_lists:length(Item#edis_item.value) + 1,
+                    Item#edis_item{value = edis_lists:push(Value, Item#edis_item.value)}}
            end, 0),
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"LRANGE">>, args = [Key, Start, Stop]}, _From, State) ->
@@ -836,7 +825,7 @@ handle_call(#edis_command{cmd = <<"LRANGE">>, args = [Key, Start, Stop]}, _From,
     try
       case get_item(State#state.backend_mod, State#state.backend_ref, list, Key) of
         #edis_item{value = Value} ->
-          L = erlang:length(Value),
+          L = edis_lists:length(Value),
           StartPos =
             case Start of
               Start when Start >= L -> throw(empty);
@@ -853,7 +842,7 @@ handle_call(#edis_command{cmd = <<"LRANGE">>, args = [Key, Start, Stop]}, _From,
             end,
           case StopPos - StartPos + 1 of
             Len when Len =< 0 -> {ok, []};
-            Len -> {ok, lists:sublist(Value, StartPos, Len)}
+            Len -> {ok, edis_lists:to_list(edis_lists:sublist(Value, StartPos, Len))}
           end;
         not_found -> {ok, []};
         {error, Reason} -> {error, Reason}
@@ -869,17 +858,18 @@ handle_call(#edis_command{cmd = <<"LREM">>, args = [Key, Count, Value]}, _From, 
                    NewV =
                      case Count of
                        0 ->
-                         lists:filter(fun(Val) ->
-                                              Val =/= Value
-                                      end, Item#edis_item.value);
+                         edis_lists:filter(fun(Val) ->
+                                                   Val =/= Value
+                                           end, Item#edis_item.value);
                        Count when Count >= 0 ->
-                         Item#edis_item.value -- lists:duplicate(Count, Value);
+                         edis_lists:remove(Value, Count, Item#edis_item.value);
                        Count ->
-                         lists:reverse(
-                           lists:reverse(Item#edis_item.value) --
-                             lists:duplicate((-1)*Count, Value))
+                         edis_lists:reverse(
+                           edis_lists:remove(Value, (-1)*Count,
+                             edis_lists:reverse(Item#edis_item.value)))
                      end,
-                   {length(Item#edis_item.value) - length(NewV), Item#edis_item{value = NewV}}
+                   {edis_lists:length(Item#edis_item.value) - edis_lists:length(NewV),
+                    Item#edis_item{value = NewV}}
            end, 0),
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"LSET">>, args = [Key, Index, Value]}, _From, State) ->
@@ -889,23 +879,31 @@ handle_call(#edis_command{cmd = <<"LSET">>, args = [Key, Index, Value]}, _From, 
              fun(Item) ->
                      case Index of
                        0 ->
-                         {ok, Item#edis_item{value = [Value | erlang:tl(Item#edis_item.value)]}};
+                         {ok, Item#edis_item{value =
+                                               edis_lists:replace_head(Value, Item#edis_item.value)}};
                        -1 ->
-                         [_|Rest] = lists:reverse(Item#edis_item.value),
-                         {ok, Item#edis_item{value = lists:reverse([Value|Rest])}};
+                         {ok, Item#edis_item{value =
+                                               edis_lists:reverse(
+                                                 edis_lists:replace_head(
+                                                   edis_lists:reverse(Item#edis_item.value)))}};
                        Index when Index >= 0 ->
-                         case lists:split(Index, Item#edis_item.value) of
-                           {Before, [_|After]} ->
-                             {ok, Item#edis_item{value = lists:append(Before, [Value|After])}};
-                           {_, []} ->
-                             throw(badarg)
+                         {Before, After} = edis_lists:split(Index, Item#edis_item.value),
+                         case edis_lists:length(After) of
+                           0 -> throw(badarg);
+                           _ ->
+                             {ok, Item#edis_item{value =
+                                                   edis_lists:append(
+                                                     Before,
+                                                     edis_lists:replace_head(Value, After))}}
                          end;
                        Index ->
                          {RAfter, RBefore} =
-                           lists:split((-1)*Index, lists:reverse(Item#edis_item.value)),
-                         [_|After] = lists:reverse(RAfter),
+                           edis_lists:split((-1)*Index, edis_lists:reverse(Item#edis_item.value)),
                          {ok, Item#edis_item{value =
-                                               lists:append(lists:reverse(RBefore), [Value|After])}}
+                                               edis_lists:append(
+                                                 edis_lists:reverse(RBefore),
+                                                 edis_lists:replace_head(
+                                                   Value, edis_lists:reverse(RAfter)))}}
                      end
              end) of
       {ok, ok} -> ok;
@@ -918,7 +916,7 @@ handle_call(#edis_command{cmd = <<"LTRIM">>, args = [Key, Start, Stop]}, _From, 
   Reply =
     case update(State#state.backend_mod, State#state.backend_ref, Key, list,
                 fun(Item) ->
-                        L = erlang:length(Item#edis_item.value),
+                        L = edis_lists:length(Item#edis_item.value),
                         StartPos =
                           case Start of
                             Start when Start >= L -> throw(empty);
@@ -937,7 +935,8 @@ handle_call(#edis_command{cmd = <<"LTRIM">>, args = [Key, Start, Stop]}, _From, 
                           Len when Len =< 0 -> throw(empty);
                           Len ->
                             {ok, Item#edis_item{value =
-                                                  lists:sublist(Item#edis_item.value, StartPos, Len)}}
+                                                  edis_lists:sublist(
+                                                    Item#edis_item.value, StartPos, Len)}}
                         end
                 end, ok) of
       {ok, ok} -> ok;
@@ -951,13 +950,14 @@ handle_call(#edis_command{cmd = <<"RPOP">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.backend_mod, State#state.backend_ref, Key, list,
                 fun(Item) ->
-                        case lists:reverse(Item#edis_item.value) of
-                          [Value] ->
-                            {{delete, Value}, Item#edis_item{value = []}};
-                          [Value|Rest] ->
-                            {{keep, Value}, Item#edis_item{value = lists:reverse(Rest)}};
-                          [] ->
-                            throw(not_found)
+                        try
+                          {Elem, NewV} = edis_lists:pop(edis_lists:reverse(Item#edis_item.value)),
+                          case edis_lists:length(NewV) of
+                            0 -> {{delete, Elem}, Item#edis_item{value = NewV}};
+                            _ -> {{keep, Elem}, Item#edis_item{value = edis_lists:reverse(NewV)}}
+                          end
+                        catch
+                          _:empty -> throw(not_found)
                         end
                 end, {keep, undefined}) of
       {ok, {delete, Value}} ->
@@ -973,64 +973,65 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Key, Key]}, _From, Stat
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list,
            fun(Item) ->
-                   case lists:reverse(Item#edis_item.value) of
-                     [Value|Rest] ->
-                       {Value,
-                        Item#edis_item{value = [Value | lists:reverse(Rest)]}};
-                     _ ->
-                       throw(not_found)
+                   try edis_lists:pop(edis_lists:reverse(Item#edis_item.value)) of
+                     {Elem, NewV} ->
+                       {Elem, Item#edis_item{value =
+                                               edis_lists:push(Elem, edis_lists:reverse(NewV))}}
+                   catch
+                     _:empty -> throw(not_found)
                    end
            end, undefined),
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, _From, State) ->
-  Reply =
-    case update(State#state.backend_mod, State#state.backend_ref, Source, list,
-                fun(Item) ->
-                        case lists:reverse(Item#edis_item.value) of
-                          [Value] ->
-                            {{delete, Value}, Item#edis_item{value = []}};
-                          [Value|Rest] ->
-                            {{keep, Value}, Item#edis_item{value = lists:reverse(Rest)}};
-                          [] ->
-                            throw(not_found)
-                        end
-                end, undefined) of
-      {ok, undefined} ->
-        {ok, undefined};
-      {ok, {delete, Value}} ->
-        _ = (State#state.backend_mod):delete(State#state.backend_ref, Source),
-        update(State#state.backend_mod, State#state.backend_ref, Destination, list, linkedlist,
-                fun(Item) ->
-                        {Value, Item#edis_item{value = [Value | Item#edis_item.value]}}
-                end, []);
-      {ok, {keep, Value}} ->
-        update(State#state.backend_mod, State#state.backend_ref, Destination, list, linkedlist,
-                fun(Item) ->
-                        {Value, Item#edis_item{value = [Value | Item#edis_item.value]}}
-                end, []);
-      {error, Reason} ->
-        {error, Reason}
-    end,
+	Reply = 
+		try
+			{SourceAction,Value} = 
+				case get_item(State#state.backend_mod, State#state.backend_ref, list, Source) of
+					{error, SReason} -> throw(SReason);
+					not_found -> throw(not_found);
+					SourceItem ->
+						{I,Rest} = edis_lists:pop(edis_lists:reverse(SourceItem#edis_item.value)),
+						case edis_lists:length(Rest) of
+							0 -> {{delete, Source},I};
+							_ -> {{put, Source, SourceItem#edis_item{value = edis_lists:reverse(Rest)}},I}
+						end
+				end,
+			DestinationAction = 
+				case get_item(State#state.backend_mod, State#state.backend_ref, list, Destination) of
+					{error, DReason} -> throw(DReason);
+					not_found -> {put, Destination, #edis_item{key = Destination, type = list, encoding = hashtable, value = edis_lists:from_list([Value])}};
+					DestinationItem -> {put, Destination, DestinationItem#edis_item{value = edis_lists:push(Value,DestinationItem#edis_item.value)}}
+				end,
+			case (State#state.backend_mod):write(State#state.backend_ref,
+												 [SourceAction,DestinationAction]) of
+				ok -> {ok, Value};
+				{error, Reason} -> {error, Reason}
+			end
+		catch
+			_:Error -> 
+				{error, Error}
+		end,
   NewState = check_blocked_list_ops(Destination, State),
   {reply, Reply, stamp([Destination, Source], write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSH">>, args = [Key | Values]}, _From, State) ->
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list, linkedlist,
            fun(Item) ->
-                   {length(Item#edis_item.value) + length(Values),
-                    Item#edis_item{value = lists:append(Item#edis_item.value, Values)}}
-           end, []),
+                   NewList = edis_lists:from_list(Values),
+                   {edis_lists:length(Item#edis_item.value) + edis_lists:length(NewList),
+                    Item#edis_item{value = edis_lists:append(Item#edis_item.value, NewList)}}
+           end, edis_lists:empty()),
   NewState = check_blocked_list_ops(Key, State),
   {reply, Reply, stamp(Key, write, NewState)};
 handle_call(#edis_command{cmd = <<"RPUSHX">>, args = [Key, Value]}, _From, State) ->
   Reply =
     update(State#state.backend_mod, State#state.backend_ref, Key, list,
            fun(Item) ->
-                   {length(Item#edis_item.value) + 1,
+                   {edis_lists:length(Item#edis_item.value) + 1,
                     Item#edis_item{value =
-                                     lists:reverse(
-                                       [Value|
-                                          lists:reverse(Item#edis_item.value)])}}
+                                     edis_lists:reverse(
+                                       edis_lists:push(
+                                         Value, edis_lists:reverse(Item#edis_item.value)))}}
            end, 0),
   {reply, Reply, stamp(Key, write, State)};
 %% -- Sets -----------------------------------------------------------------------------------------
@@ -1871,7 +1872,7 @@ sort(_Mod, _Ref, _Item, #edis_sort_options{limit = {Off, _Lim}}) when Off < 0 ->
 sort(Mod, Ref, #edis_item{type = Type, value = Value}, Options) ->
   Elements =
     case Type of
-      list -> Value;
+      list -> edis_lists:to_list(Value);
       set -> gb_sets:to_list(Value);
       zset -> [Member || {_Score, Member} <- zsets:to_list(Value)]
     end,

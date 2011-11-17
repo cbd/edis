@@ -22,7 +22,7 @@
          run/3, run/2, run/1,
          behaviour_info/1]).
 
--export([zero/1, constant/1, linear/1, quadratic/1, logarithmic/1, exponential/1]).
+-export([zero/1, constant/1, linear/1, quadratic/1, logarithmic/1, xlogarithmic/1, exponential/1]).
 
 %% ====================================================================
 %% External functions
@@ -72,7 +72,7 @@ compare(Module, Function, MathFunction, Options) ->
   RawResults = run(Module, Function, Options),
   Distances =
     [case {V, proplists:get_value(x, Options, 0) +
-             (proplists:get_value(k, Options, 100) * MathFunction(K))} of
+             (proplists:get_value(k, Options, 1) * MathFunction(K))} of
        {error, _} -> 0;
        {_, 0} -> 0;
        {V, M} -> M / V
@@ -141,6 +141,10 @@ quadratic(N) -> N * N.
 -spec logarithmic(pos_integer()) -> float().
 logarithmic(N) -> math:log(N) + 1.
 
+%% @doc O(n*log(n)) comparer
+-spec xlogarithmic(pos_integer()) -> float().
+xlogarithmic(N) -> N * math:log(N) + 1.
+
 %% @doc O(e^n) comparer
 -spec exponential(pos_integer()) -> float().
 exponential(N) -> math:pow(2.71828182845904523536028747135266249775724709369995, N).
@@ -165,9 +169,9 @@ do_run(Module, Function, N, Options) ->
   Items = lists:reverse(lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, N))),
   ok = try Module:init_per_round(Function, Items) catch _:undef -> ok end,
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
-    {Time, _Result} ->
+    {Time, Result} ->
       case proplists:get_bool(debug, Options) of
-        true -> ?INFO("~p: ~p~n", [N, Time/1000]);
+        true -> ?INFO("~p: ~p~n\t~p~n", [N, Time/1000, Result]);
         false -> ok
       end,
       {N, (Time+1)/1000}
@@ -190,9 +194,9 @@ do_graph(Results, MathFunction, Options) ->
       lists:sublist(lists:reverse(SortedData), 1, proplists:get_value(outliers, Options, 20)),
   Data = [case lists:member({K,V}, Outliers) of
             true -> {K, 0, proplists:get_value(x, Options, 0) +
-                       (proplists:get_value(k, Options, 100) * MathFunction(K))};
+                       (proplists:get_value(k, Options, 1) * MathFunction(K))};
             false -> {K, V, proplists:get_value(x, Options, 0) +
-                        (proplists:get_value(k, Options, 100) * MathFunction(K))}
+                        (proplists:get_value(k, Options, 1) * MathFunction(K))}
           end || {K,V} <- RawData],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
   Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
