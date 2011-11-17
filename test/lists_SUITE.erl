@@ -7,7 +7,7 @@
 all() ->
      [push_llen_lindex,del,long_list,
 	  blpop_brpop,brpoplpush,lpushx_rpushx,
-	  linsert,rpoplpush].
+	  linsert,rpoplpush,lpop_rpop].
  	
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -409,3 +409,30 @@ rpoplpush(Config) ->
 	{error,<<"ERR wrong number of arguments for 'RPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list5">>]),
 	{error,<<"ERR wrong number of arguments for 'RPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>]),
 	{error,<<"ERR wrong number of arguments for 'RPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list5">>,<<"list1">>,<<"list2">>]).
+
+lpop_rpop(Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	%% Basic
+	3 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list1">>,<<"a">>,<<"b">>,<<"c">>]),
+	<<"a">> = erldis_client:sr_scall(Client,[<<"lpop">>,<<"list1">>]),
+	<<"c">> = erldis_client:sr_scall(Client,[<<"rpop">>,<<"list1">>]),
+	<<"b">> = erldis_client:sr_scall(Client,[<<"lpop">>,<<"list1">>]),
+	nil = erldis_client:sr_scall(Client,[<<"rpop">>,<<"list1">>]),
+	nil = erldis_client:sr_scall(Client,[<<"lpop">>,<<"list1">>]),
+	
+	%% Massive
+	Elements = [edis_util:integer_to_binary(E)
+			    || E <- lists:seq(0,999)], 
+	[erldis_client:sr_scall(Client,[<<"rpush">>,<<"list2">>,E])
+     || E <- Elements],
+	PopResults = [{edis_util:integer_to_binary(E),edis_util:integer_to_binary(999-E)}|| E <- lists:seq(0,499)],
+	[{First,Last} = 
+     {erldis_client:sr_scall(Client,[<<"lpop">>,<<"list2">>]),
+	  erldis_client:sr_scall(Client,[<<"rpop">>,<<"list2">>])}
+    || {Fist,Last} <- PopResults],
+	[] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
+	
+	%% Non list value
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"rpop">>,<<"string">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lpop">>,<<"string">>]).
