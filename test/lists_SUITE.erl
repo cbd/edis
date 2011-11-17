@@ -435,4 +435,6 @@ lpop_rpop(Config) ->
 	
 	%% Non list value
 	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"rpop">>,<<"string">>]),
-	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lpop">>,<<"string">>]).
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lpop">>,<<"string">>]),
+	{error,<<"ERR wrong number of arguments for 'RPOP' command">>} = erldis_client:sr_scall(Client,[<<"rpop">>]),
+	{error,<<"ERR wrong number of arguments for 'LPOP' command">>} = erldis_client:sr_scall(Client,[<<"lpop">>,<<"list1">>,<<"list2">>]).
