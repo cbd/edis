@@ -378,4 +378,34 @@ linsert(Config) ->
 
 rpoplpush(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
-	ok.
+	
+	%% Base Case
+	3 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list1">>,<<"a">>,<<"foo">>,<<"bar">>]),
+	<<"bar">> = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list1">>,<<"list2">>]),
+	<<"foo">> = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list1">>,<<"list2">>]),
+	[<<"a">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list1">>,0,-1]),
+	[<<"foo">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
+	
+	%% With the same list as src and dst
+	4 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list3">>,<<"a">>,<<"b">>,<<"c">>,<<"d">>]),
+	[<<"a">>,<<"b">>,<<"c">>,<<"d">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list3">>,0,-1]),
+	<<"d">> = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list3">>,<<"list3">>]),
+	[<<"d">>,<<"a">>,<<"b">>,<<"c">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list3">>,0,-1]),
+	
+	%% Non existing key
+	nil = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list4">>,<<"list5">>]),
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list4">>]),
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list5">>]),
+	
+	%% Non list src key
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"string">>,<<"list5">>]),
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"list5">>]),
+	
+	%% Non list dest key
+	3 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list5">>,<<"a">>,<<"b">>,<<"c">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list5">>,<<"string">>]),
+	[<<"a">>,<<"b">>,<<"c">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list5">>,0,-1]),
+	
+	{error,<<"ERR wrong number of arguments for 'RPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list5">>]),
+	{error,<<"ERR wrong number of arguments for 'RPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>]),
+	{error,<<"ERR wrong number of arguments for 'RPOPLPUSH' command">>} = erldis_client:sr_scall(Client,[<<"rpoplpush">>,<<"list5">>,<<"list1">>,<<"list2">>]).
