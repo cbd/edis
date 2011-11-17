@@ -27,7 +27,7 @@
 -export([new/0, enter/2, enter/3, size/1, find/2, delete_any/2]).
 -export([iterator/1, iterator/2, direction/1, next/1, map/2, to_list/1]).
 -export([intersection/2, intersection/3, union/2, union/3]).
--export([count/3, range/3, range/4, list/3, list/4]).
+-export([count/3, count/4, range/3, range/4, list/3, list/4]).
 
 %% @doc Creates an empty {@link zset(any(), any())}
 -spec new() -> zset(any(), any()).
@@ -148,10 +148,15 @@ map(Fun, ZSet) ->
 to_list(ZSet) ->
   edis_gb_trees:keys(ZSet#zset.tree).
 
-%% @doc Returns the number of elements between Min and Max in ZSet
+%% @equiv count(Min, Max, ZSet, forward)
 -spec count(limit(Scores), limit(Scores), zset(Scores, _Members)) -> non_neg_integer().
 count(Min, Max, ZSet) ->
-  count(Min, Max, next(iterator(ZSet)), 0).
+  count(Min, Max, ZSet, forward).
+
+%% @doc Returns the number of elements between Min and Max in ZSet
+-spec count(limit(Scores), limit(Scores), zset(Scores, _Members), direction()) -> non_neg_integer().
+count(Min, Max, ZSet, Direction) ->
+  do_count(Min, Max, next(iterator(ZSet, Direction)), 0).
 
 %% @equiv range(Start, Stop, ZSet, forward)
 -spec range(non_neg_integer(), non_neg_integer(), zset(Scores, Members)) -> [{Scores, Members}].
@@ -187,13 +192,13 @@ do_list(Min, Max, {Score, Member, Iterator}, Acc) ->
   end.
 
 %% @private
-count(_Min, _Max, none, Acc) -> Acc;
-count(Min, Max, {Score, _Member, Iterator}, Acc) ->
+do_count(_Min, _Max, none, Acc) -> Acc;
+do_count(Min, Max, {Score, _Member, Iterator}, Acc) ->
   case {check_limit(min, Min, Score, Iterator#zset_iterator.direction),
         check_limit(max, Max, Score, Iterator#zset_iterator.direction)} of
-    {in, in} -> count(Min, Max, next(Iterator), Acc + 1);
+    {in, in} -> do_count(Min, Max, next(Iterator), Acc + 1);
     {_, out} -> Acc;
-    {out, in} -> count(Min, Max, next(Iterator), Acc)
+    {out, in} -> do_count(Min, Max, next(Iterator), Acc)
   end.
 
 %% @private

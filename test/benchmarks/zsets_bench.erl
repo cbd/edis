@@ -24,7 +24,7 @@
          zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1, zrank/1,
          zrem/1, zrem_one/1, zremrangebyrank_n/1, zremrangebyrank_m/1,
          zremrangebyscore_n/1, zremrangebyscore_m/1,
-         zrevrange_n/1, zrevrange_m/1, zrevrangebyscore_n/1, zrevrangebyscore_m/1]).
+         zrevrange_n/1, zrevrange_m/1, zrevrangebyscore_n/1, zrevrangebyscore_m/1, zrevrank/1]).
 
 %% ====================================================================
 %% External functions
@@ -118,6 +118,7 @@ init_per_round(Fun, _Keys) when Fun =:= zcount_m;
                   group = zsets, result_type = number}),
   ok;
 init_per_round(Fun, Keys) when Fun =:= zrank;
+                               Fun =:= zrevrank;
                                Fun =:= zrem_one ->
   edis_db:run(
     edis_db:process(0),
@@ -305,3 +306,9 @@ zrevrangebyscore_m([Key|_]) ->
     edis_db:process(0),
     #edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [?KEY, {inc, edis_util:binary_to_float(Key)}, neg_infinity],
                   group = zsets, result_type = multi_bulk}).
+
+-spec zrevrank([binary()]) -> number().
+zrevrank(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREVRANK">>, args = [?KEY, <<"1">>], group = zsets, result_type = number}).
