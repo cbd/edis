@@ -16,7 +16,7 @@
 -export([all/0,
          init/0, init_per_testcase/1, init_per_round/2,
          quit/0, quit_per_testcase/1, quit_per_round/2]).
--export([psubscribe/1]).
+-export([psubscribe/1, publish/1]).
 
 %% ====================================================================
 %% External functions
@@ -32,15 +32,41 @@ init() -> ok.
 quit() -> ok.
 
 -spec init_per_testcase(atom()) -> ok.
+init_per_testcase(publish) -> ok;
 init_per_testcase(_Function) -> edis_pubsub:add_sup_handler().
 
 -spec quit_per_testcase(atom()) -> ok.
+quit_per_testcase(publish) -> ok;
 quit_per_testcase(_Function) -> edis_pubsub:delete_handler().
 
 -spec init_per_round(atom(), [binary()]) -> ok.
+init_per_round(publish, Keys) ->
+  lists:foreach(
+    fun(Key) ->
+            P = proc_lib:spawn(
+                  fun() ->
+                          ok = edis_pubsub:add_sup_handler(),
+                          receive
+                            stop -> edis_pubsub:delete_handler()
+                          end
+                  end),
+            Name = binary_to_atom(<<"pubsub-bench-", Key/binary>>, utf8),
+            case erlang:whereis(Name) of
+              undefined -> true;
+              _ -> erlang:unregister(Name)
+            end,
+            erlang:register(Name, P)
+    end, Keys),
+  wait_for_handlers(length(Keys));
 init_per_round(_Fun, _Keys) -> ok.
 
 -spec quit_per_round(atom(), [binary()]) -> ok.
+quit_per_round(publish, Keys) ->
+  lists:foreach(
+    fun(Key) ->
+            binary_to_atom(<<"pubsub-bench-", Key/binary>>, utf8) ! stop
+    end, Keys),
+  wait_for_handlers(0);
 quit_per_round(_Fun, _Keys) -> ok.
 
 -spec psubscribe([binary()]) -> {[binary()], gb_set()}.
@@ -50,3 +76,14 @@ psubscribe(Patterns) ->
               NextPatternSet = gb_sets:add_element(Pattern, AccPatternSet),
               {[<<"psubscribe">>, Pattern, gb_sets:size(NextPatternSet)], NextPatternSet}
       end, {nothing, gb_sets:empty()}, Patterns).
+
+-spec publish([binary()]) -> non_neg_integer().
+publish([Key|_]) ->
+  edis_pubsub:notify(#edis_message{channel = Key, message = Key}),
+  edis_pubsub:count_handlers().
+
+wait_for_handlers(N) ->
+  case edis_pubsub:count_handlers() of
+    N -> ok;
+    _ -> timer:sleep(100), wait_for_handlers(N)
+  end.
