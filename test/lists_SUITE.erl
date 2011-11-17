@@ -7,7 +7,8 @@
 all() ->
      [push_llen_lindex,del,long_list,
 	  blpop_brpop,brpoplpush,lpushx_rpushx,
-	  linsert,rpoplpush,lpop_rpop,lrange].
+	  linsert,rpoplpush,lpop_rpop,lrange,
+	  ltrim].
  	
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -458,6 +459,36 @@ lrange(Config) ->
 	[] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,1]),
 	
 	[{error,<<"ERR Operation against a key holding the wrong kind of value">>}] = erldis_client:scall(Client,[<<"lrange">>,<<"string">>,0,1]),
-	{error,<<"ERR wrong number of arguments for 'LRANGE' command">>} = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0]),
-	{error,<<"ERR wrong number of arguments for 'LRANGE' command">>} = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>]),
-	{error,<<"ERR wrong number of arguments for 'LRANGE' command">>} = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,1,3]).
+	[{error,<<"ERR wrong number of arguments for 'LRANGE' command">>}] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0]),
+	[{error,<<"ERR wrong number of arguments for 'LRANGE' command">>}] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>]),
+	[{error,<<"ERR wrong number of arguments for 'LRANGE' command">>}] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,1,3]).
+
+ltrim(Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	[<<"0">>] = trim_list(Client, 0, 0),
+	[<<"0">>,<<"1">>] = trim_list(Client, 0, 1),
+	[<<"0">>,<<"1">>,<<"2">>] = trim_list(Client, 0, 2),
+	[<<"1">>,<<"2">>] = trim_list(Client, 1, 2),
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>] = trim_list(Client, 1, -1),
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>] = trim_list(Client, 1, -2),
+	[<<"6">>,<<"7">>] = trim_list(Client, -2, -1),
+	[<<"7">>] = trim_list(Client, -1, -1),
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>] = trim_list(Client, -8, -1),
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>] = trim_list(Client, -10, 10),
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>] = trim_list(Client, 0, 8),
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>] = trim_list(Client, 0, 10),
+	[<<"0">>] = trim_list(Client, 0, -8),
+	[] = trim_list(Client, 0, -9),
+	
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"ltrim">>,<<"string">>,0,1]),
+	{error,<<"ERR wrong number of arguments for 'LTRIM' command">>} = erldis_client:sr_scall(Client,[<<"ltrim">>,<<"list">>,0,1,2]),
+	{error,<<"ERR wrong number of arguments for 'LTRIM' command">>} = erldis_client:sr_scall(Client,[<<"ltrim">>,<<"list">>,0]),
+	{error,<<"ERR wrong number of arguments for 'LTRIM' command">>} = erldis_client:sr_scall(Client,[<<"ltrim">>,<<"list">>]),
+	{error,<<"ERR wrong number of arguments for 'LTRIM' command">>} = erldis_client:sr_scall(Client,[<<"ltrim">>]).
+-spec trim_list(pid(),integer(),integer()) -> list(binary()). 
+trim_list(Client, Start, Stop) ->
+	erldis_client:sr_scall(Client,[<<"del">>,<<"list">>]),
+	8 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,0,1,2,3,4,5,6,7]),
+	ok = erldis_client:sr_scall(Client,[<<"ltrim">>,<<"list">>,Start,Stop]),
+	erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]).
