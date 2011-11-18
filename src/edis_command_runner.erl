@@ -61,9 +61,11 @@ last_arg(_) -> inlined.
 -spec init(port()) -> {ok, state()}.
 init(Socket) ->
   PeerPort =
-    case inet:peername(Socket) of
+    try inet:peername(Socket) of
       {ok, {_Ip, Port}} -> Port;
       Error -> Error
+    catch
+      _:Error -> Error
     end,
   Authenticated = undefined =:= edis_config:get(requirepass),
   {ok, #state{socket = Socket, peerport = PeerPort, authenticated = Authenticated}}.
@@ -583,6 +585,8 @@ parse_command(C = #edis_command{cmd = <<"EXEC">>, args = []}) -> C#edis_command{
 parse_command(#edis_command{cmd = <<"EXEC">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"WATCH">>, args = [_Key|_Keys]}) -> C#edis_command{result_type=ok,group=transaction};
 parse_command(#edis_command{cmd = <<"WATCH">>}) -> throw(bad_arg_num);
+parse_command(C = #edis_command{cmd = <<"UNWATCH">>, args = []}) -> C#edis_command{result_type=ok,group=transaction};
+parse_command(#edis_command{cmd = <<"UNWATCH">>}) -> throw(bad_arg_num);
 %% -- Errors ---------------------------------------------------------------------------------------
 parse_command(#edis_command{cmd = <<"SYNC">>}) -> throw(unsupported);
 parse_command(#edis_command{cmd = <<"SLOWLOG">>}) -> throw(unsupported);
@@ -659,6 +663,8 @@ run(C = #edis_command{cmd = <<"WATCH">>, args = Keys}, State) ->
                 end
         end, State#state.watched_keys, Keys),
   tcp_ok(State#state{watched_keys = NewWatchedKeys});
+run(#edis_command{cmd = <<"UNWATCH">>, args = []}, State) ->
+  tcp_ok(State#state{watched_keys = []});
 %% -- Pub/Sub commands -----------------------------------------------------------------------------
 run(C = #edis_command{cmd = <<"PSUBSCRIBE">>}, State) ->
   ok = edis_pubsub:add_sup_handler(),
@@ -699,6 +705,7 @@ queue(#edis_command{cmd = <<"QUIT">>}, State) -> %% User may quit even on MULTI 
   end;
 queue(#edis_command{cmd = <<"MULTI">>}, _State) -> throw(nested);
 queue(#edis_command{cmd = <<"WATCH">>}, _State) -> throw(not_in_multi);
+queue(#edis_command{cmd = <<"UNWATCH">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"AUTH">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"SHUTDOWN">>}, _State) -> throw(not_in_multi);
 queue(#edis_command{cmd = <<"CONFIG", _/binary>>}, _State) -> throw(not_in_multi);

@@ -47,6 +47,7 @@ add_sup_handler() ->
 %% @doc Unsubscribes client.
 -spec delete_handler() -> ok.
 delete_handler() ->
+  true = unlink(erlang:whereis(?MODULE)),
   gen_event:delete_handler(?MODULE, {?MODULE, self()}, normal).
 
 %% @doc Returns the number of currently active handlers

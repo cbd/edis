@@ -23,7 +23,9 @@
          zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1,
          zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1, zrank/1,
          zrem/1, zrem_one/1, zremrangebyrank_n/1, zremrangebyrank_m/1,
-         zremrangebyscore_n/1, zremrangebyscore_m/1]).
+         zremrangebyscore_n/1, zremrangebyscore_m/1, zrevrange_n/1, zrevrange_m/1,
+         zrevrangebyscore_n/1, zrevrangebyscore_m/1, zrevrank/1, zscore/1,
+         zunionstore_n/1, zunionstore_m/1]).
 
 %% ====================================================================
 %% External functions
@@ -52,7 +54,9 @@ init_per_round(Fun, Keys) when Fun =:= zcard;
                                Fun =:= zrange_n;
                                Fun =:= zrangebyscore_n;
                                Fun =:= zremrangebyrank_n;
-                               Fun =:= zremrangebyscore_n ->
+                               Fun =:= zremrangebyscore_n;
+                               Fun =:= zrevrange_n;
+                               Fun =:= zrevrangebyscore_n ->
   zadd(Keys),
   ok;
 init_per_round(Fun, Keys) when Fun =:= zinterstore_min ->
@@ -100,12 +104,40 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_m ->
                          ],
                   group = zsets, result_type = number}),
   ok;
+init_per_round(Fun, Keys) when Fun =:= zunionstore_n ->
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZADD">>,
+                  args = [?KEY2,
+                          [{random:uniform(I) * 1.0, edis_util:integer_to_binary(I)} || I <- lists:seq(1, 10000)]],
+                  group = zsets, result_type = number}),
+  zadd(Keys),
+  ok;
+init_per_round(Fun, Keys) when Fun =:= zunionstore_m ->
+  L = length(Keys),
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZADD">>,
+                  args = [?KEY2, [{random:uniform(L) * 1.0, <<Key/binary, "-never-match">>} || Key <- Keys] ++
+                            [{random:uniform(I) * 1.0, edis_util:integer_to_binary(I)} || I <- lists:seq(L, 10000)]
+                         ],
+                  group = zsets, result_type = number}),
+  edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZADD">>,
+                  args = [?KEY, [{random:uniform(L) * 1.0, Key} || Key <- Keys] ++
+                            [{random:uniform(I) * 1.0, edis_util:integer_to_binary(I)} || I <- lists:seq(L, 10000)]
+                         ],
+                  group = zsets, result_type = number}),
+  ok;
 init_per_round(Fun, _Keys) when Fun =:= zcount_m;
                                 Fun =:= zrange_m;
                                 Fun =:= zrem;
                                 Fun =:= zrangebyscore_m;
                                 Fun =:= zremrangebyrank_m;
-                                Fun =:= zremrangebyscore_m ->
+                                Fun =:= zremrangebyscore_m;
+                                Fun =:= zrevrange_m;
+                                Fun =:= zrevrangebyscore_m ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
@@ -113,7 +145,9 @@ init_per_round(Fun, _Keys) when Fun =:= zcount_m;
                   group = zsets, result_type = number}),
   ok;
 init_per_round(Fun, Keys) when Fun =:= zrank;
-                               Fun =:= zrem_one ->
+                               Fun =:= zrevrank;
+                               Fun =:= zrem_one;
+                               Fun =:= zscore ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
@@ -207,7 +241,7 @@ zinterstore_m(_Keys) ->
 zrange_n(_Keys) ->
   catch edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, 0, 1], group = zsets, result_type = multi_bulk}).
+    #edis_command{cmd = <<"ZRANGE">>, args = [?KEY, -2, -1], group = zsets, result_type = multi_bulk}).
 
 -spec zrange_m([binary()]) -> [binary()].
 zrange_m(_Keys) ->
@@ -270,5 +304,59 @@ zremrangebyscore_n([Key|_]) ->
 zremrangebyscore_m([Key|_]) ->
   catch edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [?KEY, {exc, 0.0}, {inc, edis_util:binary_to_float(Key)}],
+    #edis_command{cmd = <<"ZREMRANGEBYSCORE">>,
+                  args = [?KEY, neg_infinity, {inc, edis_util:binary_to_float(Key)}],
                   group = zsets, result_type = multi_bulk}).
+
+-spec zrevrange_n([binary()]) -> [binary()].
+zrevrange_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREVRANGE">>, args = [?KEY, -2, -1], group = zsets, result_type = multi_bulk}).
+
+-spec zrevrange_m([binary()]) -> [binary()].
+zrevrange_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREVRANGE">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+                  group = zsets, result_type = multi_bulk}).
+
+-spec zrevrangebyscore_n([binary()]) -> [binary()].
+zrevrangebyscore_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [?KEY, neg_infinity, {inc, 1.0}],
+                  group = zsets, result_type = multi_bulk}).
+
+-spec zrevrangebyscore_m([binary()]) -> [binary()].
+zrevrangebyscore_m([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [?KEY, {inc, edis_util:binary_to_float(Key)}, neg_infinity],
+                  group = zsets, result_type = multi_bulk}).
+
+-spec zrevrank([binary()]) -> number().
+zrevrank(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZREVRANK">>, args = [?KEY, <<"1">>], group = zsets, result_type = number}).
+
+-spec zscore([binary()]) -> number().
+zscore([Key|_]) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZSCORE">>, args = [?KEY, Key], group = zsets, result_type = number}).
+
+-spec zunionstore_n([binary()]) -> number().
+zunionstore_n(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZUNIONSTORE">>, args = [?KEY, [{?KEY2, 1.0}, {?KEY, 1.0}], sum],
+                  group = zsets, result_type = number}).
+
+-spec zunionstore_m([binary()]) -> number().
+zunionstore_m(_Keys) ->
+  catch edis_db:run(
+    edis_db:process(0),
+    #edis_command{cmd = <<"ZUNIONSTORE">>, args = [?KEY, [{?KEY2, 1.0}, {?KEY, 1.0}], max],
+                  group = zsets, result_type = number}).

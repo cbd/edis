@@ -21,3 +21,8 @@ Just run `$ make run` and open connections with your favourite redis client.
 
 ### Unsupported Commands
 _SYNC_, _SLOWLOG_, _SLAVEOF_, _DEBUG *_
+
+
+### License
+edis is licensed by Electronic Inaka, LLC under the Apache 2.0 license; see the LICENSE file in this repository.
+
