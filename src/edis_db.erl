@@ -1008,6 +1008,7 @@ handle_call(#edis_command{cmd = <<"RPOPLPUSH">>, args = [Source, Destination]}, 
 				{error, Reason} -> {error, Reason}
 			end
 		catch
+			_:not_found -> {ok, undefined};
 			_:Error -> 
 				{error, Error}
 		end,
