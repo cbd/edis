@@ -885,7 +885,7 @@ handle_call(#edis_command{cmd = <<"LSET">>, args = [Key, Index, Value]}, _From, 
                          {ok, Item#edis_item{value =
                                                edis_lists:reverse(
                                                  edis_lists:replace_head(
-                                                   edis_lists:reverse(Item#edis_item.value)))}};
+												   Value, edis_lists:reverse(Item#edis_item.value)))}};
                        Index when Index >= 0 ->
                          {Before, After} = edis_lists:split(Index, Item#edis_item.value),
                          case edis_lists:length(After) of
