@@ -8,7 +8,7 @@ all() ->
      [push_llen_lindex,del,long_list,
 	  blpop_brpop,brpoplpush,lpushx_rpushx,
 	  linsert,rpoplpush,lpop_rpop,lrange,
-	  ltrim].
+	  ltrim,lset,lrem].
  	
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -492,3 +492,56 @@ trim_list(Client, Start, Stop) ->
 	8 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,0,1,2,3,4,5,6,7]),
 	ok = erldis_client:sr_scall(Client,[<<"ltrim">>,<<"list">>,Start,Stop]),
 	erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]).
+
+lset(Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	%% Basic
+	4 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,0,1,2,3]),
+	ok = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,1,<<"foo">>]),
+	ok = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,-1,<<"bar">>]),
+	[<<"0">>,<<"foo">>,<<"2">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]),
+	
+	%% Out of Range
+	{error,<<"ERR index out of range">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,10,<<"foo">>]),
+	%% Non existing key
+	{error,<<"ERR no such key">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"nosuchkey">>,1,<<"foo">>]),
+	%% Non list value
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"string">>,1,<<"foo">>]),
+	
+	{error,<<"ERR wrong number of arguments for 'LSET' command">>} = erldis_client:sr_scall(Client,[<<"lset">>]),
+	{error,<<"ERR wrong number of arguments for 'LSET' command">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>]),
+	{error,<<"ERR wrong number of arguments for 'LSET' command">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,1]),
+	{error,<<"ERR wrong number of arguments for 'LSET' command">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,1,<<"foo">>,<<"bar">>]).
+
+lrem(Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	
+	%% Remove all the occurrences
+	8 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,<<"foo">>,<<"bar">>,<<"foobar">>,<<"foobared">>,<<"zap">>,<<"bar">>,<<"test">>,<<"foo">>]),
+	2 = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list">>,0,<<"bar">>]),
+	[<<"foo">>,<<"foobar">>,<<"foobared">>,<<"zap">>,<<"test">>,<<"foo">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]),
+	
+	%% Remove the first occurrence
+	true = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list">>,1,<<"foo">>]),
+	[<<"foobar">>,<<"foobared">>,<<"zap">>,<<"test">>,<<"foo">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]),
+	
+	%% Remove non existing element
+	false = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list">>,1,<<"nosuchelement">>]),
+	
+	%% Starting from tail with negative count
+	9 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list2">>,<<"foo">>,<<"bar">>,<<"foobar">>,<<"foobared">>,<<"zap">>,<<"bar">>,<<"foo">>,<<"test">>,<<"foo">>]),
+	true = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list2">>,-1,<<"bar">>]),
+	[<<"foo">>,<<"bar">>,<<"foobar">>,<<"foobared">>,<<"zap">>,<<"foo">>,<<"test">>,<<"foo">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
+	2 = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list2">>,-2,<<"foo">>]),
+	[<<"foo">>,<<"bar">>,<<"foobar">>,<<"foobared">>,<<"zap">>,<<"test">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
+	
+	%% Deleting objects that may be int encoded
+	3 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list3">>,1,2,3]),
+	true = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list3">>,1,2]),
+	[<<"1">>,<<"3">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list3">>,0,-1]),
+	
+	{error,<<"ERR wrong number of arguments for 'LREM' command">>} = erldis_client:sr_scall(Client,[<<"lrem">>]),
+	{error,<<"ERR wrong number of arguments for 'LREM' command">>} = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list3">>]),
+	{error,<<"ERR wrong number of arguments for 'LREM' command">>} = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list3">>,1]),
+	{error,<<"ERR wrong number of arguments for 'LREM' command">>} = erldis_client:sr_scall(Client,[<<"lrem">>,<<"list3">>,1,2,3]).
