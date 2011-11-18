@@ -1,3 +1,4 @@
+%% @hidden
 -module(hashes_SUITE).
 
 -compile(export_all).
