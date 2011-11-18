@@ -431,7 +431,7 @@ lpop_rpop(Config) ->
 	[{First,Last} = 
      {erldis_client:sr_scall(Client,[<<"lpop">>,<<"list2">>]),
 	  erldis_client:sr_scall(Client,[<<"rpop">>,<<"list2">>])}
-    || {Fist,Last} <- PopResults],
+    || {First,Last} <- PopResults],
 	[] = erldis_client:scall(Client,[<<"lrange">>,<<"list2">>,0,-1]),
 	
 	%% Non list value
@@ -498,9 +498,10 @@ lset(Config) ->
 	
 	%% Basic
 	4 = erldis_client:sr_scall(Client,[<<"rpush">>,<<"list">>,0,1,2,3]),
+	ok = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,0,<<"foobar">>]),
 	ok = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,1,<<"foo">>]),
 	ok = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,-1,<<"bar">>]),
-	[<<"0">>,<<"foo">>,<<"2">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]),
+	[<<"foobar">>,<<"foo">>,<<"2">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]),
 	
 	%% Out of Range
 	{error,<<"ERR index out of range">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,10,<<"foo">>]),
