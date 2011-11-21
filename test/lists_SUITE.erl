@@ -1,3 +1,4 @@
+%% @hidden
 -module(lists_SUITE).
 
 -compile(export_all).

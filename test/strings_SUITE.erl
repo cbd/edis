@@ -1,3 +1,4 @@
+%% @hidden
 -module(strings_SUITE).
 -compile(export_all).
 

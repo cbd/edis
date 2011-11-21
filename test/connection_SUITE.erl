@@ -1,3 +1,4 @@
+%% @hidden
 -module(connection_SUITE).
 -compile(export_all).
 
