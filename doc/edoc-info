@@ -1,0 +1,9 @@
+{application,edis}.
+{packages,[]}.
+{modules,[edis,edis_backend,edis_bench,edis_client,edis_client_mgr,
+          edis_client_sup,edis_command_runner,edis_config,edis_db,
+          edis_db_monitor,edis_db_sup,edis_eleveldb_backend,edis_gb_trees,
+          edis_listener,edis_listener_sup,edis_lists,edis_pd_backend,
+          edis_pubsub,edis_pubsub_sup,edis_sup,edis_util,hashes_bench,
+          keys_bench,lists_bench,pubsub_bench,sets_bench,strings_bench,zsets,
+          zsets_bench]}.

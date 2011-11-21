@@ -1,0 +1,179 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Module sets_bench</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module sets_bench</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Benchmarks for sets commands.
+<p>Copyright © (C) 2011 InakaLabs SRL</p>
+
+<p><b>Behaviours:</b> <a href="edis_bench.html"><tt>edis_bench</tt></a>.</p>
+<p><b>Authors:</b> Fernando Benavides (<a href="mailto:fernando.benavides@inakanetworks.com"><tt>fernando.benavides@inakanetworks.com</tt></a>), Chad DePue (<a href="mailto:chad@inakanetworks.com"><tt>chad@inakanetworks.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Benchmarks for sets commands
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-0">all/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init-0">init/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_per_round-2">init_per_round/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_per_testcase-1">init_per_testcase/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#quit-0">quit/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#quit_per_round-2">quit_per_round/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#quit_per_testcase-1">quit_per_testcase/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sadd-1">sadd/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#scard-1">scard/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sdiff-1">sdiff/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sdiffstore-1">sdiffstore/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sinter_m-1">sinter_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sinter_min-1">sinter_min/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sinter_n-1">sinter_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sinterstore_m-1">sinterstore_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sinterstore_min-1">sinterstore_min/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sinterstore_n-1">sinterstore_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sismember-1">sismember/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#smembers-1">smembers/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#smove-1">smove/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#spop-1">spop/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#srandmember-1">srandmember/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#srem-1">srem/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sunion-1">sunion/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sunionstore-1">sunionstore/1</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="all-0">all/0</a></h3>
+<div class="spec">
+<p><tt>all() -&gt; [atom()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="init-0">init/0</a></h3>
+<div class="spec">
+<p><tt>init() -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="init_per_round-2">init_per_round/2</a></h3>
+<div class="spec">
+<p><tt>init_per_round(Fun::atom(), Keys::[binary()]) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="init_per_testcase-1">init_per_testcase/1</a></h3>
+<div class="spec">
+<p><tt>init_per_testcase(Function::atom()) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="quit-0">quit/0</a></h3>
+<div class="spec">
+<p><tt>quit() -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="quit_per_round-2">quit_per_round/2</a></h3>
+<div class="spec">
+<p><tt>quit_per_round(X1::atom(), Keys::[binary()]) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="quit_per_testcase-1">quit_per_testcase/1</a></h3>
+<div class="spec">
+<p><tt>quit_per_testcase(Function::atom()) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sadd-1">sadd/1</a></h3>
+<div class="spec">
+<p><tt>sadd(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="scard-1">scard/1</a></h3>
+<div class="spec">
+<p><tt>scard(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sdiff-1">sdiff/1</a></h3>
+<div class="spec">
+<p><tt>sdiff(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sdiffstore-1">sdiffstore/1</a></h3>
+<div class="spec">
+<p><tt>sdiffstore(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sinter_m-1">sinter_m/1</a></h3>
+<div class="spec">
+<p><tt>sinter_m(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sinter_min-1">sinter_min/1</a></h3>
+<div class="spec">
+<p><tt>sinter_min(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sinter_n-1">sinter_n/1</a></h3>
+<div class="spec">
+<p><tt>sinter_n(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sinterstore_m-1">sinterstore_m/1</a></h3>
+<div class="spec">
+<p><tt>sinterstore_m(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sinterstore_min-1">sinterstore_min/1</a></h3>
+<div class="spec">
+<p><tt>sinterstore_min(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sinterstore_n-1">sinterstore_n/1</a></h3>
+<div class="spec">
+<p><tt>sinterstore_n(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sismember-1">sismember/1</a></h3>
+<div class="spec">
+<p><tt>sismember(X1::[binary()]) -&gt; true</tt><br></p>
+</div>
+
+<h3 class="function"><a name="smembers-1">smembers/1</a></h3>
+<div class="spec">
+<p><tt>smembers(X1::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="smove-1">smove/1</a></h3>
+<div class="spec">
+<p><tt>smove(X1::[binary()]) -&gt; boolean()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="spop-1">spop/1</a></h3>
+<div class="spec">
+<p><tt>spop(Keys::[binary()]) -&gt; binary()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="srandmember-1">srandmember/1</a></h3>
+<div class="spec">
+<p><tt>srandmember(Keys::[binary()]) -&gt; binary()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="srem-1">srem/1</a></h3>
+<div class="spec">
+<p><tt>srem(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sunion-1">sunion/1</a></h3>
+<div class="spec">
+<p><tt>sunion(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sunionstore-1">sunionstore/1</a></h3>
+<div class="spec">
+<p><tt>sunionstore(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Nov 21 2011, 11:59:24.</i></p>
+</body>
+</html>

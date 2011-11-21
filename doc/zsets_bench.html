@@ -1,0 +1,245 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Module zsets_bench</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module zsets_bench</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>Benchmarks for zsets commands.
+<p>Copyright © (C) 2011 InakaLabs SRL</p>
+
+<p><b>Behaviours:</b> <a href="edis_bench.html"><tt>edis_bench</tt></a>.</p>
+<p><b>Authors:</b> Fernando Benavides (<a href="mailto:fernando.benavides@inakanetworks.com"><tt>fernando.benavides@inakanetworks.com</tt></a>), Chad DePue (<a href="mailto:chad@inakanetworks.com"><tt>chad@inakanetworks.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>Benchmarks for zsets commands
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#all-0">all/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init-0">init/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_per_round-2">init_per_round/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_per_testcase-1">init_per_testcase/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#quit-0">quit/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#quit_per_round-2">quit_per_round/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#quit_per_testcase-1">quit_per_testcase/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zadd-1">zadd/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zadd_one-1">zadd_one/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zcard-1">zcard/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zcount_m-1">zcount_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zcount_n-1">zcount_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zincrby-1">zincrby/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zinterstore_k-1">zinterstore_k/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zinterstore_m-1">zinterstore_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zinterstore_min-1">zinterstore_min/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zinterstore_n-1">zinterstore_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrange_m-1">zrange_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrange_n-1">zrange_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrangebyscore_m-1">zrangebyscore_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrangebyscore_n-1">zrangebyscore_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrank-1">zrank/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrem-1">zrem/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrem_one-1">zrem_one/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zremrangebyrank_m-1">zremrangebyrank_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zremrangebyrank_n-1">zremrangebyrank_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zremrangebyscore_m-1">zremrangebyscore_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zremrangebyscore_n-1">zremrangebyscore_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrevrange_m-1">zrevrange_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrevrange_n-1">zrevrange_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrevrangebyscore_m-1">zrevrangebyscore_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrevrangebyscore_n-1">zrevrangebyscore_n/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zrevrank-1">zrevrank/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zscore-1">zscore/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zunionstore_m-1">zunionstore_m/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#zunionstore_n-1">zunionstore_n/1</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="all-0">all/0</a></h3>
+<div class="spec">
+<p><tt>all() -&gt; [atom()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="init-0">init/0</a></h3>
+<div class="spec">
+<p><tt>init() -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="init_per_round-2">init_per_round/2</a></h3>
+<div class="spec">
+<p><tt>init_per_round(Fun::atom(), Keys::[binary()]) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="init_per_testcase-1">init_per_testcase/1</a></h3>
+<div class="spec">
+<p><tt>init_per_testcase(Function::atom()) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="quit-0">quit/0</a></h3>
+<div class="spec">
+<p><tt>quit() -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="quit_per_round-2">quit_per_round/2</a></h3>
+<div class="spec">
+<p><tt>quit_per_round(X1::atom(), Keys::[binary()]) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="quit_per_testcase-1">quit_per_testcase/1</a></h3>
+<div class="spec">
+<p><tt>quit_per_testcase(Function::atom()) -&gt; ok</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zadd-1">zadd/1</a></h3>
+<div class="spec">
+<p><tt>zadd(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zadd_one-1">zadd_one/1</a></h3>
+<div class="spec">
+<p><tt>zadd_one(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zcard-1">zcard/1</a></h3>
+<div class="spec">
+<p><tt>zcard(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zcount_m-1">zcount_m/1</a></h3>
+<div class="spec">
+<p><tt>zcount_m(X1::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zcount_n-1">zcount_n/1</a></h3>
+<div class="spec">
+<p><tt>zcount_n(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zincrby-1">zincrby/1</a></h3>
+<div class="spec">
+<p><tt>zincrby(X1::[binary()]) -&gt; binary()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zinterstore_k-1">zinterstore_k/1</a></h3>
+<div class="spec">
+<p><tt>zinterstore_k(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zinterstore_m-1">zinterstore_m/1</a></h3>
+<div class="spec">
+<p><tt>zinterstore_m(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zinterstore_min-1">zinterstore_min/1</a></h3>
+<div class="spec">
+<p><tt>zinterstore_min(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zinterstore_n-1">zinterstore_n/1</a></h3>
+<div class="spec">
+<p><tt>zinterstore_n(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrange_m-1">zrange_m/1</a></h3>
+<div class="spec">
+<p><tt>zrange_m(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrange_n-1">zrange_n/1</a></h3>
+<div class="spec">
+<p><tt>zrange_n(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrangebyscore_m-1">zrangebyscore_m/1</a></h3>
+<div class="spec">
+<p><tt>zrangebyscore_m(X1::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrangebyscore_n-1">zrangebyscore_n/1</a></h3>
+<div class="spec">
+<p><tt>zrangebyscore_n(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrank-1">zrank/1</a></h3>
+<div class="spec">
+<p><tt>zrank(X1::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrem-1">zrem/1</a></h3>
+<div class="spec">
+<p><tt>zrem(Keys::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrem_one-1">zrem_one/1</a></h3>
+<div class="spec">
+<p><tt>zrem_one(X1::[binary()]) -&gt; pos_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zremrangebyrank_m-1">zremrangebyrank_m/1</a></h3>
+<div class="spec">
+<p><tt>zremrangebyrank_m(X1::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zremrangebyrank_n-1">zremrangebyrank_n/1</a></h3>
+<div class="spec">
+<p><tt>zremrangebyrank_n(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zremrangebyscore_m-1">zremrangebyscore_m/1</a></h3>
+<div class="spec">
+<p><tt>zremrangebyscore_m(X1::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zremrangebyscore_n-1">zremrangebyscore_n/1</a></h3>
+<div class="spec">
+<p><tt>zremrangebyscore_n(X1::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrevrange_m-1">zrevrange_m/1</a></h3>
+<div class="spec">
+<p><tt>zrevrange_m(X1::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrevrange_n-1">zrevrange_n/1</a></h3>
+<div class="spec">
+<p><tt>zrevrange_n(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrevrangebyscore_m-1">zrevrangebyscore_m/1</a></h3>
+<div class="spec">
+<p><tt>zrevrangebyscore_m(X1::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrevrangebyscore_n-1">zrevrangebyscore_n/1</a></h3>
+<div class="spec">
+<p><tt>zrevrangebyscore_n(Keys::[binary()]) -&gt; [binary()]</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zrevrank-1">zrevrank/1</a></h3>
+<div class="spec">
+<p><tt>zrevrank(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zscore-1">zscore/1</a></h3>
+<div class="spec">
+<p><tt>zscore(X1::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zunionstore_m-1">zunionstore_m/1</a></h3>
+<div class="spec">
+<p><tt>zunionstore_m(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="zunionstore_n-1">zunionstore_n/1</a></h3>
+<div class="spec">
+<p><tt>zunionstore_n(Keys::[binary()]) -&gt; number()</tt><br></p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Nov 21 2011, 11:59:24.</i></p>
+</body>
+</html>

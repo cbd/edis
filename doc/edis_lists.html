@@ -1,0 +1,139 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Module edis_lists</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module edis_lists</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>New lists implementation with O(1) for lists:length/1 and some other
+        behaviour changes.
+<p>Copyright © (C) 2011 InakaLabs SRL</p>
+
+<p><b>Authors:</b> Fernando Benavides (<a href="mailto:fernando.benavides@inakanetworks.com"><tt>fernando.benavides@inakanetworks.com</tt></a>), Chad DePue (<a href="mailto:chad@inakanetworks.com"><tt>chad@inakanetworks.com</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>New lists implementation with O(1) for lists:length/1 and some other
+        behaviour changes
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-edis_list">edis_list()</a></h3>
+<p><b>abstract datatype</b>: <tt>edis_list(T)</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#append-2">append/2</a></td><td>appends lists X and Y.</td></tr>
+<tr><td valign="top"><a href="#empty-0">empty/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#filter-2">filter/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#from_list-1">from_list/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#insert-4">insert/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#length-1">length/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#nth-2">nth/2</a></td><td>returns the N'th element of the list L.</td></tr>
+<tr><td valign="top"><a href="#nthtail-2">nthtail/2</a></td><td>returns the N'th tail of the list L.</td></tr>
+<tr><td valign="top"><a href="#pop-1">pop/1</a></td><td>pops the leftmost element of the list.</td></tr>
+<tr><td valign="top"><a href="#push-2">push/2</a></td><td>inserts X to the left of the list.</td></tr>
+<tr><td valign="top"><a href="#remove-3">remove/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#replace_head-2">replace_head/2</a></td><td>replaces head element.</td></tr>
+<tr><td valign="top"><a href="#reverse-1">reverse/1</a></td><td>reverse all elements in the list L.</td></tr>
+<tr><td valign="top"><a href="#split-2">split/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#splitwith-2">splitwith/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#sublist-3">sublist/3</a></td><td>Returns the sub-list starting at Start of length Length.</td></tr>
+<tr><td valign="top"><a href="#to_list-1">to_list/1</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="append-2">append/2</a></h3>
+<div class="spec">
+<p><tt>append(Edis_list::<a href="#type-edis_list">edis_list</a>(T0), X2::<a href="#type-edis_list">edis_list</a>(T1)) -&gt; <a href="#type-edis_list">edis_list</a>(T0 | T1)</tt><br></p>
+</div><p>appends lists X and Y</p>
+
+<h3 class="function"><a name="empty-0">empty/0</a></h3>
+<div class="spec">
+<p><tt>empty() -&gt; <a href="#type-edis_list">edis_list</a>(term())</tt><br></p>
+</div>
+
+<h3 class="function"><a name="filter-2">filter/2</a></h3>
+<div class="spec">
+<p><tt>filter(Pred::fun((T) -&gt; boolean()), Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div>
+
+<h3 class="function"><a name="from_list-1">from_list/1</a></h3>
+<div class="spec">
+<p><tt>from_list(T::[T]) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div>
+
+<h3 class="function"><a name="insert-4">insert/4</a></h3>
+<div class="spec">
+<p><tt>insert(T, Position::before | 'after', T, EL::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div>
+
+<h3 class="function"><a name="length-1">length/1</a></h3>
+<div class="spec">
+<p><tt>length(Edis_list::<a href="#type-edis_list">edis_list</a>(term())) -&gt; non_neg_integer()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="nth-2">nth/2</a></h3>
+<div class="spec">
+<p><tt>nth(N::pos_integer(), Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; T | undefined</tt><br></p>
+</div><p>returns the N'th element of the list L</p>
+
+<h3 class="function"><a name="nthtail-2">nthtail/2</a></h3>
+<div class="spec">
+<p><tt>nthtail(N::non_neg_integer(), Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div><p>returns the N'th tail of the list L</p>
+
+<h3 class="function"><a name="pop-1">pop/1</a></h3>
+<div class="spec">
+<p><tt>pop(Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; {T, <a href="#type-edis_list">edis_list</a>(T)}</tt><br></p>
+</div><p>throws <tt>empty</tt></p>
+<p>pops the leftmost element of the list</p>
+
+<h3 class="function"><a name="push-2">push/2</a></h3>
+<div class="spec">
+<p><tt>push(T0, Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T | T0)</tt><br></p>
+</div><p>inserts X to the left of the list</p>
+
+<h3 class="function"><a name="remove-3">remove/3</a></h3>
+<div class="spec">
+<p><tt>remove(T, Count::non_neg_integer(), EL::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div>
+
+<h3 class="function"><a name="replace_head-2">replace_head/2</a></h3>
+<div class="spec">
+<p><tt>replace_head(T0, EL::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T0 | T)</tt><br></p>
+</div><p>replaces head element</p>
+
+<h3 class="function"><a name="reverse-1">reverse/1</a></h3>
+<div class="spec">
+<p><tt>reverse(EL::<a href="#type-edis_list">edis_list</a>(T)) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div><p>reverse all elements in the list L.</p>
+
+<h3 class="function"><a name="split-2">split/2</a></h3>
+<div class="spec">
+<p><tt>split(N::non_neg_integer(), EL::<a href="#type-edis_list">edis_list</a>(T)) -&gt; {<a href="#type-edis_list">edis_list</a>(T), <a href="#type-edis_list">edis_list</a>(T)}</tt><br></p>
+</div>
+
+<h3 class="function"><a name="splitwith-2">splitwith/2</a></h3>
+<div class="spec">
+<p><tt>splitwith(Pred::fun((T) -&gt; boolean()), Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; {<a href="#type-edis_list">edis_list</a>(T), <a href="#type-edis_list">edis_list</a>(T)}</tt><br></p>
+</div>
+
+<h3 class="function"><a name="sublist-3">sublist/3</a></h3>
+<div class="spec">
+<p><tt>sublist(Edis_list::<a href="#type-edis_list">edis_list</a>(T), Start::pos_integer(), Len::non_neg_integer()) -&gt; <a href="#type-edis_list">edis_list</a>(T)</tt><br></p>
+</div><p>Returns the sub-list starting at Start of length Length.</p>
+
+<h3 class="function"><a name="to_list-1">to_list/1</a></h3>
+<div class="spec">
+<p><tt>to_list(Edis_list::<a href="#type-edis_list">edis_list</a>(T)) -&gt; [T]</tt><br></p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Nov 21 2011, 11:59:23.</i></p>
+</body>
+</html>
