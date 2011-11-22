@@ -163,7 +163,7 @@ body  {
 	color: grey;
 }
 
-#container {
+.container {
 	margin: 0 auto;
 	width: 700px;
 }
