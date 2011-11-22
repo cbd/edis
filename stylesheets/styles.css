@@ -169,7 +169,16 @@ body,textarea {
 }
 
 ol,ul {
-	list-style: none;
+	list-style-type: disc;
+	margin-left: 25px;
+}
+
+ul.behaviour dt{
+	font-weight: bold;
+}
+
+ul.behaviour li{
+	margin-top: 15px;
 }
 
 table {
@@ -207,7 +216,6 @@ article,aside,canvas,details,figcaption,figure,footer,header,hgroup,menu,nav,sec
 
 h1,h2,h3 {
 	font-weight: 300;
-	color: black;
 }
 
 h1 {
@@ -217,15 +225,16 @@ h1 {
 }
 
 h2 {
-	font-size: 18px;
+	font-size: 26px;
 	line-height: 22px;
-	margin: 14px 0 8px 0;
+	margin: 18px 0 2px 0;
+	color: #253;
 }
-
 h3 {
 	font-size: 18px;
 	line-height: 18px;
-	margin: 13px 0 6px 0;
+	margin: 22px 0 8px 0;
+	color: #253;
 }
 
 code {
@@ -312,7 +321,7 @@ a:hover {
 	margin: 5px 0;
 }
 
-.text>p:first-of-type,.text>*>p:first-of-type {
+.text>p,.text>*>p {
 	margin-top: 15px;
 }
 
@@ -404,9 +413,13 @@ a:hover {
 	margin-top: 0;
 }
 
+.text command{
+	
+}
+
 .container {
 	margin: 0 auto;
-	width: 700px;
+	width: 840px;
 }
 
 h1 {
@@ -421,16 +434,6 @@ h1 .small {
 
 h1 a {
 	text-decoration: none
-}
-
-h2 {
-	font-size: 1.5em;
-	color: #253;
-}
-
-h3 {
-	text-align: center;
-	color: green;
 }
 
 a {

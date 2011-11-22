@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <link href='stylesheets/styles.css' rel='stylesheet' type='text/css' />
+    <title>
+      Edis
+    </title>
+  </head>
+  <body class=''>
+    <header>
+      <div class='container'>
+        <a href='index.html'>
+          <img alt='Edis' height='30' src='/images/edis.png' width='93' />
+        </a>
+        <nav>
+          <a href='http://redis.io/commands'>Commands</a>
+          <a href='doc/index.html'>Documentation</a>
+          <a href='download.html'>Download</a>
+          <a href='https://github.com/inaka/edis/issues'>Issues</a>
+        </nav>
+      </div>
+    </header>
+    <div class='text container'>
+       <h2>Compared with Redis</h2>
+       <h3>Time complexity</h3>
+       <p> Some functions have different time complexity, check the orders
+       <a href="https://docs.google.com/a/inakanetworks.com/spreadsheet/pub?hl=en_US&hl=en_US&key=0Au31dRqFRDNRdEVGWVVSbHdrbXFXWTZuc3JIbnRZaHc&single=true&gid=0&output=html">
+       here</a>.  
+       </p>
+       <h3>Behaviour</h3>
+       <ul class="behaviour">
+       	<li>
+       		<dl>
+       			<dt><em>SAVE, BGSAVE, LASTSAVE</em></dt>
+       			<dd>This commands are database dependent. 
+       				The original Redis saves all databases at once, edis saves just the one you <em>SELECT</em>'ed
+       			</dd>
+       		</dl>
+       	</li>
+       	<li>
+       		<dl>
+       			<dt><em>INFO</em></dt>
+       			<dd>Provides much less information and no statistics (so, <em>CONFIG RESETSTAT</em> does nothing at all)</dd>
+       		</dl>
+       	</li>
+       	<li>
+       		<dl>
+       			<dt><em>MULTI</em> doesn't support</dt>
+       			<dd>- cross-db commands (i.e. <em>FLUSHALL, SELECT, MOVE</em>)</dd>
+  				<dd>- non-db commands (i.e <em>AUTH, CONFIG *, SHUTDOWN, MONITOR</em>)</dd>
+  				<dd>- pub/sub commands (i.e. <em>PUBLISH, SUBSCRIBE, UNSUBSCRIBE, PSUBSCRIBE, PUNSUBSCRIBE</em>)</dd>
+       		</dl>
+       	</li>
+       	<li>
+       		<dl>
+       			<dt><em>(P)UNSUBSCRIBE</em></dt>
+       			<dd>This commands are not allowed outside <em>PUBSUB</em> mode</dd>
+       		</dl></li>
+       	<li>
+       		<dl>
+       			<dt><em>PUBLISH</em></dt>
+       			<dd>Its Response is not precise:
+       			It's the amount of all clients subscribed to any channel and/or pattern, not just those that will handle the message.
+       			On the other hand it runs in <em>O(1)</em> because it's asynchronous, it just dispatches the message.</dd>
+       		</dl>
+       </li>
+       </ul>
+       <h3>Missing Features</h3>
+       <ul class="features">
+       <li>Dynamic node configuration (i.e. the <em>SLAVEOF</em> command is not implemented)</li>
+	   <li>Encoding optimization (i.e. all objects are encoded as binary representations of erlang terms,
+	    so for instance "123" will never be stored as an int)</li>
+	   <li><em>OBJECT REFCOUNT</em> allways returns 1 for existing keys and (nil) otherwise</li>
+	   </ul>
+       <h3>Unsupported Commands</h3>
+       <em>SYNC, SLOWLOG, SLAVEOF, DEBUG *</em>
+    </div>
+    <footer>
+      <p>
+        edis is licensed by Electronic Inaka, LLC under the Apache 2.0 license
+      </p>
+    </footer>
+  </body>
+</html>
