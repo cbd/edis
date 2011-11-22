@@ -45,8 +45,8 @@ body > footer .sponsor { position: absolute; top: 0; right: 0; }
 body > footer .sponsor img { display: block; }
 
 .text { -moz-box-shadow: #cccccc 0px 0px 10px 0; -webkit-box-shadow: #cccccc 0px 0px 10px 0; -o-box-shadow: #cccccc 0px 0px 10px 0; box-shadow: #cccccc 0px 0px 10px 0; overflow: hidden; *zoom: 1; background-color: #fafafa; color: #333333; margin: 0 auto; max-width: 840px; padding: 30px; }
-.text a { color: #0066aa; text-shadow: #f0f0f0 1px 1px 0px; }
-.text a:hover { color: #0099ff; }
+.text a { color: #888; text-shadow: #f0f0f0 1px 1px 0px; }
+.text a:hover { color: #263; }
 .text p { margin: 5px 0; }
 .text > p:first-of-type, .text > * > p:first-of-type { margin-top: 15px; }
 .text strong { font-weight: 500; }
@@ -157,3 +157,64 @@ body.topics.whos-using-redis ul:first-of-type li img { vertical-align: middle; m
 #buzz li { margin: 0 0 8px 0; padding-left: 34px; position: relative; min-height: 26px; }
 #buzz li a:first-child { -moz-box-shadow: #bbbbbb 0px 0px 3px 0; -webkit-box-shadow: #bbbbbb 0px 0px 3px 0; -o-box-shadow: #bbbbbb 0px 0px 3px 0; box-shadow: #bbbbbb 0px 0px 3px 0; display: block; height: 26px; left: 0; position: absolute; top: 3px; width: 26px; }
 #buzz li a:first-child img { height: 26px; width: 26px; }
+
+body  {
+	font-family: Helvetica, Arial, FreeSans, san-serif;
+	color: grey;
+}
+
+#container {
+	margin: 0 auto;
+	width: 700px;
+}
+
+h1 {
+	font-size: 3.8em;
+	color: green;
+	margin-bottom: 3px;
+}
+
+h1 .small {
+	font-size: 0.4em;
+}
+
+h1 a {
+	text-decoration: none
+}
+
+h2 {
+	font-size: 1.5em;
+	color: #253;
+}
+
+h3 {
+	text-align: center;
+	color: green;
+}
+
+a {
+	color: green;
+}
+
+.description {
+	font-size: 1.2em;
+	margin-bottom: 30px;
+	margin-top: 30px;
+	font-style: italic;
+}
+
+.download {
+	float: none;
+}
+
+hr {
+	border: 0;
+	width: 80%;
+	border-bottom: 1px solid #aaa
+}
+
+.footer {
+	text-align: center;
+	padding-top: 30px;
+	font-style: italic;
+}

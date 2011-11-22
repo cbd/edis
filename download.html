@@ -7,25 +7,7 @@
       Edis
     </title>
     <style type="text/css">
-    body {
-      font-family: Helvetica, Arial, FreeSans, san-serif;
-      color: grey;
-    }
-    #container {
-      margin: 0 auto;
-      width: 700px;
-    }
-    h1 { font-size: 3.8em; color: green; margin-bottom: 3px; }
-    h1 .small { font-size: 0.4em; }
-    h1 a { text-decoration: none }
-    h2 { font-size: 1.5em; color: green; }
-    h3 { text-align: center; color: green; }
-    a { color: green; }
-    .description { font-size: 1.2em; margin-bottom: 30px; margin-top: 30px; font-style: italic;}
-    .download { float: none; }
-    pre { background: #000; color: #fff; padding: 15px;}
-    hr { border: 0; width: 80%; border-bottom: 1px solid #aaa}
-    .footer { text-align:center; padding-top:30px; font-style: italic; }
+    
   </style>
   </head>
 <body class=''>
@@ -41,10 +23,6 @@
 		</div>
 	</header>
 	<div id="container" class="text">
-		<h1>Edis</h1>
-
-		<div class="description">An Erlang version of Redis. Still in
-			its very early stages.</div>
 		<h2>Download</h2>
 		<p>
 			You can download this project in either <a
@@ -59,25 +37,27 @@
 				border="0" width="90"
 				src="https://github.com/images/modules/download/tar.png"> </a>
 		</div>
+		Get the source code on GitHub: <a href="https://github.com/inaka/edis" target="_blank">inaka/edis</a>
 		<br />
 		<p>
-			You can also clone the project with <a href="http://git-scm.com">Git</a>
+			You can also clone the project with <a href="http://git-scm.com" target="_blank">Git</a>
 			by running:
-		<pre>$ git clone git://github.com/inaka/edis</pre>
 		</p>
+		<pre><code>$ git clone git://github.com/inaka/edis</code></pre>
 		<br />
-		<h2>Authors</h2>
-		<p>
-			C B DePue (chad@inakanetworks.com) <br />Fernando 'Brujo' Benavides
-			(fernando.benavides@inakanetworks.com) <br /> Marcos Almonacid
-			(marcos@inakanetworks.com) <br />
-		</p>
-		<br />
-		<h2>Contact</h2>
-		<p>
-			Inaka Labs (gravatar@inakanetworks.com) <br />
-		</p>
-
+		<h2>Installation</h2>
+		<p>You should <a href="http://www.erlang.org/" target="_blank">install erlang.</a></p>
+		<p>Clone the project and start the server:</p>
+		<pre><code>$ git clone git://github.com/inaka/edis
+$ cd edis/
+edis$ make run</code></pre>
+		<p>Now, You can access to the server with any <a href="http://redis.io/clients" target="_blank">client</a>.
+		For example, the <a href="https://github.com/inaka/erldis" target="_blank">erldis client</a> from the erlang shell:</p>
+		<pre><code>edis$ make shell
+1&gt; {ok,Client} = erldis:connect(localhost,6379).
+{ok,&lt;0.81.0&gt;}</code></pre>
+		<p>Also with the redis client:</p>
+		<pre><code>$ redis-cli</code></pre>
 	</div>
 	<footer>
 		<p>
