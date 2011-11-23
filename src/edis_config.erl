@@ -15,6 +15,7 @@
 
 -type config_option() :: listener_port_range | client_timeout | databases | requirepass | dir | backend.
 
+%% @doc sets configuration params
 -spec set(config_option(), term()) -> ok.
 set(listener_port_range, {P1, P2}) when is_integer(P1), is_integer(P2), P1 =< P2 ->
   ok = application:set_env(edis, listener_port_range, {P1, P2}),
@@ -45,6 +46,7 @@ set(Param, Value) ->
   ?THROW("Unsupported param: ~p: ~p~n", [Param, Value]),
   throw(unsupported_param).
 
+%% @doc gets configuration params
 -spec get(binary() | config_option()) -> term().
 get(listener_port_range) ->
   get(listener_port_range, {6379,6379});

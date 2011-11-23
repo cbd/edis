@@ -33,23 +33,27 @@
 %% =================================================================================================
 %% External functions
 %% =================================================================================================
+%% @doc start a new command runner
 -spec start_link(port()) -> {ok, pid()}.
 start_link(Socket) ->
   gen_server:start_link(?MODULE, Socket, []).
 
+%% @doc stop the connection
 -spec stop(pid()) -> ok.
 stop(Runner) ->
   gen_server:cast(Runner, stop).
 
+%% @doc generate an error(like throw())
 -spec err(pid(), iodata()) -> ok.
 err(Runner, Message) ->
   gen_server:cast(Runner, {err, Message}).
 
+%% @doc execute the received command
 -spec run(pid(), binary(), [binary()]) -> ok.
 run(Runner, Command, Arguments) ->
   gen_server:cast(Runner, {run, Command, Arguments}).
 
-%% @doc Should last argument be inlined?
+%% @doc should last argument be inlined?
 %%      Useful for old protocol calls.
 -spec last_arg(binary()) -> inlined | safe.
 last_arg(_) -> inlined.

@@ -19,15 +19,19 @@
 -export([length/1, from_list/1, to_list/1, nth/2, nthtail/2, reverse/1, splitwith/2, insert/4,
          append/2, push/2, pop/1, sublist/3, filter/2, remove/3, replace_head/2, split/2, empty/0]).
 
+%% @doc return an empty edis_list 
 -spec empty() -> edis_list(_).
 empty() -> #edis_list{}.
 
+%% @doc return the edis_list size
 -spec length(edis_list(_)) -> non_neg_integer().
 length(#edis_list{size = S}) -> S.
 
+%% @doc return an edis_list with the same elements in the list
 -spec from_list([T]) -> edis_list(T).
 from_list(L) -> #edis_list{size = erlang:length(L), list = L}.
 
+%% @doc return a list with the same elements in the edis_list
 -spec to_list(edis_list(T)) -> [T].
 to_list(#edis_list{list = L}) -> L.
 
@@ -45,6 +49,7 @@ nthtail(N, #edis_list{list = L}) -> lists:nthtail(N, L).
 -spec reverse(edis_list(T)) -> edis_list(T).
 reverse(EL = #edis_list{list = L}) -> EL#edis_list{list = lists:reverse(L)}.
 
+%% @doc partition edis_list into two edis_lists according to Pred
 -spec splitwith(fun((T) -> boolean()), edis_list(T)) -> {edis_list(T), edis_list(T)}.
 splitwith(_Pred, #edis_list{size = 0}) -> {#edis_list{}, #edis_list{}};
 splitwith(Pred, #edis_list{size = S, list = L}) ->
@@ -52,6 +57,7 @@ splitwith(Pred, #edis_list{size = S, list = L}) ->
   EL0 = from_list(L0),
   {EL0, #edis_list{size = S - EL0#edis_list.size, list = L1}}.
 
+%% @doc insert a value before or after the pivot
 -spec insert(T, before|'after', T, edis_list(T)) -> edis_list(T).
 insert(Value, Position, Pivot, EL = #edis_list{size = S, list = L}) ->
   case {lists:splitwith(fun(Val) -> Val =/= Pivot end, L), Position} of
@@ -84,10 +90,12 @@ sublist(#edis_list{size = S}, Start, _Len) when Start > S -> #edis_list{};
 sublist(#edis_list{size = S, list = L}, Start, Len) ->
   #edis_list{size = erlang:max(S - Start + 1, Len), list = lists:sublist(L, Start, Len)}.
 
+%% @doc Return a edis_list of all elements Elem in the received edis_list for which Pred(Elem) returns true.
 -spec filter(fun((T) -> boolean()), edis_list(T)) -> edis_list(T).
 filter(_Pred, #edis_list{size = 0}) -> #edis_list{};
 filter(Pred, #edis_list{list = L}) -> from_list(lists:filter(Pred, L)).
 
+%% @doc Remove the first N elements which compares equal to the value
 -spec remove(T, non_neg_integer(), edis_list(T)) -> edis_list(T).
 remove(_, 0, EL) -> EL;
 remove(_, _, #edis_list{size = 0}) -> empty();
@@ -102,6 +110,7 @@ remove(X, C, [Y|Rest], Size, RevStart) -> remove(X, C, Rest, Size, [Y|RevStart])
 -spec replace_head(T0, edis_list(T)) -> edis_list(T0|T).
 replace_head(H, EL = #edis_list{list = [_|Rest]}) -> EL#edis_list{list = [H|Rest]}.
 
+%% @doc Splits the received list into two lists. The first list contains the first N elements and the other list the rest of the elements (the Nth tail)
 -spec split(non_neg_integer(), edis_list(T)) -> {edis_list(T), edis_list(T)}.
 split(N, EL = #edis_list{size = S}) when N > S -> {EL, #edis_list{}};
 split(N, #edis_list{size = S, list = L}) ->

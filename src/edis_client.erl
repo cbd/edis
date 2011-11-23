@@ -35,16 +35,17 @@
 %% External functions
 %% ====================================================================
 %% -- General ---------------------------------------------------------
-%% @hidden
+%% @doc Start the client
 -spec start_link() -> {ok, pid()}.
 start_link() ->
   gen_fsm:start_link(?MODULE, [], []).
 
-%% @hidden
+%% @doc Associates the client with the socket
 -spec set_socket(pid(), port()) -> ok.
 set_socket(Client, Socket) ->
   gen_fsm:send_event(Client, {socket_ready, Socket}).
 
+%% @doc Stop the client
 -spec disconnect(pid()) -> ok.
 disconnect(Client) ->
   gen_fsm:send_event(Client, disconnect).
