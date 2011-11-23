@@ -29,3 +29,13 @@ test: all
 
 shell: all
 	${ERL}
+	
+doc: all
+	cd deps/erldocs 
+	make
+	cd ../..
+	./deps/erldocs/erldocs doc
+	cat doc/erldocs_index.js | tr -d '\n' > doc/erldocs_index2.js
+	mv ./doc/erldocs_index2.js ./doc/erldocs_index.js
+	
+	

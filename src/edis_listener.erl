@@ -3,7 +3,7 @@
 %%% @author Chad DePue <chad@inakanetworks.com>
 %%% @copyright (C) 2011 InakaLabs SRL
 %%% @doc Listener process for clients
-%%% @reference See <a href="http://www.trapexit.org/index.php/Building_a_Non-blocking_TCP_server_using_OTP_principles">this article</a> for more information, and liberally borrowed from Fernando Benavides' code - <fernando@inakanetworks.com>
+%%% @reference See <a href="http://www.trapexit.org/index.php/Building_a_Non-blocking_TCP_server_using_OTP_principles">this article</a> for more information, and liberally borrowed from Fernando Benavides' code - fernando@inakanetworks.com
 %%% @end
 %%%-------------------------------------------------------------------
 -module(edis_listener).

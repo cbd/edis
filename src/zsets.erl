@@ -29,7 +29,7 @@
 -export([intersection/2, intersection/3, union/2, union/3]).
 -export([count/3, count/4, range/3, range/4, list/3, list/4]).
 
-%% @doc Creates an empty {@link zset(any(), any())}
+%% @doc Creates an empty {@link zset/2}
 -spec new() -> zset(any(), any()).
 new() ->
   #zset{dict = dict:new(), tree = edis_gb_trees:empty()}.
@@ -70,7 +70,7 @@ delete_any(Member, ZSet) ->
 size(ZSet) ->
   dict:size(ZSet#zset.dict).
 
-%% @equiv iterator(ZSet, forward).
+%% @equiv iterator(ZSet, forward)
 -spec iterator(zset(Scores, Members)) -> iterator(Scores, Members).
 iterator(ZSet) ->
   iterator(ZSet, forward).
@@ -117,7 +117,7 @@ intersection(Aggregate, ZSet1, ZSet2) ->
 
 %% @doc Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
 %%      The last argument will be the accumulated result
--spec intersection(fun((Scores, Scores) -> Scores), [zset(Scores, Members),...]) -> zset(Scores, Members).
+-spec intersection(fun((Scores, Scores) -> Scores), [zset(Scores, Members)]) -> zset(Scores, Members).
 intersection(Aggregate, [ZSet1 | ZSets]) ->
   lists:foldl(
     fun(ZSet, AccZSet) ->
@@ -131,7 +131,7 @@ union(Aggregate, ZSet1, ZSet2) ->
 
 %% @doc Returns the union of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
 %%      The last argument will be the accumulated result
--spec union(fun((undefined|Scores, undefined|Scores) -> Scores), [zset(Scores, Members),...]) -> zset(Scores, Members).
+-spec union(fun((undefined|Scores, undefined|Scores) -> Scores), [zset(Scores, Members)]) -> zset(Scores, Members).
 union(Aggregate, [ZSet1 | ZSets]) ->
   lists:foldl(
     fun(ZSet, AccZSet) ->
@@ -163,7 +163,7 @@ count(Min, Max, ZSet, Direction) ->
 range(Start, Stop, ZSet) ->
   range(Start, Stop, ZSet, forward).
 
-%% @doc Returns the list of elements between the Start'th one and the Stop'th one inclusive
+%% @doc Returns the list of elements between the Start one and the Stop one inclusive
 -spec range(non_neg_integer(), non_neg_integer(), zset(Scores, Members), direction()) -> [{Scores, Members}].
 range(Start, Stop, ZSet, Direction) ->
   lists:reverse(range(Start, Stop, next(iterator(ZSet, Direction)), 1, [])).

@@ -54,7 +54,7 @@ process(Index) ->
 %% =================================================================================================
 %% Commands
 %% =================================================================================================
-%% @equiv run(Db, Command, ?DEFAULT_TIMEOUT)
+%% @equiv run(Db, Command, 5000)
 -spec run(atom(), edis:command()) -> term().
 run(Db, Command) ->
   run(Db, Command, ?DEFAULT_TIMEOUT).

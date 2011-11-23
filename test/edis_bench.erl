@@ -48,7 +48,7 @@ run(Module) ->
   end.
 
 %% @doc Runs the benchmarking function Module:Function/1.
-%% @equiv run(Module, Function, []).
+%% @equiv run(Module, Function, [])
 -spec run(atom(), atom()) -> [{pos_integer(), error | pos_integer()}].
 run(Module, Function) ->
   run(Module, Function, []).
@@ -94,19 +94,19 @@ compare(Module, Function, MathFunction, Options) ->
 %% math:sqrt([(Distance - Avg) * (Distance - Avg) / Avg || Distance <- Distances])).
 
 %% @doc Compares the different runs of Module:Function/1 to a given function.
-%% @equiv compare(Module, Function, []).
+%% @equiv compare(Module, Function, [])
 -spec compare(atom(), atom(), atom() | fun((pos_integer()) -> number())) -> float().
 compare(Module, Function, MathFunction) ->
   compare(Module, Function, MathFunction, []).
 
 %% @doc Graphs the results of running Module:Function/1 using ASCII Art
-%% @equiv graph(Module, Function, []).
+%% @equiv graph(Module, Function, [])
 -spec graph(atom(), atom()) -> ok.
 graph(Module, Function) ->
   graph(Module, Function, []).
 
 %% @doc Graphs the results of running Module:Function using ASCII Art
-%% @equiv graph(Module, Function, zero, Options).
+%% @equiv graph(Module, Function, zero, Options)
 -spec graph(atom(), atom(), [option()]) -> ok.
 graph(Module, Function, Options) ->
   graph(Module, Function, zero, Options).

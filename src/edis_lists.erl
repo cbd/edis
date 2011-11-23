@@ -31,12 +31,12 @@ from_list(L) -> #edis_list{size = erlang:length(L), list = L}.
 -spec to_list(edis_list(T)) -> [T].
 to_list(#edis_list{list = L}) -> L.
 
-%% @doc returns the N`th element of the list L
+%% @doc returns the Nth element of the list L
 -spec nth(pos_integer(), edis_list(T)) -> T | undefined.
 nth(N, #edis_list{size = S}) when S < N -> undefined;
 nth(N, #edis_list{list = L}) -> lists:nth(N, L).
 
-%% @doc returns the N`th tail of the list L
+%% @doc returns the Nth tail of the list L
 -spec nthtail(non_neg_integer(), edis_list(T)) -> edis_list(T).
 nthtail(N, #edis_list{size = S}) when S < N -> [];
 nthtail(N, #edis_list{list = L}) -> lists:nthtail(N, L).
