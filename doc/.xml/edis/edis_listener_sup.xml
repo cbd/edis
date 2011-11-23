@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_listener_sup</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_listener_sup.xml</file></header>
+<module>edis_listener_sup</module>
+<modulesummary>Edis TCP listener supervisor.</modulesummary>
+<description>
+<p>Edis TCP listener supervisor</p></description>
+<funcs>
+<func>
+<name>start_link() -&gt; ignore | {error, term()} | {ok, pid()}</name>
+<fsummary> Starts the supervisor process.</fsummary>
+
+<desc><marker id="start_link-0"/>
+
+<p> Starts the supervisor process</p>
+</desc></func>
+<func>
+<name>reload() -&gt; ok</name>
+<fsummary> Reloads configuration.</fsummary>
+
+<desc><marker id="reload-0"/>
+
+<p> Reloads configuration. Restarts the listeners</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

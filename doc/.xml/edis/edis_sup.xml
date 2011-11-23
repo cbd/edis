@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_sup</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_sup.xml</file></header>
+<module>edis_sup</module>
+<modulesummary>Edis main supervisor.</modulesummary>
+<description>
+<p>Edis main supervisor</p></description>
+<funcs>
+<func>
+<name>start_link() -&gt; {ok, pid()}</name>
+<fsummary> Starts a new supervisor.</fsummary>
+
+<desc><marker id="start_link-0"/>
+
+<p> Starts a new supervisor</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

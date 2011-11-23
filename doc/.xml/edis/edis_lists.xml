@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_lists</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_lists.xml</file></header>
+<module>edis_lists</module>
+<modulesummary>New lists implementation with O(1) for lists:length/1 and some other
+        behaviour changes.</modulesummary>
+<description>
+<p>New lists implementation with O(1) for lists:length/1 and some other
+        behaviour changes</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>edis_list(T)</c></tag>
+<item><marker id="type-edis_list"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>empty() -&gt; edis_list(term())</name>
+<fsummary> </fsummary>
+
+<desc><marker id="empty-0"/>
+ </desc></func>
+<func>
+<name>length(Edis_list::edis_list(term())) -&gt; non_neg_integer()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="length-1"/>
+ </desc></func>
+<func>
+<name>from_list(T::[T]) -&gt; edis_list(T)</name>
+<fsummary> </fsummary>
+
+<desc><marker id="from_list-1"/>
+ </desc></func>
+<func>
+<name>to_list(Edis_list::edis_list(T)) -&gt; [T]</name>
+<fsummary> </fsummary>
+
+<desc><marker id="to_list-1"/>
+ </desc></func>
+<func>
+<name>nth(N::pos_integer(), Edis_list::edis_list(T)) -&gt; T | undefined</name>
+<fsummary>returns the Nth element of the list L.</fsummary>
+
+<desc><marker id="nth-2"/>
+
+<p>returns the Nth element of the list L</p>
+</desc></func>
+<func>
+<name>nthtail(N::non_neg_integer(), Edis_list::edis_list(T)) -&gt; edis_list(T)</name>
+<fsummary>returns the Nth tail of the list L.</fsummary>
+
+<desc><marker id="nthtail-2"/>
+
+<p>returns the Nth tail of the list L</p>
+</desc></func>
+<func>
+<name>reverse(EL::edis_list(T)) -&gt; edis_list(T)</name>
+<fsummary>reverse all elements in the list L.</fsummary>
+
+<desc><marker id="reverse-1"/>
+
+<p>reverse all elements in the list L.</p>
+</desc></func>
+<func>
+<name>splitwith(Pred::(T) -&gt; boolean(), Edis_list::edis_list(T)) -&gt; {edis_list(T), edis_list(T)}</name>
+<fsummary> </fsummary>
+
+<desc><marker id="splitwith-2"/>
+ </desc></func>
+<func>
+<name>insert(T, Position::before | 'after', T, EL::edis_list(T)) -&gt; edis_list(T)</name>
+<fsummary> </fsummary>
+
+<desc><marker id="insert-4"/>
+ </desc></func>
+<func>
+<name>append(Edis_list::edis_list(T0), X2::edis_list(T1)) -&gt; edis_list(T0 | T1)</name>
+<fsummary>appends lists X and Y.</fsummary>
+
+<desc><marker id="append-2"/>
+
+<p>appends lists X and Y</p>
+</desc></func>
+<func>
+<name>push(T0, Edis_list::edis_list(T)) -&gt; edis_list(T | T0)</name>
+<fsummary>inserts X to the left of the list.</fsummary>
+
+<desc><marker id="push-2"/>
+
+<p>inserts X to the left of the list</p>
+</desc></func>
+<func>
+<name>pop(Edis_list::edis_list(T)) -&gt; {T, edis_list(T)}</name>
+<fsummary>pops the leftmost element of the list.</fsummary>
+
+<desc><marker id="pop-1"/>
+
+<p>pops the leftmost element of the list</p>
+</desc></func>
+<func>
+<name>sublist(Edis_list::edis_list(T), Start::pos_integer(), Len::non_neg_integer()) -&gt; edis_list(T)</name>
+<fsummary>Returns the sub-list starting at Start of length Length.</fsummary>
+
+<desc><marker id="sublist-3"/>
+
+<p>Returns the sub-list starting at Start of length Length.</p>
+</desc></func>
+<func>
+<name>filter(Pred::(T) -&gt; boolean(), Edis_list::edis_list(T)) -&gt; edis_list(T)</name>
+<fsummary> </fsummary>
+
+<desc><marker id="filter-2"/>
+ </desc></func>
+<func>
+<name>remove(T, Count::non_neg_integer(), EL::edis_list(T)) -&gt; edis_list(T)</name>
+<fsummary> </fsummary>
+
+<desc><marker id="remove-3"/>
+ </desc></func>
+<func>
+<name>replace_head(T0, EL::edis_list(T)) -&gt; edis_list(T0 | T)</name>
+<fsummary>replaces head element.</fsummary>
+
+<desc><marker id="replace_head-2"/>
+
+<p>replaces head element</p>
+</desc></func>
+<func>
+<name>split(N::non_neg_integer(), EL::edis_list(T)) -&gt; {edis_list(T), edis_list(T)}</name>
+<fsummary> </fsummary>
+
+<desc><marker id="split-2"/>
+ </desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

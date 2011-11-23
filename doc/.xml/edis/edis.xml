@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis.xml</file></header>
+<module>edis</module>
+<modulesummary>Redis (http://redis.io), but in Erlang.</modulesummary>
+<description>
+<p>Redis (http://redis.io), but in Erlang</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>command() = #edis_command{}</c></tag>
+<item><marker id="type-command"/> </item>
+<tag><c>result_type() = ok | string | bulk | number | float | zrange | multi_bulk | boolean | multi_result | sort</c></tag>
+<item><marker id="type-result_type"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>start() -&gt; ok | {error, {already_started, '?MODULE'}}</name>
+<fsummary>Starts the application.</fsummary>
+
+<desc><marker id="start-0"/>
+
+<p>Starts the application</p>
+</desc></func>
+<func>
+<name>stop() -&gt; ok</name>
+<fsummary>Stops the application.</fsummary>
+
+<desc><marker id="stop-0"/>
+
+<p>Stops the application</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

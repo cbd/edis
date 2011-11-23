@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_util</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_util.xml</file></header>
+<module>edis_util</module>
+<modulesummary>edis utilities.</modulesummary>
+<description>
+<p>edis utilities</p></description>
+<funcs>
+<func>
+<name>timestamp() -&gt; float()</name>
+<fsummary>Current timestamp.</fsummary>
+
+<desc><marker id="timestamp-0"/>
+
+<p>Current timestamp</p>
+</desc></func>
+<func>
+<name>now() -&gt; pos_integer()</name>
+<fsummary>UTC in *NIX seconds.</fsummary>
+
+<desc><marker id="now-0"/>
+
+<p>UTC in *NIX seconds</p>
+</desc></func>
+<func>
+<name>upper(Bin::binary()) -&gt; binary()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="upper-1"/>
+ </desc></func>
+<func>
+<name>lower(Bin::binary()) -&gt; binary()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="lower-1"/>
+ </desc></func>
+<func>
+<name>binary_to_integer(Bin::binary()) -&gt; integer()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="binary_to_integer-1"/>
+ </desc></func>
+<func>
+<name>binary_to_float(Bin::binary()) -&gt; integer()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="binary_to_float-1"/>
+ </desc></func>
+<func>
+<name>binary_to_integer(Bin::binary(), Default::integer()) -&gt; integer()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="binary_to_integer-2"/>
+ </desc></func>
+<func>
+<name>binary_to_float(Bin::binary(), X) -&gt; float() | X</name>
+<fsummary> </fsummary>
+
+<desc><marker id="binary_to_float-2"/>
+ </desc></func>
+<func>
+<name>integer_to_binary(Int::binary()) -&gt; integer()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="integer_to_binary-1"/>
+ </desc></func>
+<func>
+<name>make_pairs(KVs::[any()]) -&gt; [{any(), any()}]</name>
+<fsummary> </fsummary>
+
+<desc><marker id="make_pairs-1"/>
+ </desc></func>
+<func>
+<name>glob_to_re(Pattern::binary()) -&gt; binary()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="glob_to_re-1"/>
+ </desc></func>
+<func>
+<name>random_binary() -&gt; binary()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="random_binary-0"/>
+ </desc></func>
+<func>
+<name>join(Bins::[binary()], Sep::binary()) -&gt; binary()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="join-2"/>
+ </desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

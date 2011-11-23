@@ -1,0 +1,503 @@
+* {
+    padding : 0px;
+    margin  : 0px;
+}
+
+body {
+    font-family      : verdana, Arial, sans-serif;
+    font-size        : 13px;
+    font-size-adjust : none;
+    font-style       : normal;
+    font-variant     : normal;
+    font-weight      : normal;
+    line-height      : 1.3;
+    color            : #222;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color       : #333;
+    font-weight : normal;
+}
+
+p {
+    margin : 7px 0px 12px 0px;
+    color  : #222;
+    line-height:135%;
+}
+
+h1 {
+    display:inline;
+    font-size   : 24px;
+    font-weight : bold;
+}
+
+h2 {
+    margin-top  : 0px;
+    font-size   : 17px;
+    font-weight : normal;
+}
+
+hr {
+    height     : 1px;
+    background : #AAA;
+    color      : #AAA;
+}
+
+dl {
+    margin : 15px 20px;
+}
+
+dt {
+    margin : 2px 0px;
+}
+
+dd {
+    margin-bottom : 8px;
+}
+
+h4 a {
+    color:black;
+font-weight:bold;
+    /* font-size:80%; */
+}
+a {
+    color : #B22222;
+}
+
+a:visited {
+    color           : #CD5C5C;
+    border-bottom   : 1px dotted #CD5C5C;
+    text-decoration : none;
+}
+
+ul {
+    margin : 10px 0px;
+}
+
+code {
+    font-family   : "Courier New","Andale Mono",monospace;
+    background    : #EEFFCC none repeat scroll 0 0;
+    border-bottom : 1px dotted #AADD99;
+}
+
+pre code {
+    background : none;
+    border     : none;
+}
+
+pre {
+    margin      : 10px 0px;
+    padding     : 5px;
+    border-left : 2px solid #ccc;
+    background  : #EFEFEF;
+    margin-left : 10px;
+    color       : #111;
+    font-family : "Courier New","Andale Mono",monospace;
+    font-size   : 13px;
+    line-height : normal;
+    overflow    : auto;
+}
+
+td {
+    padding: 5px;
+}
+
+.copystuff {
+    padding   : 2px 0px 0px 4px;
+    font-size : 10px;
+}
+
+.copystuff a {
+    text-decoration : none;
+}
+
+#content li {
+    margin : 0px 25px;
+}
+
+#content {
+    bottom   :0px;
+    right    :0px;
+    left     :240px;
+    overflow :auto;
+    padding  :0;
+    position :fixed;
+    top      :0;
+    outline  : none;
+}
+
+#content h4 {
+    color      : #444;
+    margin-top : 25px;
+    font-size  : 14px;
+}
+
+h2.modsummary {
+    font-size     : 11px;
+    border-bottom : 1px solid #999;
+    margin-bottom : 15px;
+    margin-top : 10px;
+}
+
+.functions {
+    margin-top : 15px;
+}
+
+.function h3 {
+    margin-top  : 5px;
+    font-size   : 14px;
+    font-weight : bold;
+}
+
+.function {
+    margin : 25px 0px;
+}
+
+.function p {
+    padding-left : 10px;
+}
+
+.function em {
+    font-style  : normal;
+    font-weight : bold;
+}
+
+.function ul {
+    list-style-type : none;
+}
+
+.seealso li {
+    float       : left;
+    font-style  : normal;
+    margin-left : 10px;
+}
+
+.note {
+    border     : 1px solid #E1E4EA;
+    padding    : 10px;
+    margin     : 10px 8%;
+    background : #EFF3F8;
+}
+
+.note h2 {
+    font-size   : 14px;
+    font-weight : bold;
+    display     : inline;
+}
+
+.warning {
+    border     : 1px solid #E8DFDF;
+    padding    : 10px;
+    margin     : 10px 8%;
+    background : #FBF4E9;
+}
+
+.warning h2 {
+    font-size   : 14px;
+    font-weight : bold;
+    display     : inline;
+}
+
+#sidebar {
+    overflow-y   : hidden;
+    overflow-x   : hidden;
+    position     : fixed;
+    border-right : 1px solid #999;
+    width        : 240px;
+    padding      : 0px;
+    background   : #EEE;
+    height       : 100%;
+}
+
+#sidebar.inactive {
+    opacity:0.5;
+}
+
+#search {
+    -moz-border-radius    : 5px;
+    -webkit-border-radius : 5px;
+    display               : block;
+    width                 : 228px;
+    float                 : left;
+    outline               : none;
+    font-family           : 13px Arial, sans-serif;
+    padding               : 2px;
+    text-indent           : 2px;
+    margin                : 3px;
+    border                : 1px solid;
+    border-color          : #CCC #999 #999 #CCC;
+}
+
+
+/* #sidebar input:focus { */
+/*     color:black; */
+/*     font-style:normal; */
+/*     -moz-box-shadow    : 0px 0px 1px #888; */
+/*     -webkit-box-shadow : 0px 0px 1px #888; */
+/* } */
+
+#expand {
+    -moz-border-radius    : 5px;
+    -webkit-border-radius : 5px;
+    display               : block;
+    width                 : 15px;
+    background            : #FFF;
+    height                : 12px;
+    cursor                : pointer;
+    color                 : #333;
+    line-height           : 13px;
+    float                 : right;
+    outline               : none;
+    font-family           : 13px Arial, sans-serif;
+    padding               : 2px;
+    text-indent           : 5px;
+    margin                : 3px;
+    border                : 1px solid;
+    border-color          : #CCC #999 #999 #CCC;
+    text-decoration       : none;
+}
+
+#expand:hover {
+    border-color       : #AAA #777 #777 #AAA;
+    -moz-box-shadow    : 0px 0px 1px #888;
+    -webkit-box-shadow : 0px 0px 1px #888;
+}
+
+#results {
+    clear           : both;
+    height          : 100%;
+    overflow-y      : scroll;
+    overflow-x      : hidden;
+    list-style-type : none;
+    border-top      : 1px solid #999;
+    border-bottom   : 1px solid #999;
+}
+
+#results li a {
+    display         : block;
+    padding         : 3px 0px 3px 5px;
+    position        : relative;
+    text-decoration : none;
+    color           : #555;
+    text-shadow     : #DDD 1px 1px 1px;
+    border-bottom   : 1px solid #AAA;
+    overflow        : hidden;
+}
+
+#results .name {
+    color        : #000;
+    padding-left : 0px;
+}
+
+#results li:hover {
+    background : #DDD !important;
+}
+
+#results li.selected {
+    background : #333 !important;
+    background : -moz-linear-gradient(top, #222222, #333333) !important;
+}
+
+#results li.selected .sub, #results li.selected span {
+    color : #FFF !important;
+    text-shadow     : #000 1px 1px 1px;
+}
+
+.sub {
+    color       : #555;
+    font-size   : 10px;
+    white-space : nowrap;
+}
+
+#results .dat {
+    -moz-border-radius    : 3px;
+    -webkit-border-radius : 3px;
+    font-size             : 11px;
+    color                 : #777;
+    line-height           : 11px;
+    padding               : 2px;
+    position              : absolute;
+    display               : block;
+    width                 : 25px;
+    margin                : 2px 5px 0px 0px;
+    text-align            : center;
+}
+
+#results li.fun {
+    background : #E6FFCC;
+}
+
+#results li.mod {
+    background: #CCE6FF;
+}
+
+#results li.app .dat {
+    background : red;
+}
+
+.app .sub {
+    position:absolute;
+    top:5px;
+    right:5px;
+    color:#999;
+    text-shadow:none;
+}
+
+#sideinfo {
+    position   : absolute;
+    top        : 26px;
+    width      : 230px;
+    display    : none;
+    background : white;
+    padding    : 5px;
+    height     : 100%;
+    z-index    : 999;
+    font-size  : 11px;
+}
+
+.info li {
+    margin : 5px 0px 5px 20px;
+}
+
+#funs {
+    position:relative;
+    top:-30px;
+    bottom:60px;
+    right:0px;
+    height:100%;
+    list-style-type : none;
+    overflow        : auto;
+    background      : white;
+    padding-bottom  : 10px;
+    padding-left    : 20px;
+    border-top      : 1px solid #999;
+    background      : #eee;
+}
+
+#funs li {
+    display  : block;
+    width    : 80px;
+    margin   : 0px 5px;
+    overflow : hidden;
+    float    : left;
+    padding  : 0px;
+}
+
+#funs li a {
+    font-size : 9px;
+}
+
+#funwrapper {
+    position : fixed;
+    top      : 75%;
+    left     : 241px;
+    right    : 0px;
+    bottom   : 0px;
+    display  : none;
+}
+
+#viewfuns {
+    display             : block;
+    text-align          : center;
+    width               : 80px;
+    background          : #eee;
+    border              : 1px solid #999;
+    border-bottom-width : 0px;
+    font-size           : 10px;
+    padding             : 4px 5px 1px 5px;
+    cursor              : pointer;
+    position            : relative;
+    top                 : -19px;
+    right               : -20px;
+    z-index             : 99;
+    -moz-border-radius-topleft     : 4px;
+    -moz-border-radius-topright    : 4px;
+    -webkit-border-radius-topleft  : 4px;
+    -webkit-border-radius-topright : 4px;
+}
+
+.main {
+    padding: 10px 20px !important;
+    font-family:"Myriad Pro",arial,sans-serif;
+    font-weight:normal;
+}
+
+.main h1 { font-size: 30px; margin-bottom: 8px; line-height:30px;}
+.main h2 { font-size: 20px; margin-top:20px;}
+
+.notes { opacity:0.6; }
+
+.type_desc {
+    margin-left:30px;
+}
+h3 + .type_desc {
+   margin-top:10px;
+}
+
+pre.sh_sourceCode {
+    color       : black;
+    font-style  : normal;
+    font-weight : normal;
+}
+
+pre.sh_sourceCode .sh_keyword { color: blue; font-weight: bold; }
+pre.sh_sourceCode .sh_type { color: darkgreen; }
+pre.sh_sourceCode .sh_usertype { color: teal; }
+pre.sh_sourceCode .sh_string { color: red; font-family: monospace; }
+pre.sh_sourceCode .sh_regexp { color: orange; font-family: monospace; }
+pre.sh_sourceCode .sh_specialchar { color: pink; font-family: monospace; }
+pre.sh_sourceCode .sh_comment { color: brown; font-style: italic; }
+pre.sh_sourceCode .sh_number { color: purple; }
+pre.sh_sourceCode .sh_preproc { color: darkblue; font-weight: bold; }
+pre.sh_sourceCode .sh_symbol { color: darkred; }
+pre.sh_sourceCode .sh_function { color: #32656A; font-weight: bold; }
+pre.sh_sourceCode .sh_cbracket { color: red; }
+pre.sh_sourceCode .sh_todo { font-weight: bold; background-color: cyan; }
+
+/* Predefined variables and functions (for instance glsl) */
+pre.sh_sourceCode .sh_predef_var { color: darkblue; }
+pre.sh_sourceCode .sh_predef_func { color: darkblue; font-weight: bold; }
+
+/* for OOP */
+pre.sh_sourceCode .sh_classname { color: teal; }
+
+/* line numbers (not yet implemented) */
+pre.sh_sourceCode .sh_linenum { color: black; font-family: monospace; }
+
+/* Internet related */
+pre.sh_sourceCode .sh_url { color: blue; text-decoration: underline; font-family: monospace; }
+
+/* for ChangeLog and Log files */
+pre.sh_sourceCode .sh_date { color: blue; font-weight: bold; }
+pre.sh_sourceCode .sh_time, pre.sh_sourceCode .sh_file { color: darkblue; font-weight: bold; }
+pre.sh_sourceCode .sh_ip, pre.sh_sourceCode .sh_name { color: darkgreen; }
+
+/* for Prolog, Perl... */
+pre.sh_sourceCode .sh_variable { color: darkgreen; }
+
+/* for LaTeX */
+pre.sh_sourceCode .sh_italics { color: darkgreen; font-style: italic; }
+pre.sh_sourceCode .sh_bold { color: darkgreen; font-weight: bold; }
+pre.sh_sourceCode .sh_underline { color: darkgreen; text-decoration: underline; }
+pre.sh_sourceCode .sh_fixed { color: green; font-family: monospace; }
+pre.sh_sourceCode .sh_argument { color: darkgreen; }
+pre.sh_sourceCode .sh_optionalargument { color: purple; }
+pre.sh_sourceCode .sh_math { color: orange; }
+pre.sh_sourceCode .sh_bibtex { color: blue; }
+
+/* for diffs */
+pre.sh_sourceCode .sh_oldfile { color: orange; }
+pre.sh_sourceCode .sh_newfile { color: darkgreen; }
+pre.sh_sourceCode .sh_difflines { color: blue; }
+
+/* for css */
+pre.sh_sourceCode .sh_selector { color: purple; }
+pre.sh_sourceCode .sh_property { color: blue; }
+pre.sh_sourceCode .sh_value { color: darkgreen; font-style: italic; }
+
+/* other */
+pre.sh_sourceCode .sh_section { color: black; font-weight: bold; }
+pre.sh_sourceCode .sh_paren { color: red; }
+pre.sh_sourceCode .sh_attribute { color: darkgreen; }
+
+.sh_sourceCode{ font-weight:normal; font-style:normal}.sh_sourceCode .sh_symbol,.sh_sourceCode .sh_cbracket{ color:#32656a}.sh_sourceCode .sh_keyword{ font-style:italic}.sh_sourceCode .sh_function{ font-weight:bold}.sh_sourceCode .sh_preproc{ font-weight:bold; color:#32656a}.sh_sourceCode .sh_string,.sh_sourceCode .sh_regexp,.sh_sourceCode .sh_specialchar{  color:#94E343}.sh_sourceCode .sh_number{  color:#a67}.sh_sourceCode .sh_comment{ color:#999}

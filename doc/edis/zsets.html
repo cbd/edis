@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <title>zsets (edis) -  - erldocs.com (Erlang Documentation)</title>
+    <link rel="search" type="application/opensearchdescription+xml"
+          title="erldocs" href="/search.xml">
+    <link type="text/css" rel="stylesheet" href="../erldocs.css" />
+  </head>
+  <body>
+
+    <div id="sidebar" class="inactive">
+      <input type="text" id="search" autocomplete="off"
+             placeholder="press TAB to search" />
+      <ul id="results"> </ul>
+    </div>
+
+    <div id="content">
+      <div style="margin:0px; padding:10px 20px;">
+        
+
+<h1>zsets</h1>
+<h2 class="modsummary">Sorted Sets.</h2>
+<div class="description">
+<p>Sorted Sets</p></div>
+<div class="section"><h4>DATA TYPES</h4><span id="types"> </span>
+
+<dl>
+<dt><code>aggregate() = sum | max | min</code></dt>
+<dd><span id="type-aggregate"> </span> </dd>
+<dt><code>direction() = forward | backwards</code></dt>
+<dd><span id="type-direction"> </span> </dd>
+<dt><code>iterator(_Scores, _Members)</code></dt>
+<dd><span id="type-iterator"> </span> </dd>
+<dt><code>limit(Scores) = neg_infinity | infinity | {exc, Scores} | {inc, Scores}</code></dt>
+<dd><span id="type-limit"> </span> </dd>
+<dt><code>zset(_Scores, _Members)</code></dt>
+<dd><span id="type-zset"> </span> </dd>
+</dl></div>
+<div class="functions"><h4>Functions</h4><hr  />
+<div class="function">
+<h3 id="new/0">new() -&gt; zset(any(), any())</h3>
+
+
+<div class="description"><span id="new-0"> </span>
+
+<p>Creates an empty <a href="#zset-2" class="seealso">zset/2</a></p>
+</div></div>
+<div class="function">
+<h3 id="enter/4">enter(X1::{Score, Member}, ZSet::zset(Scores, Members)) -&gt; zset(Scores, Members)</h3>
+
+<ul class="type">
+<li><code>Score = Scores</code></li><li><code>Member = Members</code></li></ul>
+<div class="description"><span id="enter-2"> </span>
+<p>Equivalent to <a href="#enter-3" class="seealso">enter(Score, Member, ZSet)</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="enter/4-1">enter(Score, Member, ZSet::zset(Scores, Members)) -&gt; zset(Scores, Members)</h3>
+
+<ul class="type">
+<li><code>Score = Scores</code></li><li><code>Member = Members</code></li></ul>
+<div class="description"><span id="enter-3"> </span>
+
+<p>Adds a new element to the zset.
+       If the element is already present it justs updates its score</p>
+</div></div>
+<div class="function">
+<h3 id="delete_any/3">delete_any(Members, ZSet::zset(Scores, Members)) -&gt; zset(Scores, Members)</h3>
+
+
+<div class="description"><span id="delete_any-2"> </span>
+
+<p>Removes the node with key Key from Tree1 if the key is present in the tree, otherwise does
+       nothing; returns new tree.</p>
+</div></div>
+<div class="function">
+<h3 id="size/1">size(ZSet::zset(any(), any())) -&gt; non_neg_integer()</h3>
+
+
+<div class="description"><span id="size-1"> </span>
+
+<p>Returns the size of the zset</p>
+</div></div>
+<div class="function">
+<h3 id="iterator/2">iterator(ZSet::zset(Scores, Members)) -&gt; iterator(Scores, Members)</h3>
+
+
+<div class="description"><span id="iterator-1"> </span>
+<p>Equivalent to <a href="#iterator-2" class="seealso">iterator(ZSet, forward)</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="iterator/2-1">iterator(ZSet::zset(Scores, Members), X2::direction()) -&gt; iterator(Scores, Members)</h3>
+
+
+<div class="description"><span id="iterator-2"> </span>
+
+<p>Returns an iterator that can be used for traversing the entries of Tree; see <a href="#next-1" class="seealso">next/1</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="next/2">next(Iter1::iterator(Scores, Members)) -&gt; none | {Scores, Members, iterator(Scores, Members)}</h3>
+
+
+<div class="description"><span id="next-1"> </span>
+
+<p>Returns {Score, Member, Iter2} where Score is the smallest score referred to by the iterator
+  Iter1, and Iter2 is the new iterator to be used for traversing the remaining nodes, or the atom
+  none if no nodes remain.</p>
+</div></div>
+<div class="function">
+<h3 id="direction/2">direction(Iter::iterator(_Scores, _Members)) -&gt; direction()</h3>
+
+
+<div class="description"><span id="direction-1"> </span>
+
+<p>Returns the direction of the iterator</p>
+</div></div>
+<div class="function">
+<h3 id="find/3">find(Member, ZSet::iterator(Scores, Members)) -&gt; Scores</h3>
+
+<ul class="type">
+<li><code>Member = Members</code></li></ul>
+<div class="description"><span id="find-2"> </span>
+
+<p>This function searches for a key in a zset. Returns {ok, Score} where Score is the score
+       associated with Member, or error if the key is not present.</p>
+</div></div>
+<div class="function">
+<h3 id="intersection/2">intersection(Aggregate::(Scores1, Scores2) -&gt; Scores3, ZSet1::zset(Scores1, Members), ZSet2::zset(Scores2, Members)) -&gt; zset(Scores3, Members)</h3>
+
+
+<div class="description"><span id="intersection-3"> </span>
+
+<p>Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate</p>
+</div></div>
+<div class="function">
+<h3 id="intersection/2-1">intersection(Aggregate::(Scores, Scores) -&gt; Scores, ZSets::[zset(Scores, Members)]) -&gt; zset(Scores, Members)</h3>
+
+
+<div class="description"><span id="intersection-2"> </span>
+
+<p>Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
+       The last argument will be the accumulated result</p>
+</div></div>
+<div class="function">
+<h3 id="union/2">union(Aggregate::(Scores1, Scores2) -&gt; Scores3, ZSet1::zset(Scores1, Members), ZSet2::zset(Scores2, Members)) -&gt; zset(Scores3, Members)</h3>
+
+
+<div class="description"><span id="union-3"> </span>
+
+<p>Returns the union of ZSet1 and ZSet2 generating the resulting scores using Aggregate</p>
+</div></div>
+<div class="function">
+<h3 id="union/2-1">union(Aggregate::(undefined | Scores, undefined | Scores) -&gt; Scores, ZSets::[zset(Scores, Members)]) -&gt; zset(Scores, Members)</h3>
+
+
+<div class="description"><span id="union-2"> </span>
+
+<p>Returns the union of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
+       The last argument will be the accumulated result</p>
+</div></div>
+<div class="function">
+<h3 id="map/2">map(Fun::(Scores, Members) -&gt; Scores2, ZSet::zset(Scores, Members)) -&gt; zset(Scores2, Members)</h3>
+
+
+<div class="description"><span id="map-2"> </span>
+
+<p>Executes Fun in each element and returns the zset with the scores returned by it</p>
+</div></div>
+<div class="function">
+<h3 id="to_list/2">to_list(ZSet::zset(Scores, Members)) -&gt; [{Scores, Members}]</h3>
+
+
+<div class="description"><span id="to_list-1"> </span>
+
+<p>Converts the sorted set into a list of {Score, Member} pairs</p>
+</div></div>
+<div class="function">
+<h3 id="count/1">count(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, _Members)) -&gt; non_neg_integer()</h3>
+
+
+<div class="description"><span id="count-3"> </span>
+<p>Equivalent to <a href="#count-4" class="seealso">count(Min, Max, ZSet, forward)</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="count/1-1">count(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, _Members), Direction::direction()) -&gt; non_neg_integer()</h3>
+
+
+<div class="description"><span id="count-4"> </span>
+
+<p>Returns the number of elements between Min and Max in ZSet</p>
+</div></div>
+<div class="function">
+<h3 id="range/1">range(Start::non_neg_integer(), Stop::non_neg_integer(), ZSet::zset(Scores, Members)) -&gt; [{Scores, Members}]</h3>
+
+
+<div class="description"><span id="range-3"> </span>
+<p>Equivalent to <a href="#range-4" class="seealso">range(Start, Stop, ZSet, forward)</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="range/1-1">range(Start::non_neg_integer(), Stop::non_neg_integer(), ZSet::zset(Scores, Members), Direction::direction()) -&gt; [{Scores, Members}]</h3>
+
+
+<div class="description"><span id="range-4"> </span>
+
+<p>Returns the list of elements between the Start one and the Stop one inclusive</p>
+</div></div>
+<div class="function">
+<h3 id="list/1">list(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, Members)) -&gt; [{Scores, Members}]</h3>
+
+
+<div class="description"><span id="list-3"> </span>
+<p>Equivalent to <a href="#list-4" class="seealso">list(Min, Max, ZSet, forward)</a>.</p>
+</div></div>
+<div class="function">
+<h3 id="list/1-1">list(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, Members), Direction::direction()) -&gt; [{Scores, Members}]</h3>
+
+
+<div class="description"><span id="list-4"> </span>
+
+<p>Returns the list of elements with scores between the specified limits</p>
+</div></div></div>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors>
+      </div>
+      <div id="funwrapper">
+        <a id="viewfuns">View Functions</a>
+        <ul id="funs"><li><a href="#new/0">new/0</a></li><li><a href="#enter/4">enter/4</a></li><li><a href="#enter/4-1">enter/4-1</a></li><li><a href="#delete_any/3">delete_any/3</a></li><li><a href="#size/1">size/1</a></li><li><a href="#iterator/2">iterator/2</a></li><li><a href="#iterator/2-1">iterator/2-1</a></li><li><a href="#next/2">next/2</a></li><li><a href="#direction/2">direction/2</a></li><li><a href="#find/3">find/3</a></li><li><a href="#intersection/2">intersection/2</a></li><li><a href="#intersection/2-1">intersection/2-1</a></li><li><a href="#union/2">union/2</a></li><li><a href="#union/2-1">union/2-1</a></li><li><a href="#map/2">map/2</a></li><li><a href="#to_list/2">to_list/2</a></li><li><a href="#count/1">count/1</a></li><li><a href="#count/1-1">count/1-1</a></li><li><a href="#range/1">range/1</a></li><li><a href="#range/1-1">range/1-1</a></li><li><a href="#list/1">list/1</a></li><li><a href="#list/1-1">list/1-1</a></li></ul>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      var CURRENT_ROOT = "../";
+    </script>
+
+    <script type="text/javascript" src="../jquery.js"></script>
+    <script type="text/javascript" src="../erldocs_index.js"></script>
+    <script type="text/javascript" src="../erldocs.js"></script>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-59760-14']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script');
+        ga.src = ('https:' == document.location.protocol ?
+          'https://ssl' : 'http://www') +
+          '.google-analytics.com/ga.js';
+        ga.setAttribute('async', 'true');
+        document.documentElement.firstChild.appendChild(ga);
+      })();
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_pubsub</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_pubsub.xml</file></header>
+<module>edis_pubsub</module>
+<modulesummary>edis PubSub Monitor.</modulesummary>
+<description>
+<p>edis PubSub Monitor</p></description>
+<funcs>
+<func>
+<name>start_link() -&gt; {ok, pid()} | {error, term()}</name>
+<fsummary>Starts the event manager.</fsummary>
+
+<desc><marker id="start_link-0"/>
+
+<p>Starts the event manager</p>
+</desc></func>
+<func>
+<name>add_sup_handler() -&gt; ok</name>
+<fsummary>Subscribes client.</fsummary>
+
+<desc><marker id="add_sup_handler-0"/>
+
+<p>Subscribes client.       
+From this point on, all db operations will be notified to the client procedure using       
+Erlang messages in the form of #edis_message{}.       
+If the event handler later is deleted, the event manager sends a message {gen_event_EXIT,Handler,Reason} to the calling process. Reason is one of the following:</p>
+ 
+         <p>normal, if the event handler has been removed due to a call to delete_handler/3, or remove_handler has been returned by a callback function (see below).
+         shutdown, if the event handler has been removed because the event manager is terminating.
+         {swapped,NewHandler,Pid}, if the process Pid has replaced the event handler with another event handler NewHandler using a call to swap_handler/3 or swap_sup_handler/3.
+         a term, if the event handler is removed due to an error. Which term depends on the error.</p>
+</desc></func>
+<func>
+<name>delete_handler() -&gt; ok</name>
+<fsummary>Unsubscribes client.</fsummary>
+
+<desc><marker id="delete_handler-0"/>
+
+<p>Unsubscribes client.</p>
+</desc></func>
+<func>
+<name>count_handlers() -&gt; non_neg_integer()</name>
+<fsummary>Returns the number of currently active handlers.</fsummary>
+
+<desc><marker id="count_handlers-0"/>
+
+<p>Returns the number of currently active handlers</p>
+</desc></func>
+<func>
+<name>notify(Edis_message::#edis_message{}) -&gt; ok</name>
+<fsummary>Notifies an event.</fsummary>
+
+<desc><marker id="notify-1"/>
+
+<p>Notifies an event.</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

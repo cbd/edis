@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <title>edis_gb_trees (edis) -  - erldocs.com (Erlang Documentation)</title>
+    <link rel="search" type="application/opensearchdescription+xml"
+          title="erldocs" href="/search.xml">
+    <link type="text/css" rel="stylesheet" href="../erldocs.css" />
+  </head>
+  <body>
+
+    <div id="sidebar" class="inactive">
+      <input type="text" id="search" autocomplete="off"
+             placeholder="press TAB to search" />
+      <ul id="results"> </ul>
+    </div>
+
+    <div id="content">
+      <div style="margin:0px; padding:10px 20px;">
+        
+
+<h1>edis_gb_trees</h1>
+<h2 class="modsummary">Extension for gb_trees with a couple of extra functions.</h2>
+<div class="description">
+<p>Extension for gb_trees with a couple of extra functions</p></div>
+<div class="section"><h4>DATA TYPES</h4><span id="types"> </span>
+
+<dl>
+<dt><code>edis_gb_tree() = gb_tree()</code></dt>
+<dd><span id="type-edis_gb_tree"> </span> </dd>
+</dl></div>
+<div class="functions"><h4>Functions</h4><hr  />
+<div class="function">
+<h3 id="rev_iterator/1">rev_iterator(X1::edis_gb_tree()) -&gt; [gb_tree_node() (see module gb_trees)]</h3>
+
+
+<div class="description"><span id="rev_iterator-1"> </span>
+
+<p>Returns a reverse iterator. It's just like the one returned by <a href="#iterator-1" class="seealso">iterator/1</a> but it
+       traverses the tree in the exact opposite direction</p>
+</div></div>
+<div class="function">
+<h3 id="previous/1">previous(As::[gb_tree_node() (see module gb_trees)]) -&gt; none | {term(), term(), [gb_tree_node() (see module gb_trees)]}</h3>
+
+
+<div class="description"><span id="previous-1"> </span>
+
+<p>Like <a href="#next-1" class="seealso">next/1</a> for reverse iterators</p>
+</div></div></div>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors>
+      </div>
+      <div id="funwrapper">
+        <a id="viewfuns">View Functions</a>
+        <ul id="funs"><li><a href="#rev_iterator/1">rev_iterator/1</a></li><li><a href="#previous/1">previous/1</a></li></ul>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      var CURRENT_ROOT = "../";
+    </script>
+
+    <script type="text/javascript" src="../jquery.js"></script>
+    <script type="text/javascript" src="../erldocs_index.js"></script>
+    <script type="text/javascript" src="../erldocs.js"></script>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-59760-14']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script');
+        ga.src = ('https:' == document.location.protocol ?
+          'https://ssl' : 'http://www') +
+          '.google-analytics.com/ga.js';
+        ga.setAttribute('async', 'true');
+        document.documentElement.firstChild.appendChild(ga);
+      })();
+    </script>
+  </body>
+</html>
+

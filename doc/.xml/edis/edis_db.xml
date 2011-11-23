@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_db</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_db.xml</file></header>
+<module>edis_db</module>
+<modulesummary>edis Database.</modulesummary>
+<description>
+<p>edis Database</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>item_encoding() = raw | int | ziplist | linkedlist | intset | hashtable | zipmap | skiplist</c></tag>
+<item><marker id="type-item_encoding"/> </item>
+<tag><c>item_type() = string | hash | list | set | zset</c></tag>
+<item><marker id="type-item_type"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>start_link(Index::non_neg_integer()) -&gt; {ok, pid()}</name>
+<fsummary> </fsummary>
+
+<desc><marker id="start_link-1"/>
+ </desc></func>
+<func>
+<name>process(Index::non_neg_integer()) -&gt; atom()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="process-1"/>
+ </desc></func>
+<func>
+<name>run(Db::atom(), Command::command() (see module edis)) -&gt; term()</name>
+<fsummary>Equivalent to run(Db, Command, 5000).
+</fsummary>
+
+<desc><marker id="run-2"/>
+<p>Equivalent to <seealso marker="#run-3">run(Db, Command, 5000)</seealso>.</p>
+</desc></func>
+<func>
+<name>run(Db::atom(), Command::command() (see module edis), Timeout::infinity | pos_integer()) -&gt; term()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="run-3"/>
+ </desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

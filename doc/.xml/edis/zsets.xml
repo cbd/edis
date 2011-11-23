@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>zsets</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>zsets.xml</file></header>
+<module>zsets</module>
+<modulesummary>Sorted Sets.</modulesummary>
+<description>
+<p>Sorted Sets</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>aggregate() = sum | max | min</c></tag>
+<item><marker id="type-aggregate"/> </item>
+<tag><c>direction() = forward | backwards</c></tag>
+<item><marker id="type-direction"/> </item>
+<tag><c>iterator(_Scores, _Members)</c></tag>
+<item><marker id="type-iterator"/> </item>
+<tag><c>limit(Scores) = neg_infinity | infinity | {exc, Scores} | {inc, Scores}</c></tag>
+<item><marker id="type-limit"/> </item>
+<tag><c>zset(_Scores, _Members)</c></tag>
+<item><marker id="type-zset"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>new() -&gt; zset(any(), any())</name>
+<fsummary>Creates an empty zset/2</fsummary>
+
+<desc><marker id="new-0"/>
+
+<p>Creates an empty <seealso marker="#zset-2">zset/2</seealso></p>
+</desc></func>
+<func>
+<name>enter(X1::{Score, Member}, ZSet::zset(Scores, Members)) -&gt; zset(Scores, Members)</name>
+<fsummary>Equivalent to enter(Score, Member, ZSet).
+</fsummary>
+<type>
+<v>Score = Scores</v><v>Member = Members</v></type>
+<desc><marker id="enter-2"/>
+<p>Equivalent to <seealso marker="#enter-3">enter(Score, Member, ZSet)</seealso>.</p>
+</desc></func>
+<func>
+<name>enter(Score, Member, ZSet::zset(Scores, Members)) -&gt; zset(Scores, Members)</name>
+<fsummary>Adds a new element to the zset.</fsummary>
+<type>
+<v>Score = Scores</v><v>Member = Members</v></type>
+<desc><marker id="enter-3"/>
+
+<p>Adds a new element to the zset.
+       If the element is already present it justs updates its score</p>
+</desc></func>
+<func>
+<name>delete_any(Members, ZSet::zset(Scores, Members)) -&gt; zset(Scores, Members)</name>
+<fsummary>Removes the node with key Key from Tree1 if the key is present in the tree, otherwise does
+       nothing; returns new tree.</fsummary>
+
+<desc><marker id="delete_any-2"/>
+
+<p>Removes the node with key Key from Tree1 if the key is present in the tree, otherwise does
+       nothing; returns new tree.</p>
+</desc></func>
+<func>
+<name>size(ZSet::zset(any(), any())) -&gt; non_neg_integer()</name>
+<fsummary>Returns the size of the zset.</fsummary>
+
+<desc><marker id="size-1"/>
+
+<p>Returns the size of the zset</p>
+</desc></func>
+<func>
+<name>iterator(ZSet::zset(Scores, Members)) -&gt; iterator(Scores, Members)</name>
+<fsummary>Equivalent to iterator(ZSet, forward).
+</fsummary>
+
+<desc><marker id="iterator-1"/>
+<p>Equivalent to <seealso marker="#iterator-2">iterator(ZSet, forward)</seealso>.</p>
+</desc></func>
+<func>
+<name>iterator(ZSet::zset(Scores, Members), X2::direction()) -&gt; iterator(Scores, Members)</name>
+<fsummary>Returns an iterator that can be used for traversing the entries of Tree; see next/1.</fsummary>
+
+<desc><marker id="iterator-2"/>
+
+<p>Returns an iterator that can be used for traversing the entries of Tree; see <seealso marker="#next-1">next/1</seealso>.</p>
+</desc></func>
+<func>
+<name>next(Iter1::iterator(Scores, Members)) -&gt; none | {Scores, Members, iterator(Scores, Members)}</name>
+<fsummary>Returns {Score, Member, Iter2} where Score is the smallest score referred to by the iterator
+  Iter1, and Iter2 is the new iterator to be used for traversing the remaining nodes, or the atom
+  none if no nodes remain.</fsummary>
+
+<desc><marker id="next-1"/>
+
+<p>Returns {Score, Member, Iter2} where Score is the smallest score referred to by the iterator
+  Iter1, and Iter2 is the new iterator to be used for traversing the remaining nodes, or the atom
+  none if no nodes remain.</p>
+</desc></func>
+<func>
+<name>direction(Iter::iterator(_Scores, _Members)) -&gt; direction()</name>
+<fsummary>Returns the direction of the iterator.</fsummary>
+
+<desc><marker id="direction-1"/>
+
+<p>Returns the direction of the iterator</p>
+</desc></func>
+<func>
+<name>find(Member, ZSet::iterator(Scores, Members)) -&gt; Scores</name>
+<fsummary>This function searches for a key in a zset.</fsummary>
+<type>
+<v>Member = Members</v></type>
+<desc><marker id="find-2"/>
+
+<p>This function searches for a key in a zset. Returns {ok, Score} where Score is the score
+       associated with Member, or error if the key is not present.</p>
+</desc></func>
+<func>
+<name>intersection(Aggregate::(Scores1, Scores2) -&gt; Scores3, ZSet1::zset(Scores1, Members), ZSet2::zset(Scores2, Members)) -&gt; zset(Scores3, Members)</name>
+<fsummary>Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate.</fsummary>
+
+<desc><marker id="intersection-3"/>
+
+<p>Returns the intersection of ZSet1 and ZSet2 generating the resulting scores using Aggregate</p>
+</desc></func>
+<func>
+<name>intersection(Aggregate::(Scores, Scores) -&gt; Scores, ZSets::[zset(Scores, Members)]) -&gt; zset(Scores, Members)</name>
+<fsummary>Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.</fsummary>
+
+<desc><marker id="intersection-2"/>
+
+<p>Returns the intersection of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
+       The last argument will be the accumulated result</p>
+</desc></func>
+<func>
+<name>union(Aggregate::(Scores1, Scores2) -&gt; Scores3, ZSet1::zset(Scores1, Members), ZSet2::zset(Scores2, Members)) -&gt; zset(Scores3, Members)</name>
+<fsummary>Returns the union of ZSet1 and ZSet2 generating the resulting scores using Aggregate.</fsummary>
+
+<desc><marker id="union-3"/>
+
+<p>Returns the union of ZSet1 and ZSet2 generating the resulting scores using Aggregate</p>
+</desc></func>
+<func>
+<name>union(Aggregate::(undefined | Scores, undefined | Scores) -&gt; Scores, ZSets::[zset(Scores, Members)]) -&gt; zset(Scores, Members)</name>
+<fsummary>Returns the union of the non-empty list of ZSets generating the resulting scores using Aggregate in order.</fsummary>
+
+<desc><marker id="union-2"/>
+
+<p>Returns the union of the non-empty list of ZSets generating the resulting scores using Aggregate in order.
+       The last argument will be the accumulated result</p>
+</desc></func>
+<func>
+<name>map(Fun::(Scores, Members) -&gt; Scores2, ZSet::zset(Scores, Members)) -&gt; zset(Scores2, Members)</name>
+<fsummary>Executes Fun in each element and returns the zset with the scores returned by it.</fsummary>
+
+<desc><marker id="map-2"/>
+
+<p>Executes Fun in each element and returns the zset with the scores returned by it</p>
+</desc></func>
+<func>
+<name>to_list(ZSet::zset(Scores, Members)) -&gt; [{Scores, Members}]</name>
+<fsummary>Converts the sorted set into a list of {Score, Member} pairs.</fsummary>
+
+<desc><marker id="to_list-1"/>
+
+<p>Converts the sorted set into a list of {Score, Member} pairs</p>
+</desc></func>
+<func>
+<name>count(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, _Members)) -&gt; non_neg_integer()</name>
+<fsummary>Equivalent to count(Min, Max, ZSet, forward).
+</fsummary>
+
+<desc><marker id="count-3"/>
+<p>Equivalent to <seealso marker="#count-4">count(Min, Max, ZSet, forward)</seealso>.</p>
+</desc></func>
+<func>
+<name>count(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, _Members), Direction::direction()) -&gt; non_neg_integer()</name>
+<fsummary>Returns the number of elements between Min and Max in ZSet.</fsummary>
+
+<desc><marker id="count-4"/>
+
+<p>Returns the number of elements between Min and Max in ZSet</p>
+</desc></func>
+<func>
+<name>range(Start::non_neg_integer(), Stop::non_neg_integer(), ZSet::zset(Scores, Members)) -&gt; [{Scores, Members}]</name>
+<fsummary>Equivalent to range(Start, Stop, ZSet, forward).
+</fsummary>
+
+<desc><marker id="range-3"/>
+<p>Equivalent to <seealso marker="#range-4">range(Start, Stop, ZSet, forward)</seealso>.</p>
+</desc></func>
+<func>
+<name>range(Start::non_neg_integer(), Stop::non_neg_integer(), ZSet::zset(Scores, Members), Direction::direction()) -&gt; [{Scores, Members}]</name>
+<fsummary>Returns the list of elements between the Start one and the Stop one inclusive.</fsummary>
+
+<desc><marker id="range-4"/>
+
+<p>Returns the list of elements between the Start one and the Stop one inclusive</p>
+</desc></func>
+<func>
+<name>list(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, Members)) -&gt; [{Scores, Members}]</name>
+<fsummary>Equivalent to list(Min, Max, ZSet, forward).
+</fsummary>
+
+<desc><marker id="list-3"/>
+<p>Equivalent to <seealso marker="#list-4">list(Min, Max, ZSet, forward)</seealso>.</p>
+</desc></func>
+<func>
+<name>list(Min::limit(Scores), Max::limit(Scores), ZSet::zset(Scores, Members), Direction::direction()) -&gt; [{Scores, Members}]</name>
+<fsummary>Returns the list of elements with scores between the specified limits.</fsummary>
+
+<desc><marker id="list-4"/>
+
+<p>Returns the list of elements with scores between the specified limits</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

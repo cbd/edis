@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_client</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_client.xml</file></header>
+<module>edis_client</module>
+<modulesummary>edis client FSM.</modulesummary>
+<description>
+<p>edis client FSM</p></description>
+<funcs>
+<func>
+<name>disconnect(Client::pid()) -&gt; ok</name>
+<fsummary> </fsummary>
+
+<desc><marker id="disconnect-1"/>
+ </desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

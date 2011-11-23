@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_gb_trees</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_gb_trees.xml</file></header>
+<module>edis_gb_trees</module>
+<modulesummary>Extension for gb_trees with a couple of extra functions.</modulesummary>
+<description>
+<p>Extension for gb_trees with a couple of extra functions</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>edis_gb_tree() = gb_tree()</c></tag>
+<item><marker id="type-edis_gb_tree"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>rev_iterator(X1::edis_gb_tree()) -&gt; [gb_tree_node() (see module gb_trees)]</name>
+<fsummary>Returns a reverse iterator.</fsummary>
+
+<desc><marker id="rev_iterator-1"/>
+
+<p>Returns a reverse iterator. It's just like the one returned by <seealso marker="#iterator-1">iterator/1</seealso> but it
+       traverses the tree in the exact opposite direction</p>
+</desc></func>
+<func>
+<name>previous(As::[gb_tree_node() (see module gb_trees)]) -&gt; none | {term(), term(), [gb_tree_node() (see module gb_trees)]}</name>
+<fsummary>Like next/1 for reverse iterators.</fsummary>
+
+<desc><marker id="previous-1"/>
+
+<p>Like <seealso marker="#next-1">next/1</seealso> for reverse iterators</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

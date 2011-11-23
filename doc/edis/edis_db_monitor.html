@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <title>edis_db_monitor (edis) -  - erldocs.com (Erlang Documentation)</title>
+    <link rel="search" type="application/opensearchdescription+xml"
+          title="erldocs" href="/search.xml">
+    <link type="text/css" rel="stylesheet" href="../erldocs.css" />
+  </head>
+  <body>
+
+    <div id="sidebar" class="inactive">
+      <input type="text" id="search" autocomplete="off"
+             placeholder="press TAB to search" />
+      <ul id="results"> </ul>
+    </div>
+
+    <div id="content">
+      <div style="margin:0px; padding:10px 20px;">
+        
+
+<h1>edis_db_monitor</h1>
+<h2 class="modsummary">edis Database Monitor.</h2>
+<div class="description">
+<p>edis Database Monitor</p></div>
+<div class="functions"><h4>Functions</h4><hr  />
+<div class="function">
+<h3 id="start_link/0">start_link() -&gt; {ok, pid()} | {error, term()}</h3>
+
+
+<div class="description"><span id="start_link-0"> </span>
+
+<p>Starts the event manager</p>
+</div></div>
+<div class="function">
+<h3 id="add_sup_handler/0">add_sup_handler() -&gt; ok</h3>
+
+
+<div class="description"><span id="add_sup_handler-0"> </span>
+
+<p>Subscribes client.       
+From this point on, all db operations will be notified to the client procedure using       
+Erlang messages in the form of #edis_command{}.       
+If the event handler later is deleted, the event manager sends a message {gen_event_EXIT,Handler,Reason} to the calling process. Reason is one of the following:</p>
+ 
+         <p>normal, if the event handler has been removed due to a call to delete_handler/3, or remove_handler has been returned by a callback function (see below).
+         shutdown, if the event handler has been removed because the event manager is terminating.
+         {swapped,NewHandler,Pid}, if the process Pid has replaced the event handler with another event handler NewHandler using a call to swap_handler/3 or swap_sup_handler/3.
+         a term, if the event handler is removed due to an error. Which term depends on the error.</p>
+</div></div>
+<div class="function">
+<h3 id="delete_handler/0">delete_handler() -&gt; ok</h3>
+
+
+<div class="description"><span id="delete_handler-0"> </span>
+
+<p>Unsubscribes client.</p>
+</div></div>
+<div class="function">
+<h3 id="notify/1">notify(Edis_command::#edis_command{}) -&gt; ok</h3>
+
+
+<div class="description"><span id="notify-1"> </span>
+
+<p>Notifies an event.</p>
+</div></div></div>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors>
+      </div>
+      <div id="funwrapper">
+        <a id="viewfuns">View Functions</a>
+        <ul id="funs"><li><a href="#start_link/0">start_link/0</a></li><li><a href="#add_sup_handler/0">add_sup_handler/0</a></li><li><a href="#delete_handler/0">delete_handler/0</a></li><li><a href="#notify/1">notify/1</a></li></ul>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      var CURRENT_ROOT = "../";
+    </script>
+
+    <script type="text/javascript" src="../jquery.js"></script>
+    <script type="text/javascript" src="../erldocs_index.js"></script>
+    <script type="text/javascript" src="../erldocs.js"></script>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-59760-14']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script');
+        ga.src = ('https:' == document.location.protocol ?
+          'https://ssl' : 'http://www') +
+          '.google-analytics.com/ga.js';
+        ga.setAttribute('async', 'true');
+        document.documentElement.firstChild.appendChild(ga);
+      })();
+    </script>
+  </body>
+</html>
+

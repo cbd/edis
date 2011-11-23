@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_command_runner</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_command_runner.xml</file></header>
+<module>edis_command_runner</module>
+<modulesummary>edis Command runner.</modulesummary>
+<description>
+<p>edis Command runner.
+        It helps pipelining commands and running them in order, thanks to
+        regular Erlang mechanisms</p></description>
+<funcs>
+<func>
+<name>start_link(Socket::port()) -&gt; {ok, pid()}</name>
+<fsummary> </fsummary>
+
+<desc><marker id="start_link-1"/>
+ </desc></func>
+<func>
+<name>stop(Runner::pid()) -&gt; ok</name>
+<fsummary> </fsummary>
+
+<desc><marker id="stop-1"/>
+ </desc></func>
+<func>
+<name>err(Runner::pid(), Message::iodata()) -&gt; ok</name>
+<fsummary> </fsummary>
+
+<desc><marker id="err-2"/>
+ </desc></func>
+<func>
+<name>run(Runner::pid(), Command::binary(), Arguments::[binary()]) -&gt; ok</name>
+<fsummary> </fsummary>
+
+<desc><marker id="run-3"/>
+ </desc></func>
+<func>
+<name>last_arg(X1::binary()) -&gt; inlined | safe</name>
+<fsummary>Should last argument be inlined?
+       Useful for old protocol calls.</fsummary>
+
+<desc><marker id="last_arg-1"/>
+
+<p>Should last argument be inlined?
+       Useful for old protocol calls.</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

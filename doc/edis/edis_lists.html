@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <title>edis_lists (edis) -  - erldocs.com (Erlang Documentation)</title>
+    <link rel="search" type="application/opensearchdescription+xml"
+          title="erldocs" href="/search.xml">
+    <link type="text/css" rel="stylesheet" href="../erldocs.css" />
+  </head>
+  <body>
+
+    <div id="sidebar" class="inactive">
+      <input type="text" id="search" autocomplete="off"
+             placeholder="press TAB to search" />
+      <ul id="results"> </ul>
+    </div>
+
+    <div id="content">
+      <div style="margin:0px; padding:10px 20px;">
+        
+
+<h1>edis_lists</h1>
+<h2 class="modsummary">New lists implementation with O(1) for lists:length/1 and some other
+        behaviour changes.</h2>
+<div class="description">
+<p>New lists implementation with O(1) for lists:length/1 and some other
+        behaviour changes</p></div>
+<div class="section"><h4>DATA TYPES</h4><span id="types"> </span>
+
+<dl>
+<dt><code>edis_list(T)</code></dt>
+<dd><span id="type-edis_list"> </span> </dd>
+</dl></div>
+<div class="functions"><h4>Functions</h4><hr  />
+<div class="function">
+<h3 id="empty/0">empty() -&gt; edis_list(term())</h3>
+
+
+<div class="description"><span id="empty-0"> </span>
+ </div></div>
+<div class="function">
+<h3 id="length/1">length(Edis_list::edis_list(term())) -&gt; non_neg_integer()</h3>
+
+
+<div class="description"><span id="length-1"> </span>
+ </div></div>
+<div class="function">
+<h3 id="from_list/1">from_list(T::[T]) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="from_list-1"> </span>
+ </div></div>
+<div class="function">
+<h3 id="to_list/1">to_list(Edis_list::edis_list(T)) -&gt; [T]</h3>
+
+
+<div class="description"><span id="to_list-1"> </span>
+ </div></div>
+<div class="function">
+<h3 id="nth/1">nth(N::pos_integer(), Edis_list::edis_list(T)) -&gt; T | undefined</h3>
+
+
+<div class="description"><span id="nth-2"> </span>
+
+<p>returns the Nth element of the list L</p>
+</div></div>
+<div class="function">
+<h3 id="nthtail/1">nthtail(N::non_neg_integer(), Edis_list::edis_list(T)) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="nthtail-2"> </span>
+
+<p>returns the Nth tail of the list L</p>
+</div></div>
+<div class="function">
+<h3 id="reverse/1">reverse(EL::edis_list(T)) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="reverse-1"> </span>
+
+<p>reverse all elements in the list L.</p>
+</div></div>
+<div class="function">
+<h3 id="splitwith/1">splitwith(Pred::(T) -&gt; boolean(), Edis_list::edis_list(T)) -&gt; {edis_list(T), edis_list(T)}</h3>
+
+
+<div class="description"><span id="splitwith-2"> </span>
+ </div></div>
+<div class="function">
+<h3 id="insert/4">insert(T, Position::before | 'after', T, EL::edis_list(T)) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="insert-4"> </span>
+ </div></div>
+<div class="function">
+<h3 id="append/1">append(Edis_list::edis_list(T0), X2::edis_list(T1)) -&gt; edis_list(T0 | T1)</h3>
+
+
+<div class="description"><span id="append-2"> </span>
+
+<p>appends lists X and Y</p>
+</div></div>
+<div class="function">
+<h3 id="push/2">push(T0, Edis_list::edis_list(T)) -&gt; edis_list(T | T0)</h3>
+
+
+<div class="description"><span id="push-2"> </span>
+
+<p>inserts X to the left of the list</p>
+</div></div>
+<div class="function">
+<h3 id="pop/1">pop(Edis_list::edis_list(T)) -&gt; {T, edis_list(T)}</h3>
+
+
+<div class="description"><span id="pop-1"> </span>
+
+<p>pops the leftmost element of the list</p>
+</div></div>
+<div class="function">
+<h3 id="sublist/1">sublist(Edis_list::edis_list(T), Start::pos_integer(), Len::non_neg_integer()) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="sublist-3"> </span>
+
+<p>Returns the sub-list starting at Start of length Length.</p>
+</div></div>
+<div class="function">
+<h3 id="filter/1">filter(Pred::(T) -&gt; boolean(), Edis_list::edis_list(T)) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="filter-2"> </span>
+ </div></div>
+<div class="function">
+<h3 id="remove/2">remove(T, Count::non_neg_integer(), EL::edis_list(T)) -&gt; edis_list(T)</h3>
+
+
+<div class="description"><span id="remove-3"> </span>
+ </div></div>
+<div class="function">
+<h3 id="replace_head/2">replace_head(T0, EL::edis_list(T)) -&gt; edis_list(T0 | T)</h3>
+
+
+<div class="description"><span id="replace_head-2"> </span>
+
+<p>replaces head element</p>
+</div></div>
+<div class="function">
+<h3 id="split/1">split(N::non_neg_integer(), EL::edis_list(T)) -&gt; {edis_list(T), edis_list(T)}</h3>
+
+
+<div class="description"><span id="split-2"> </span>
+ </div></div></div>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors>
+      </div>
+      <div id="funwrapper">
+        <a id="viewfuns">View Functions</a>
+        <ul id="funs"><li><a href="#empty/0">empty/0</a></li><li><a href="#length/1">length/1</a></li><li><a href="#from_list/1">from_list/1</a></li><li><a href="#to_list/1">to_list/1</a></li><li><a href="#nth/1">nth/1</a></li><li><a href="#nthtail/1">nthtail/1</a></li><li><a href="#reverse/1">reverse/1</a></li><li><a href="#splitwith/1">splitwith/1</a></li><li><a href="#insert/4">insert/4</a></li><li><a href="#append/1">append/1</a></li><li><a href="#push/2">push/2</a></li><li><a href="#pop/1">pop/1</a></li><li><a href="#sublist/1">sublist/1</a></li><li><a href="#filter/1">filter/1</a></li><li><a href="#remove/2">remove/2</a></li><li><a href="#replace_head/2">replace_head/2</a></li><li><a href="#split/1">split/1</a></li></ul>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      var CURRENT_ROOT = "../";
+    </script>
+
+    <script type="text/javascript" src="../jquery.js"></script>
+    <script type="text/javascript" src="../erldocs_index.js"></script>
+    <script type="text/javascript" src="../erldocs.js"></script>
+
+    <script type="text/javascript">
+      var _gaq = _gaq || [];
+      _gaq.push(['_setAccount', 'UA-59760-14']);
+      _gaq.push(['_trackPageview']);
+
+      (function() {
+        var ga = document.createElement('script');
+        ga.src = ('https:' == document.location.protocol ?
+          'https://ssl' : 'http://www') +
+          '.google-analytics.com/ga.js';
+        ga.setAttribute('async', 'true');
+        document.documentElement.firstChild.appendChild(ga);
+      })();
+    </script>
+  </body>
+</html>
+

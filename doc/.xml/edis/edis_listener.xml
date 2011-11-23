@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_listener</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_listener.xml</file></header>
+<module>edis_listener</module>
+<modulesummary>Listener process for clients.</modulesummary>
+<description>
+<p>Listener process for clients</p></description>
+<funcs>
+<func>
+<name>start_link(Port::pos_integer()) -&gt; {ok, pid()}</name>
+<fsummary> Starts a new client listener.</fsummary>
+
+<desc><marker id="start_link-1"/>
+
+<p> Starts a new client listener</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

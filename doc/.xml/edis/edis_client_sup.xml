@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_client_sup</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_client_sup.xml</file></header>
+<module>edis_client_sup</module>
+<modulesummary>Edis client supervisor.</modulesummary>
+<description>
+<p>Edis client supervisor</p></description>
+<funcs>
+<func>
+<name>start_link() -&gt; ignore | {error, term()} | {ok, pid()}</name>
+<fsummary> Starts the supervisor process.</fsummary>
+
+<desc><marker id="start_link-0"/>
+
+<p> Starts the supervisor process</p>
+</desc></func>
+<func>
+<name>start_client() -&gt; {ok, pid() | undefined} | {error, term()}</name>
+<fsummary> Starts a new client process.</fsummary>
+
+<desc><marker id="start_client-0"/>
+
+<p> Starts a new client process</p>
+</desc></func>
+<func>
+<name>reload() -&gt; ok</name>
+<fsummary> Reloads configuration.</fsummary>
+
+<desc><marker id="reload-0"/>
+
+<p> Reloads configuration. Restarts the managers</p>
+</desc></func>
+<func>
+<name>count_clients() -&gt; non_neg_integer()</name>
+<fsummary> Returns the count of reigstered clients under the supervision of this process.</fsummary>
+
+<desc><marker id="count_clients-0"/>
+
+<p> Returns the count of reigstered clients under the supervision of this process</p>
+</desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

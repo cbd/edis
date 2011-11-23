@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_config</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_config.xml</file></header>
+<module>edis_config</module>
+<modulesummary>edis Configuration utilities.</modulesummary>
+<description>
+<p>edis Configuration utilities</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>config_option() = listener_port_range | client_timeout | databases | requirepass | dir | backend</c></tag>
+<item><marker id="type-config_option"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>set(Param::config_option(), Timeout::term()) -&gt; ok</name>
+<fsummary> </fsummary>
+
+<desc><marker id="set-2"/>
+ </desc></func>
+<func>
+<name>get(Pattern::binary() | config_option()) -&gt; term()</name>
+<fsummary> </fsummary>
+
+<desc><marker id="get-1"/>
+ </desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>

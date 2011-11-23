@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="latin1" ?>
+<!DOCTYPE erlref SYSTEM "erlref.dtd">
+<erlref>
+<header>
+<title>edis_backend</title>
+<prepared></prepared>
+<responsible></responsible>
+<docno>1</docno>
+<approved></approved>
+<checked></checked>
+<date></date>
+<rev>A</rev>
+<file>edis_backend.xml</file></header>
+<module>edis_backend</module>
+<modulesummary>DB backend behaviour for edis.</modulesummary>
+<description>
+<p>DB backend behaviour for edis</p></description>
+<section><title>DATA TYPES</title><marker id="types"/>
+
+<taglist>
+<tag><c>fold_fun() = (Item::#edis_item{}, any()) -&gt; any()</c></tag>
+<item><marker id="type-fold_fun"/> </item>
+<tag><c>write_actions() = [{put, Key::binary(), Value::#edis_item{}} | {delete, Key::binary()} | clear]</c></tag>
+<item><marker id="type-write_actions"/> </item>
+</taglist></section>
+<funcs>
+<func>
+<name>behaviour_info(X1::callbacks | term()) -&gt; undefined | [{atom(), non_neg_integer()}]</name>
+<fsummary> </fsummary>
+
+<desc><marker id="behaviour_info-1"/>
+ </desc></func></funcs>
+
+<authors>
+
+<aname>Fernando Benavides</aname>
+<email>fernando.benavides@inakanetworks.com</email>
+<aname>Chad DePue</aname>
+<email>chad@inakanetworks.com</email></authors></erlref>
