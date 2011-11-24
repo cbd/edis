@@ -532,7 +532,7 @@ parse_command(C = #edis_command{cmd = <<"CONFIG SET">>, args = [Key | Values]}) 
         throw({bad_arg_num, "CONFIG SET"});
       {client_timeout, [Timeout]} ->
         edis_util:binary_to_integer(Timeout);
-      {client_tiemout, _} ->
+      {client_timeout, _} ->
         throw({bad_arg_num, "CONFIG SET"});
       {databases, [Dbs]} ->
         edis_util:binary_to_integer(Dbs);

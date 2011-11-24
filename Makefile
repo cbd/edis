@@ -53,4 +53,6 @@ install:
 	$(INSTALL) deps/eleveldb/priv/eleveldb.so $(INSTALL_BIN)/priv
 
 service: install
-	mv priv/edis.init.d /etc/init.d/edis
+	mkdir -p /etc/edis/db/
+	cp priv/edis.config /etc/edis/
+	cp priv/edis.init.d /etc/init.d/edis

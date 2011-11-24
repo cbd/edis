@@ -24,7 +24,7 @@ set(listener_port_range, Param) ->
   ?THROW("Invalid range: ~p~n", [Param]),
   throw(invalid_param);
 set(client_timeout, Timeout) when is_integer(Timeout), Timeout >= 0 ->
-  ok = application:set_env(edis, client_tiemout, Timeout);
+  ok = application:set_env(edis, client_timeout, Timeout);
 set(client_timeout, Param) ->
   ?THROW("Invalid timeout: ~p~n", [Param]),
   throw(invalid_param);
@@ -51,7 +51,7 @@ set(Param, Value) ->
 get(listener_port_range) ->
   get(listener_port_range, {6379,6379});
 get(client_timeout) ->
-  get(client_tiemout, 35000);
+  get(client_timeout, 35000);
 get(databases) ->
   get(databases, 16);
 get(requirepass) ->
