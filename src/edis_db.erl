@@ -49,6 +49,7 @@ start_link(Index) ->
   gen_server:start_link({local, process(Index)}, ?MODULE, Index, []).
 
 %% @doc returns the database name with index Index 
+%% You can use that value later on calls to {@link run/2} or {@link run/3}
 -spec process(non_neg_integer()) -> atom().
 process(Index) ->
   list_to_atom("edis-db-" ++ integer_to_list(Index)).
@@ -61,7 +62,7 @@ process(Index) ->
 run(Db, Command) ->
   run(Db, Command, ?DEFAULT_TIMEOUT).
 
-%% @doc Execute Command in Db with some Timeout 
+%% @doc Executes Command in Db with some Timeout 
 -spec run(atom(), edis:command(), infinity | pos_integer()) -> term().
 run(Db, Command, Timeout) ->
   ?DEBUG("CALL for ~p: ~p~n", [Db, Command]),

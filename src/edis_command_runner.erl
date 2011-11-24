@@ -33,22 +33,22 @@
 %% =================================================================================================
 %% External functions
 %% =================================================================================================
-%% @doc start a new command runner
+%% @doc starts a new command runner
 -spec start_link(port()) -> {ok, pid()}.
 start_link(Socket) ->
   gen_server:start_link(?MODULE, Socket, []).
 
-%% @doc stop the connection
+%% @doc stops the connection
 -spec stop(pid()) -> ok.
 stop(Runner) ->
   gen_server:cast(Runner, stop).
 
-%% @doc generate an error(like throw())
+%% @doc generates an error(like throw())
 -spec err(pid(), iodata()) -> ok.
 err(Runner, Message) ->
   gen_server:cast(Runner, {err, Message}).
 
-%% @doc execute the received command
+%% @doc executes the received command
 -spec run(pid(), binary(), [binary()]) -> ok.
 run(Runner, Command, Arguments) ->
   gen_server:cast(Runner, {run, Command, Arguments}).

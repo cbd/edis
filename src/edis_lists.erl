@@ -19,19 +19,19 @@
 -export([length/1, from_list/1, to_list/1, nth/2, nthtail/2, reverse/1, splitwith/2, insert/4,
          append/2, push/2, pop/1, sublist/3, filter/2, remove/3, replace_head/2, split/2, empty/0]).
 
-%% @doc return an empty edis_list 
+%% @doc returns an empty edis_list 
 -spec empty() -> edis_list(_).
 empty() -> #edis_list{}.
 
-%% @doc return the edis_list size
+%% @doc returns the edis_list size
 -spec length(edis_list(_)) -> non_neg_integer().
 length(#edis_list{size = S}) -> S.
 
-%% @doc return an edis_list with the same elements in the list
+%% @doc returns an edis_list with the same elements of the list
 -spec from_list([T]) -> edis_list(T).
 from_list(L) -> #edis_list{size = erlang:length(L), list = L}.
 
-%% @doc return a list with the same elements in the edis_list
+%% @doc returns a list with the same elements of the edis_list
 -spec to_list(edis_list(T)) -> [T].
 to_list(#edis_list{list = L}) -> L.
 
@@ -45,7 +45,7 @@ nth(N, #edis_list{list = L}) -> lists:nth(N, L).
 nthtail(N, #edis_list{size = S}) when S < N -> [];
 nthtail(N, #edis_list{list = L}) -> lists:nthtail(N, L).
 
-%% @doc reverse all elements in the list L.
+%% @doc reverses all elements in the list L.
 -spec reverse(edis_list(T)) -> edis_list(T).
 reverse(EL = #edis_list{list = L}) -> EL#edis_list{list = lists:reverse(L)}.
 
@@ -90,12 +90,12 @@ sublist(#edis_list{size = S}, Start, _Len) when Start > S -> #edis_list{};
 sublist(#edis_list{size = S, list = L}, Start, Len) ->
   #edis_list{size = erlang:max(S - Start + 1, Len), list = lists:sublist(L, Start, Len)}.
 
-%% @doc Return a edis_list of all elements Elem in the received edis_list for which Pred(Elem) returns true.
+%% @doc Returns an edis_list of all elements Elem in the received edis_list for which Pred(Elem) returns true.
 -spec filter(fun((T) -> boolean()), edis_list(T)) -> edis_list(T).
 filter(_Pred, #edis_list{size = 0}) -> #edis_list{};
 filter(Pred, #edis_list{list = L}) -> from_list(lists:filter(Pred, L)).
 
-%% @doc Remove the first N elements which compares equal to the value
+%% @doc Removes the first N elements which compares equal to the value
 -spec remove(T, non_neg_integer(), edis_list(T)) -> edis_list(T).
 remove(_, 0, EL) -> EL;
 remove(_, _, #edis_list{size = 0}) -> empty();
