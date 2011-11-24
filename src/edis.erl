@@ -20,6 +20,28 @@
 
 -export([start/0, stop/0]).
 -export([start/2, stop/1]).
+-export([main/1]).
+
+%%-------------------------------------------------------------------
+%% ESCRIPT API
+%%-------------------------------------------------------------------
+%% @doc Entry point for escript
+-spec main([string()]) -> ok.
+main(Args) ->
+  case Args of
+    [] -> ok;
+    [ConfigFile] -> edis_util:load_config(ConfigFile)
+  end,
+  crypto:start(),
+  elog:start(),
+  ok = start(),
+  Pid = erlang:whereis(edis_sup),
+  Ref = erlang:monitor(process, Pid),
+  receive
+    {'DOWN',Ref,process,Pid,shutdown} -> halt(0);
+    {'DOWN',Ref,process,Pid,Reason} -> error_logger:error_msg("System down: ~p~n", [Reason]), halt(1);
+    Error -> error_logger:error_msg("Unexpected message: ~p~n", [Error]), halt(-1)
+  end.
 
 %%-------------------------------------------------------------------
 %% ADMIN API

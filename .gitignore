@@ -1,6 +1,7 @@
 doc
 logs/ct/index.html
 db
+bin
 ebin
 deps
 erl_crash.dump
