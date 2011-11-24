@@ -11,7 +11,7 @@
 
 -export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
          integer_to_binary/1, binary_to_float/1, binary_to_float/2,
-         make_pairs/1, glob_to_re/1,random_binary/0, join/2]).
+         make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1]).
 
 -include("elog.hrl").
 
@@ -142,3 +142,29 @@ join([Bin|Bins], Sep) -> join(Bins, Sep, Bin).
 
 join([], _, Acc) -> Acc;
 join([Bin|Bins], Sep, Acc) -> join(Bins, Sep, <<Acc/binary, Sep/binary, Bin/binary>>).
+
+%% @doc Loads an Erlang config file and sets the corresponding application environment variables
+-spec load_config(string()) -> ok.
+load_config(File) ->
+  case file:consult(File) of
+    {error, Reason} ->
+      ?THROW("Couldn't load config file '~s': ~p~n", [Reason]);
+    {ok, [Configs]} ->
+      lists:foreach(fun load_app_config/1, Configs)
+  end.
+
+load_app_config({App, Envs}) ->
+  case application:load(App) of
+    ok -> ok;
+    {error, {already_loaded, App}} ->
+      ok =
+          case application:stop(App) of
+            ok -> ok;
+            {error, {not_started, App}} -> ok
+          end,
+      ok = application:unload(App),
+      ok = application:load(App)
+  end,
+  lists:foreach(fun({Key, Value}) ->
+                        ok = application:set_env(App, Key, Value)
+                end, Envs).

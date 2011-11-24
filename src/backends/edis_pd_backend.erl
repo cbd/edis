@@ -23,7 +23,9 @@
 %% Behaviour functions
 %% ====================================================================
 -spec init(string(), non_neg_integer(), [any()]) -> {ok, ref()} | {error, term()}.
-init(_Dir, _Index, _Options) -> {ok, #ref{}}.
+init(_Dir, _Index, _Options) ->
+  ?WARN("USING PD BACKEND!! This should not be a production environment!~n", []),
+  {ok, #ref{}}.
 
 -spec write(ref(), edis_backend:write_actions()) -> ok | {error, term()}.
 write(#ref{}, Actions) ->
@@ -46,7 +48,7 @@ fold(#ref{}, Fun, InitValue) ->
   lists:foldl(
     fun({_Key, Item}, Acc) ->
       Fun(Item, Acc)
-    end, InitValue, erlang:get()).
+    end, InitValue, [{K, V} || {K, V} <- erlang:get(), not is_atom(K)]).
 
 -spec is_empty(ref()) -> boolean().
 is_empty(#ref{}) -> [] =:= erlang:get().

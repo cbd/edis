@@ -33,7 +33,7 @@ main(Args) ->
     [ConfigFile] -> edis_util:load_config(ConfigFile)
   end,
   crypto:start(),
-  elog:start(),
+  ok = application:start(elog),
   ok = start(),
   Pid = erlang:whereis(edis_sup),
   Ref = erlang:monitor(process, Pid),
