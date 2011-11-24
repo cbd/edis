@@ -1,41 +1,56 @@
-ERL := erl -pa deps/*/ebin -pa ebin -pa src -s crypto -boot start_sasl +Bc +K true -smp enable -s inets -s ssl -s elog ${ERL_ARGS}
+# edis Makefile
+# Copyright (C) 2011 Electronic Inaka, LLC <contact at inakanetworks dot com>
+# edis is licensed by Electronic Inaka, LLC under the Apache 2.0 license
 
-all:
+ERL := erl -pa deps/*/ebin -pa ebin -pa src -boot start_sasl +Bc +K true -smp enable -s crypto -s inets -s ssl -s elog ${ERL_ARGS}
+PREFIX= /usr/local
+INSTALL_BIN= $(PREFIX)/bin
+INSTALL= cp -p
+
+all: erl
+	mkdir -p bin
+	./priv/script_builder
+
+erl:
 	rebar get-deps && rebar compile
 	
 clean:
+	rm -rf bin
 	rebar clean
 
-build_plt: all
-	dialyzer --build_plt --apps kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
+build_plt: erl
+	dialyzer --verbose --build_plt --apps kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
 				    xmerl webtool snmp public_key mnesia eunit syntax_tools compiler --output_plt ~/.edis_plt -pa deps/*/ebin ebin
 
-analyze: all
-	dialyzer -pa deps/*/ebin --plt ~/.itweet_dialyzer_plt -Wunmatched_returns -Werror_handling -Wbehaviours ebin
+analyze: erl
+	dialyzer --verbose -pa deps/*/ebin --plt ~/.edis_plt -Wunmatched_returns -Werror_handling -Wbehaviours ebin
 
-doc: all
-	rebar skip_deps=true doc
-
-xref: all
+xref: erl
 	rebar skip_deps=true xref
 	
-run: all
+run: erl
 	${ERL} -s edis
 
-test: all
+test: erl
 	${ERL} -config test.config -noshell -sname edis_test_server -s edis -run elog debug & 
 	rebar skip_deps=true ct ; \
 	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
 
-shell: all
+shell: erl
 	${ERL}
-	
-doc: all
+
+doc: erl
 	cd deps/erldocs 
 	make
 	cd ../..
 	./deps/erldocs/erldocs doc
 	cat doc/erldocs_index.js | tr -d '\n' > doc/erldocs_index2.js
 	mv ./doc/erldocs_index2.js ./doc/erldocs_index.js
-	
-	
+
+install:
+	mkdir -p $(INSTALL_BIN)/priv
+	$(INSTALL) bin/edis $(INSTALL_BIN)
+	$(INSTALL) deps/eleveldb/priv/eleveldb.so $(INSTALL_BIN)/priv
+
+service: install
+	mv priv/edis.init.d /etc/init.d/edis
