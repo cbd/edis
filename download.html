@@ -43,11 +43,21 @@
 		<pre><code>$ git clone git://github.com/inaka/edis</code></pre>
 		<br />
 		<h2>Installation</h2>
-		<p>You should <a href="http://www.erlang.org/" target="_blank">install erlang.</a></p>
-		<p>Clone the project and start the server:</p>
+		<p>You should install <a href="http://www.erlang.org/" target="_blank">erlang</a> and <a href="https://github.com/basho/rebar" target="_blank">rebar</a> first.</p>
+		<p>Then clone the project and compile it:</p>
 		<pre><code>$ git clone git://github.com/inaka/edis
 $ cd edis/
-edis$ make run</code></pre>
+edis$ make</code></pre>
+         <p>If everything went smoothly, you should be able to run your edis instance:</p>
+         <pre><code>edis$ bin/edis</code></pre>
+         <p>You can also install it on your system:</p>
+         <pre><code>edis$ sudo make install</code></pre>
+         <p>Then you will be able to run edis everywhere:</p>
+         <pre><code>~$ edis</code></pre>
+         <p>You can even install it as a deamon:</p>
+         <pre><code>edis$ sudo make service</code></pre>
+         <p>Then you can start it by just running:</p>
+         <pre><code>edis$ sudo service edis start</code></pre>
 		<p>Now, You can access to the server with any <a href="http://redis.io/clients" target="_blank">client</a>.
 		For example, the <a href="https://github.com/inaka/erldis" target="_blank">erldis client</a> from the erlang shell:</p>
 		<pre><code>edis$ make shell
@@ -55,6 +65,8 @@ edis$ make run</code></pre>
 {ok,&lt;0.81.0&gt;}</code></pre>
 		<p>Also with the redis client:</p>
 		<pre><code>$ redis-cli</code></pre>
+		<p>edis accepts one parameter on command-line: the config file to use. This file should be a regular <a href="http://www.erlang.org/doc/man/config.html" target="_blank">Erlang config file</a></p>
+		<p>The default config file (used by the edis daemon) is installed at <code>/etc/edis/edis.config</code></p>
 	</div>
 	<footer>
 		<p>
