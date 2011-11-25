@@ -16,7 +16,7 @@
 %%%   </li><li>
 %%%   <pre>delete(ref(), binary()) -> ok | {error, term()}</pre>
 %%%     Deletes an item<br/>
-%%%   </li>
+%%%   </li><li>
 %%%   <pre>is_empty(ref()) -> boolean()</pre>  
 %%%     Determines if the database is empty<br/>
 %%%   </li><li>
@@ -28,7 +28,8 @@
 %%%   </li><li>
 %%%   <pre>get(ref(), binary()) -> #edis_item{} | not_found | {error, term()}</pre>  
 %%%     Gets an item from the database<br/>
-%%%   </li></ul>
+%%%   </li>
+%%%</ul>
 %%% @end
 %%%-------------------------------------------------------------------
 -module(edis_backend).

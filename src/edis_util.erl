@@ -27,6 +27,7 @@ timestamp() ->
 now() ->
   calendar:datetime_to_gregorian_seconds(calendar:universal_time()) - ?EPOCH.
 
+%% @doc converts all characters in the specified binary to uppercase. 
 -spec upper(binary()) -> binary().
 upper(Bin) ->
   upper(Bin, <<>>).
@@ -43,6 +44,7 @@ upper(<<195, C, Rest/binary>>, Acc) when 184 =< C, C =< 190 -> %% U and Y with t
 upper(<<C, Rest/binary>>, Acc) ->
   upper(Rest, <<Acc/binary, C>>).
 
+%% @doc converts all characters in the specified binary to lowercase
 -spec lower(binary()) -> binary().
 lower(Bin) ->
   lower(Bin, <<>>).
@@ -58,6 +60,7 @@ lower(<<195, C, Rest/binary>>, Acc) when 152 =< C, C =< 158 -> %% U and Y with t
 lower(<<C, Rest/binary>>, Acc) ->
   lower(Rest, <<Acc/binary, C>>).
 
+%% @doc returns an integer whose binary representation is Bin
 -spec binary_to_integer(binary()) -> integer().
 binary_to_integer(Bin) ->
   try list_to_integer(binary_to_list(Bin))
@@ -66,6 +69,7 @@ binary_to_integer(Bin) ->
       throw(not_integer)
   end.
 
+%% @doc returns a float whose binary representation is Bin
 -spec binary_to_float(binary()) -> integer().
 binary_to_float(Bin) ->
   try list_to_float(binary_to_list(Bin))
@@ -78,6 +82,8 @@ binary_to_float(Bin) ->
       end
   end.
 
+%% @doc returns an integer whose binary representation is Bin.
+%% If a badarg error is detected, Default is returned
 -spec binary_to_integer(binary(), integer()) -> integer().
 binary_to_integer(Bin, Default) ->
   try list_to_integer(binary_to_list(Bin))
@@ -91,7 +97,9 @@ binary_to_integer(Bin, Default) ->
       end
   end.
 
--spec binary_to_float(binary(), X) -> float() | X.
+%% @doc returns a float whose binary representation is Bin.
+%% If a badarg error is detected, Default is returned
+-spec binary_to_float(binary(), float() | undefined) -> float() | undefined.
 binary_to_float(Bin, Default) ->
   try list_to_float(binary_to_list(Bin))
   catch
@@ -103,10 +111,14 @@ binary_to_float(Bin, Default) ->
       end
   end.
 
+%% @doc returns a binary whose integer representation is Int
 -spec integer_to_binary(binary()) -> integer().
 integer_to_binary(Int) ->
   list_to_binary(integer_to_list(Int)).
 
+%% @doc returns a binary tuples list. The first tuple contains the first pair of elements in the received list,
+%% the second tuple contains the second pair and so on. 
+%% If the received list is odd, the last element will be ignored
 -spec make_pairs([any()]) -> [{any(), any()}].
 make_pairs(KVs) ->
   make_pairs(KVs, []).
@@ -116,6 +128,7 @@ make_pairs([_], Acc) -> lists:reverse(Acc);
 make_pairs([K, V | Rest], Acc) ->
   make_pairs(Rest, [{K,V} | Acc]).
 
+%% @doc converts the GLOB into reg exp 
 -spec glob_to_re(binary()) -> binary().
 glob_to_re(Pattern) ->
   binary:replace(
@@ -126,6 +139,7 @@ glob_to_re(Pattern) ->
       <<"(">>, <<"\\(">>, [global]),
     <<")">>, <<"\\)">>, [global]).
 
+%% @doc returns a random binary
 -spec random_binary() -> binary().
 random_binary() ->
   Now = {_, _, Micro} = erlang:now(),
@@ -135,6 +149,7 @@ random_binary() ->
   Prefix = io_lib:format("~14.16.0b", [(Nowsecs - Then) * 1000000 + Micro]),
   list_to_binary(Prefix ++ integer_to_list(Micro) ++ base64:encode(crypto:rand_bytes(9))).
 
+%% @doc joins the list of binaries with Sep
 -spec join([binary()], binary()) -> binary().
 join([], _) -> <<>>;
 join([Bin], _) -> Bin;
@@ -153,6 +168,7 @@ load_config(File) ->
       lists:foreach(fun load_app_config/1, Configs)
   end.
 
+%% @doc Reads an erlang config file and sets the corresponding application environments
 load_app_config({App, Envs}) ->
   case application:load(App) of
     ok -> ok;
