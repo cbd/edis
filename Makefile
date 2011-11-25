@@ -48,11 +48,8 @@ doc: erl
 	mv ./doc/erldocs_index2.js ./doc/erldocs_index.js
 
 install:
-	# We need to fix this... creating /usr/local/priv is JUST WRONG
 	mkdir -p $(INSTALL_BIN)
-	mkdir -p $(INSTALL_BIN)/../priv
-	$(INSTALL) bin/edis $(INSTALL_BIN)
-	$(INSTALL) deps/eleveldb/priv/eleveldb.so $(INSTALL_BIN)/../priv
+	$(INSTALL) bin/* $(INSTALL_BIN)
 
 service: install
 	mkdir -p /etc/edis/db/
