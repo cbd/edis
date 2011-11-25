@@ -23,7 +23,26 @@
 <h1>edis_backend</h1>
 <h2 class="modsummary">DB backend behaviour for edis.</h2>
 <div class="description">
-<p>DB backend behaviour for edis</p></div>
+<p>DB backend behaviour for edis.
+  </p><ul>
+     <li><pre class="sh_erlang">init(string(), non_neg_integer(), eleveldb:open_options()) -&gt; {ok, ref()} | {error, term()}</pre><p>
+       Opens and/or initializes the backend<br  />
+     </p></li><li><pre class="sh_erlang">write(ref(), edis_backend:write_actions()) -&gt; ok | {error, term()}</pre><p>
+        Atomically apply a set of actions<br  />
+     </p></li><li><pre class="sh_erlang">put(ref(), binary(), #edis_item{}) -&gt; ok | {error, term()}</pre><p>
+       Puts an item in the database<br  />
+     </p></li><li><pre class="sh_erlang">delete(ref(), binary()) -&gt; ok | {error, term()}</pre><p>
+       Deletes an item<br  />
+     </p></li><li><pre class="sh_erlang">is_empty(ref()) -&gt; boolean()</pre><p>
+       Determines if the database is empty<br  />
+     </p></li><li><pre class="sh_erlang">destroy(ref()) -&gt; ok | {error, term()}</pre><p>
+       Deletes database<br  />
+     </p></li><li><pre class="sh_erlang">status(ref()) -&gt; {ok, binary()} | error</pre><p>
+       Determines the databse status<br  />
+     </p></li><li><pre class="sh_erlang">get(ref(), binary()) -&gt; #edis_item{} | not_found | {error, term()}</pre><p>
+       Gets an item from the database<br  />
+     </p></li>
+  </ul></div>
 <div class="section"><h4>DATA TYPES</h4><span id="types"> </span>
 
 <dl>
@@ -32,13 +51,7 @@
 <dt><code>write_actions() = [{put, Key::binary(), Value::#edis_item{}} | {delete, Key::binary()} | clear]</code></dt>
 <dd><span id="type-write_actions"> </span> </dd>
 </dl></div>
-<div class="functions"><h4>Functions</h4><hr  />
-<div class="function">
-<h3 id="behaviour_info/1">behaviour_info(X1::callbacks | term()) -&gt; undefined | [{atom(), non_neg_integer()}]</h3>
 
-
-<div class="description"><span id="behaviour_info-1"> </span>
- </div></div></div>
 
 <authors>
 
@@ -49,7 +62,7 @@
       </div>
       <div id="funwrapper">
         <a id="viewfuns">View Functions</a>
-        <ul id="funs"><li><a href="#behaviour_info/1">behaviour_info/1</a></li></ul>
+        <ul id="funs" />
       </div>
     </div>
 

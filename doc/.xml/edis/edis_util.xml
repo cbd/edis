@@ -34,70 +34,104 @@
 </desc></func>
 <func>
 <name>upper(Bin::binary()) -&gt; binary()</name>
-<fsummary> </fsummary>
+<fsummary>converts all characters in the specified binary to uppercase.</fsummary>
 
 <desc><marker id="upper-1"/>
- </desc></func>
+
+<p>converts all characters in the specified binary to uppercase.</p>
+</desc></func>
 <func>
 <name>lower(Bin::binary()) -&gt; binary()</name>
-<fsummary> </fsummary>
+<fsummary>converts all characters in the specified binary to lowercase.</fsummary>
 
 <desc><marker id="lower-1"/>
- </desc></func>
+
+<p>converts all characters in the specified binary to lowercase</p>
+</desc></func>
 <func>
 <name>binary_to_integer(Bin::binary()) -&gt; integer()</name>
-<fsummary> </fsummary>
+<fsummary>returns an integer whose binary representation is Bin.</fsummary>
 
 <desc><marker id="binary_to_integer-1"/>
- </desc></func>
+
+<p>returns an integer whose binary representation is Bin</p>
+</desc></func>
 <func>
 <name>binary_to_float(Bin::binary()) -&gt; integer()</name>
-<fsummary> </fsummary>
+<fsummary>returns a float whose binary representation is Bin.</fsummary>
 
 <desc><marker id="binary_to_float-1"/>
- </desc></func>
+
+<p>returns a float whose binary representation is Bin</p>
+</desc></func>
 <func>
 <name>binary_to_integer(Bin::binary(), Default::integer()) -&gt; integer()</name>
-<fsummary> </fsummary>
+<fsummary>returns an integer whose binary representation is Bin.</fsummary>
 
 <desc><marker id="binary_to_integer-2"/>
- </desc></func>
+
+<p>returns an integer whose binary representation is Bin.
+  If Bin is not a integer, Default is returned</p>
+</desc></func>
 <func>
-<name>binary_to_float(Bin::binary(), X) -&gt; float() | X</name>
-<fsummary> </fsummary>
+<name>binary_to_float(Bin::binary(), Default::float() | undefined) -&gt; float() | undefined</name>
+<fsummary>returns a float whose binary representation is Bin.</fsummary>
 
 <desc><marker id="binary_to_float-2"/>
- </desc></func>
+
+<p>returns a float whose binary representation is Bin.
+  If Bin is not a float, Default is returned</p>
+</desc></func>
 <func>
 <name>integer_to_binary(Int::binary()) -&gt; integer()</name>
-<fsummary> </fsummary>
+<fsummary>returns a binary whose integer representation is Int.</fsummary>
 
 <desc><marker id="integer_to_binary-1"/>
- </desc></func>
+
+<p>returns a binary whose integer representation is Int</p>
+</desc></func>
 <func>
 <name>make_pairs(KVs::[any()]) -&gt; [{any(), any()}]</name>
-<fsummary> </fsummary>
+<fsummary>returns a list of binary tuples.</fsummary>
 
 <desc><marker id="make_pairs-1"/>
- </desc></func>
+
+<p>returns a list of binary tuples. The first tuple contains the first pair of elements in the received list,
+  the second tuple contains the second pair and so on.
+  If the received list is odd, the last element will be ignored</p>
+</desc></func>
 <func>
 <name>glob_to_re(Pattern::binary()) -&gt; binary()</name>
-<fsummary> </fsummary>
+<fsummary>converts the GLOB into reg exp.</fsummary>
 
 <desc><marker id="glob_to_re-1"/>
- </desc></func>
+
+<p>converts the GLOB into reg exp</p>
+</desc></func>
 <func>
 <name>random_binary() -&gt; binary()</name>
-<fsummary> </fsummary>
+<fsummary>returns a random binary.</fsummary>
 
 <desc><marker id="random_binary-0"/>
- </desc></func>
+
+<p>returns a random binary</p>
+</desc></func>
 <func>
 <name>join(Bins::[binary()], Sep::binary()) -&gt; binary()</name>
-<fsummary> </fsummary>
+<fsummary>joins the list of binaries with Sep.</fsummary>
 
 <desc><marker id="join-2"/>
- </desc></func></funcs>
+
+<p>joins the list of binaries with Sep</p>
+</desc></func>
+<func>
+<name>load_config(File::string()) -&gt; ok</name>
+<fsummary>Loads an Erlang config file and sets the corresponding application environment variables.</fsummary>
+
+<desc><marker id="load_config-1"/>
+
+<p>Loads an Erlang config file and sets the corresponding application environment variables</p>
+</desc></func></funcs>
 
 <authors>
 

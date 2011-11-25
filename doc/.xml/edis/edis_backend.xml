@@ -14,7 +14,26 @@
 <module>edis_backend</module>
 <modulesummary>DB backend behaviour for edis.</modulesummary>
 <description>
-<p>DB backend behaviour for edis</p></description>
+<p>DB backend behaviour for edis.
+  </p><list>
+     <item><pre>init(string(), non_neg_integer(), eleveldb:open_options()) -&gt; {ok, ref()} | {error, term()}</pre><p>
+       Opens and/or initializes the backend<br/>
+     </p></item><item><pre>write(ref(), edis_backend:write_actions()) -&gt; ok | {error, term()}</pre><p>
+        Atomically apply a set of actions<br/>
+     </p></item><item><pre>put(ref(), binary(), #edis_item{}) -&gt; ok | {error, term()}</pre><p>
+       Puts an item in the database<br/>
+     </p></item><item><pre>delete(ref(), binary()) -&gt; ok | {error, term()}</pre><p>
+       Deletes an item<br/>
+     </p></item><item><pre>is_empty(ref()) -&gt; boolean()</pre><p>
+       Determines if the database is empty<br/>
+     </p></item><item><pre>destroy(ref()) -&gt; ok | {error, term()}</pre><p>
+       Deletes database<br/>
+     </p></item><item><pre>status(ref()) -&gt; {ok, binary()} | error</pre><p>
+       Determines the databse status<br/>
+     </p></item><item><pre>get(ref(), binary()) -&gt; #edis_item{} | not_found | {error, term()}</pre><p>
+       Gets an item from the database<br/>
+     </p></item>
+  </list></description>
 <section><title>DATA TYPES</title><marker id="types"/>
 
 <taglist>
@@ -23,13 +42,7 @@
 <tag><c>write_actions() = [{put, Key::binary(), Value::#edis_item{}} | {delete, Key::binary()} | clear]</c></tag>
 <item><marker id="type-write_actions"/> </item>
 </taglist></section>
-<funcs>
-<func>
-<name>behaviour_info(X1::callbacks | term()) -&gt; undefined | [{atom(), non_neg_integer()}]</name>
-<fsummary> </fsummary>
 
-<desc><marker id="behaviour_info-1"/>
- </desc></func></funcs>
 
 <authors>
 

@@ -20,36 +20,44 @@
 <funcs>
 <func>
 <name>start_link(Socket::port()) -&gt; {ok, pid()}</name>
-<fsummary> </fsummary>
+<fsummary>starts a new command runner.</fsummary>
 
 <desc><marker id="start_link-1"/>
- </desc></func>
+
+<p>starts a new command runner</p>
+</desc></func>
 <func>
 <name>stop(Runner::pid()) -&gt; ok</name>
-<fsummary> </fsummary>
+<fsummary>stops the connection.</fsummary>
 
 <desc><marker id="stop-1"/>
- </desc></func>
+
+<p>stops the connection</p>
+</desc></func>
 <func>
 <name>err(Runner::pid(), Message::iodata()) -&gt; ok</name>
-<fsummary> </fsummary>
+<fsummary>generates an error(like throw()).</fsummary>
 
 <desc><marker id="err-2"/>
- </desc></func>
+
+<p>generates an error(like throw())</p>
+</desc></func>
 <func>
 <name>run(Runner::pid(), Command::binary(), Arguments::[binary()]) -&gt; ok</name>
-<fsummary> </fsummary>
+<fsummary>executes the received command.</fsummary>
 
 <desc><marker id="run-3"/>
- </desc></func>
+
+<p>executes the received command</p>
+</desc></func>
 <func>
 <name>last_arg(X1::binary()) -&gt; inlined | safe</name>
-<fsummary>Should last argument be inlined?
+<fsummary>should last argument be inlined?
        Useful for old protocol calls.</fsummary>
 
 <desc><marker id="last_arg-1"/>
 
-<p>Should last argument be inlined?
+<p>should last argument be inlined?
        Useful for old protocol calls.</p>
 </desc></func></funcs>
 

@@ -25,6 +25,14 @@
 </taglist></section>
 <funcs>
 <func>
+<name>main(Args::[string()]) -&gt; ok</name>
+<fsummary>Entry point for escript.</fsummary>
+
+<desc><marker id="main-1"/>
+
+<p>Entry point for escript</p>
+</desc></func>
+<func>
 <name>start() -&gt; ok | {error, {already_started, '?MODULE'}}</name>
 <fsummary>Starts the application.</fsummary>
 

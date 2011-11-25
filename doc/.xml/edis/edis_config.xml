@@ -24,16 +24,20 @@
 <funcs>
 <func>
 <name>set(Param::config_option(), Timeout::term()) -&gt; ok</name>
-<fsummary> </fsummary>
+<fsummary>sets configuration params.</fsummary>
 
 <desc><marker id="set-2"/>
- </desc></func>
+
+<p>sets configuration params</p>
+</desc></func>
 <func>
 <name>get(Pattern::binary() | config_option()) -&gt; term()</name>
-<fsummary> </fsummary>
+<fsummary>gets configuration params.</fsummary>
 
 <desc><marker id="get-1"/>
- </desc></func></funcs>
+
+<p>gets configuration params</p>
+</desc></func></funcs>
 
 <authors>
 

@@ -17,11 +17,29 @@
 <p>edis client FSM</p></description>
 <funcs>
 <func>
+<name>start_link() -&gt; {ok, pid()}</name>
+<fsummary>Start the client.</fsummary>
+
+<desc><marker id="start_link-0"/>
+
+<p>Start the client</p>
+</desc></func>
+<func>
+<name>set_socket(Client::pid(), Socket::port()) -&gt; ok</name>
+<fsummary>Associates the client with the socket.</fsummary>
+
+<desc><marker id="set_socket-2"/>
+
+<p>Associates the client with the socket</p>
+</desc></func>
+<func>
 <name>disconnect(Client::pid()) -&gt; ok</name>
-<fsummary> </fsummary>
+<fsummary>Stop the client.</fsummary>
 
 <desc><marker id="disconnect-1"/>
- </desc></func></funcs>
+
+<p>Stop the client</p>
+</desc></func></funcs>
 
 <authors>
 

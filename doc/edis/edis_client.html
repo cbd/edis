@@ -26,11 +26,29 @@
 <p>edis client FSM</p></div>
 <div class="functions"><h4>Functions</h4><hr  />
 <div class="function">
+<h3 id="start_link/0">start_link() -&gt; {ok, pid()}</h3>
+
+
+<div class="description"><span id="start_link-0"> </span>
+
+<p>Start the client</p>
+</div></div>
+<div class="function">
+<h3 id="set_socket/1">set_socket(Client::pid(), Socket::port()) -&gt; ok</h3>
+
+
+<div class="description"><span id="set_socket-2"> </span>
+
+<p>Associates the client with the socket</p>
+</div></div>
+<div class="function">
 <h3 id="disconnect/1">disconnect(Client::pid()) -&gt; ok</h3>
 
 
 <div class="description"><span id="disconnect-1"> </span>
- </div></div></div>
+
+<p>Stop the client</p>
+</div></div></div>
 
 <authors>
 
@@ -41,7 +59,7 @@
       </div>
       <div id="funwrapper">
         <a id="viewfuns">View Functions</a>
-        <ul id="funs"><li><a href="#disconnect/1">disconnect/1</a></li></ul>
+        <ul id="funs"><li><a href="#start_link/0">start_link/0</a></li><li><a href="#set_socket/1">set_socket/1</a></li><li><a href="#disconnect/1">disconnect/1</a></li></ul>
       </div>
     </div>
 

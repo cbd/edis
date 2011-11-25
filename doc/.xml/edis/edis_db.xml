@@ -26,16 +26,22 @@
 <funcs>
 <func>
 <name>start_link(Index::non_neg_integer()) -&gt; {ok, pid()}</name>
-<fsummary> </fsummary>
+<fsummary>starts a new db client.</fsummary>
 
 <desc><marker id="start_link-1"/>
- </desc></func>
+
+<p>starts a new db client</p>
+</desc></func>
 <func>
 <name>process(Index::non_neg_integer()) -&gt; atom()</name>
-<fsummary> </fsummary>
+<fsummary>returns the database name with index Index
+  You can use that value later on calls to run/2 or run/3</fsummary>
 
 <desc><marker id="process-1"/>
- </desc></func>
+
+<p>returns the database name with index Index
+  You can use that value later on calls to <seealso marker="#run-2">run/2</seealso> or <seealso marker="#run-3">run/3</seealso></p>
+</desc></func>
 <func>
 <name>run(Db::atom(), Command::command() (see module edis)) -&gt; term()</name>
 <fsummary>Equivalent to run(Db, Command, 5000).
@@ -46,10 +52,12 @@
 </desc></func>
 <func>
 <name>run(Db::atom(), Command::command() (see module edis), Timeout::infinity | pos_integer()) -&gt; term()</name>
-<fsummary> </fsummary>
+<fsummary>Executes Command in Db with some Timeout.</fsummary>
 
 <desc><marker id="run-3"/>
- </desc></func></funcs>
+
+<p>Executes Command in Db with some Timeout</p>
+</desc></func></funcs>
 
 <authors>
 

@@ -26,28 +26,36 @@
 <funcs>
 <func>
 <name>empty() -&gt; edis_list(term())</name>
-<fsummary> </fsummary>
+<fsummary>returns an empty edis_list.</fsummary>
 
 <desc><marker id="empty-0"/>
- </desc></func>
+
+<p>returns an empty edis_list</p>
+</desc></func>
 <func>
 <name>length(Edis_list::edis_list(term())) -&gt; non_neg_integer()</name>
-<fsummary> </fsummary>
+<fsummary>returns the edis_list size.</fsummary>
 
 <desc><marker id="length-1"/>
- </desc></func>
+
+<p>returns the edis_list size</p>
+</desc></func>
 <func>
 <name>from_list(T::[T]) -&gt; edis_list(T)</name>
-<fsummary> </fsummary>
+<fsummary>returns an edis_list with the same elements of the list.</fsummary>
 
 <desc><marker id="from_list-1"/>
- </desc></func>
+
+<p>returns an edis_list with the same elements of the list</p>
+</desc></func>
 <func>
 <name>to_list(Edis_list::edis_list(T)) -&gt; [T]</name>
-<fsummary> </fsummary>
+<fsummary>returns a list with the same elements of the edis_list.</fsummary>
 
 <desc><marker id="to_list-1"/>
- </desc></func>
+
+<p>returns a list with the same elements of the edis_list</p>
+</desc></func>
 <func>
 <name>nth(N::pos_integer(), Edis_list::edis_list(T)) -&gt; T | undefined</name>
 <fsummary>returns the Nth element of the list L.</fsummary>
@@ -66,24 +74,28 @@
 </desc></func>
 <func>
 <name>reverse(EL::edis_list(T)) -&gt; edis_list(T)</name>
-<fsummary>reverse all elements in the list L.</fsummary>
+<fsummary>reverses all elements in the list L.</fsummary>
 
 <desc><marker id="reverse-1"/>
 
-<p>reverse all elements in the list L.</p>
+<p>reverses all elements in the list L.</p>
 </desc></func>
 <func>
 <name>splitwith(Pred::(T) -&gt; boolean(), Edis_list::edis_list(T)) -&gt; {edis_list(T), edis_list(T)}</name>
-<fsummary> </fsummary>
+<fsummary>partition edis_list into two edis_lists according to Pred.</fsummary>
 
 <desc><marker id="splitwith-2"/>
- </desc></func>
+
+<p>partition edis_list into two edis_lists according to Pred</p>
+</desc></func>
 <func>
 <name>insert(T, Position::before | 'after', T, EL::edis_list(T)) -&gt; edis_list(T)</name>
-<fsummary> </fsummary>
+<fsummary>insert a value before or after the pivot.</fsummary>
 
 <desc><marker id="insert-4"/>
- </desc></func>
+
+<p>insert a value before or after the pivot</p>
+</desc></func>
 <func>
 <name>append(Edis_list::edis_list(T0), X2::edis_list(T1)) -&gt; edis_list(T0 | T1)</name>
 <fsummary>appends lists X and Y.</fsummary>
@@ -118,16 +130,20 @@
 </desc></func>
 <func>
 <name>filter(Pred::(T) -&gt; boolean(), Edis_list::edis_list(T)) -&gt; edis_list(T)</name>
-<fsummary> </fsummary>
+<fsummary>Returns an edis_list of all elements Elem in the received edis_list for which Pred(Elem) returns true.</fsummary>
 
 <desc><marker id="filter-2"/>
- </desc></func>
+
+<p>Returns an edis_list of all elements Elem in the received edis_list for which Pred(Elem) returns true.</p>
+</desc></func>
 <func>
 <name>remove(T, Count::non_neg_integer(), EL::edis_list(T)) -&gt; edis_list(T)</name>
-<fsummary> </fsummary>
+<fsummary>Removes the first N elements which compares equal to the value.</fsummary>
 
 <desc><marker id="remove-3"/>
- </desc></func>
+
+<p>Removes the first N elements which compares equal to the value</p>
+</desc></func>
 <func>
 <name>replace_head(T0, EL::edis_list(T)) -&gt; edis_list(T0 | T)</name>
 <fsummary>replaces head element.</fsummary>
@@ -138,10 +154,12 @@
 </desc></func>
 <func>
 <name>split(N::non_neg_integer(), EL::edis_list(T)) -&gt; {edis_list(T), edis_list(T)}</name>
-<fsummary> </fsummary>
+<fsummary>Splits the received list into two lists.</fsummary>
 
 <desc><marker id="split-2"/>
- </desc></func></funcs>
+
+<p>Splits the received list into two lists. The first list contains the first N elements and the other list the rest of the elements (the Nth tail)</p>
+</desc></func></funcs>
 
 <authors>
 

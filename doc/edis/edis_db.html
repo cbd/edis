@@ -38,13 +38,18 @@
 
 
 <div class="description"><span id="start_link-1"> </span>
- </div></div>
+
+<p>starts a new db client</p>
+</div></div>
 <div class="function">
 <h3 id="process/1">process(Index::non_neg_integer()) -&gt; atom()</h3>
 
 
 <div class="description"><span id="process-1"> </span>
- </div></div>
+
+<p>returns the database name with index Index
+  You can use that value later on calls to <a href="#run-2" class="seealso">run/2</a> or <a href="#run-3" class="seealso">run/3</a></p>
+</div></div>
 <div class="function">
 <h3 id="run/1">run(Db::atom(), Command::command() (see module edis)) -&gt; term()</h3>
 
@@ -57,7 +62,9 @@
 
 
 <div class="description"><span id="run-3"> </span>
- </div></div></div>
+
+<p>Executes Command in Db with some Timeout</p>
+</div></div></div>
 
 <authors>
 

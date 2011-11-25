@@ -46,67 +46,101 @@
 
 
 <div class="description"><span id="upper-1"> </span>
- </div></div>
+
+<p>converts all characters in the specified binary to uppercase.</p>
+</div></div>
 <div class="function">
 <h3 id="lower/1">lower(Bin::binary()) -&gt; binary()</h3>
 
 
 <div class="description"><span id="lower-1"> </span>
- </div></div>
+
+<p>converts all characters in the specified binary to lowercase</p>
+</div></div>
 <div class="function">
 <h3 id="binary_to_integer/1">binary_to_integer(Bin::binary()) -&gt; integer()</h3>
 
 
 <div class="description"><span id="binary_to_integer-1"> </span>
- </div></div>
+
+<p>returns an integer whose binary representation is Bin</p>
+</div></div>
 <div class="function">
 <h3 id="binary_to_float/1">binary_to_float(Bin::binary()) -&gt; integer()</h3>
 
 
 <div class="description"><span id="binary_to_float-1"> </span>
- </div></div>
+
+<p>returns a float whose binary representation is Bin</p>
+</div></div>
 <div class="function">
 <h3 id="binary_to_integer/1-1">binary_to_integer(Bin::binary(), Default::integer()) -&gt; integer()</h3>
 
 
 <div class="description"><span id="binary_to_integer-2"> </span>
- </div></div>
+
+<p>returns an integer whose binary representation is Bin.
+  If Bin is not a integer, Default is returned</p>
+</div></div>
 <div class="function">
-<h3 id="binary_to_float/1-1">binary_to_float(Bin::binary(), X) -&gt; float() | X</h3>
+<h3 id="binary_to_float/1-1">binary_to_float(Bin::binary(), Default::float() | undefined) -&gt; float() | undefined</h3>
 
 
 <div class="description"><span id="binary_to_float-2"> </span>
- </div></div>
+
+<p>returns a float whose binary representation is Bin.
+  If Bin is not a float, Default is returned</p>
+</div></div>
 <div class="function">
 <h3 id="integer_to_binary/1">integer_to_binary(Int::binary()) -&gt; integer()</h3>
 
 
 <div class="description"><span id="integer_to_binary-1"> </span>
- </div></div>
+
+<p>returns a binary whose integer representation is Int</p>
+</div></div>
 <div class="function">
 <h3 id="make_pairs/1">make_pairs(KVs::[any()]) -&gt; [{any(), any()}]</h3>
 
 
 <div class="description"><span id="make_pairs-1"> </span>
- </div></div>
+
+<p>returns a list of binary tuples. The first tuple contains the first pair of elements in the received list,
+  the second tuple contains the second pair and so on.
+  If the received list is odd, the last element will be ignored</p>
+</div></div>
 <div class="function">
 <h3 id="glob_to_re/1">glob_to_re(Pattern::binary()) -&gt; binary()</h3>
 
 
 <div class="description"><span id="glob_to_re-1"> </span>
- </div></div>
+
+<p>converts the GLOB into reg exp</p>
+</div></div>
 <div class="function">
 <h3 id="random_binary/0">random_binary() -&gt; binary()</h3>
 
 
 <div class="description"><span id="random_binary-0"> </span>
- </div></div>
+
+<p>returns a random binary</p>
+</div></div>
 <div class="function">
 <h3 id="join/1">join(Bins::[binary()], Sep::binary()) -&gt; binary()</h3>
 
 
 <div class="description"><span id="join-2"> </span>
- </div></div></div>
+
+<p>joins the list of binaries with Sep</p>
+</div></div>
+<div class="function">
+<h3 id="load_config/1">load_config(File::string()) -&gt; ok</h3>
+
+
+<div class="description"><span id="load_config-1"> </span>
+
+<p>Loads an Erlang config file and sets the corresponding application environment variables</p>
+</div></div></div>
 
 <authors>
 
@@ -117,7 +151,7 @@
       </div>
       <div id="funwrapper">
         <a id="viewfuns">View Functions</a>
-        <ul id="funs"><li><a href="#timestamp/0">timestamp/0</a></li><li><a href="#now/0">now/0</a></li><li><a href="#upper/1">upper/1</a></li><li><a href="#lower/1">lower/1</a></li><li><a href="#binary_to_integer/1">binary_to_integer/1</a></li><li><a href="#binary_to_float/1">binary_to_float/1</a></li><li><a href="#binary_to_integer/1-1">binary_to_integer/1-1</a></li><li><a href="#binary_to_float/1-1">binary_to_float/1-1</a></li><li><a href="#integer_to_binary/1">integer_to_binary/1</a></li><li><a href="#make_pairs/1">make_pairs/1</a></li><li><a href="#glob_to_re/1">glob_to_re/1</a></li><li><a href="#random_binary/0">random_binary/0</a></li><li><a href="#join/1">join/1</a></li></ul>
+        <ul id="funs"><li><a href="#timestamp/0">timestamp/0</a></li><li><a href="#now/0">now/0</a></li><li><a href="#upper/1">upper/1</a></li><li><a href="#lower/1">lower/1</a></li><li><a href="#binary_to_integer/1">binary_to_integer/1</a></li><li><a href="#binary_to_float/1">binary_to_float/1</a></li><li><a href="#binary_to_integer/1-1">binary_to_integer/1-1</a></li><li><a href="#binary_to_float/1-1">binary_to_float/1-1</a></li><li><a href="#integer_to_binary/1">integer_to_binary/1</a></li><li><a href="#make_pairs/1">make_pairs/1</a></li><li><a href="#glob_to_re/1">glob_to_re/1</a></li><li><a href="#random_binary/0">random_binary/0</a></li><li><a href="#join/1">join/1</a></li><li><a href="#load_config/1">load_config/1</a></li></ul>
       </div>
     </div>
 
