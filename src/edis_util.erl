@@ -83,7 +83,7 @@ binary_to_float(Bin) ->
   end.
 
 %% @doc returns an integer whose binary representation is Bin.
-%% If a badarg error is detected, Default is returned
+%% If Bin is not a integer, Default is returned
 -spec binary_to_integer(binary(), integer()) -> integer().
 binary_to_integer(Bin, Default) ->
   try list_to_integer(binary_to_list(Bin))
@@ -98,7 +98,7 @@ binary_to_integer(Bin, Default) ->
   end.
 
 %% @doc returns a float whose binary representation is Bin.
-%% If a badarg error is detected, Default is returned
+%% If Bin is not a float, Default is returned
 -spec binary_to_float(binary(), float() | undefined) -> float() | undefined.
 binary_to_float(Bin, Default) ->
   try list_to_float(binary_to_list(Bin))
@@ -116,7 +116,7 @@ binary_to_float(Bin, Default) ->
 integer_to_binary(Int) ->
   list_to_binary(integer_to_list(Int)).
 
-%% @doc returns a binary tuples list. The first tuple contains the first pair of elements in the received list,
+%% @doc returns a list of binary tuples. The first tuple contains the first pair of elements in the received list,
 %% the second tuple contains the second pair and so on. 
 %% If the received list is odd, the last element will be ignored
 -spec make_pairs([any()]) -> [{any(), any()}].
