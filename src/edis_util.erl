@@ -163,7 +163,7 @@ join([Bin|Bins], Sep, Acc) -> join(Bins, Sep, <<Acc/binary, Sep/binary, Bin/bina
 load_config(File) ->
   case file:consult(File) of
     {error, Reason} ->
-      ?THROW("Couldn't load config file '~s': ~p~n", [Reason]);
+	  throw(Reason);
     {ok, [Configs]} ->
       lists:foreach(fun load_app_config/1, Configs)
   end.

@@ -53,5 +53,6 @@ install:
 
 service: install
 	mkdir -p /etc/edis/db/
-	cp priv/edis.config /etc/edis/
+	if [ ! -f /etc/edis/edis.config ] ; then cp priv/edis.config /etc/edis/ ; fi
 	cp priv/edis.init.d /etc/init.d/edis
+	

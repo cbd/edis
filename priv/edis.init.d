@@ -1,5 +1,5 @@
 #!/bin/bash 
-PREFIX= /usr/local
+PREFIX=/usr/local
 
 if [[ $EUID -ne 0 ]]; then
   echo "This script must be run as sudo or root" 1>&2
@@ -29,8 +29,9 @@ function start {
       echo "Starting edis..." 
       ulimit -n 99999
       export HOME=/tmp
-      if [ -f /etc/edis/edis.conf ] then
-        $PREFIX/bin/edis /etc/edis/edis.conf
+      if [ -f /etc/edis/edis.config ]; then
+        $PREFIX/bin/edis /etc/edis/edis.config ;
+        echo $PREFIX
       else
         $PREFIX/bin/edis
       fi
@@ -60,17 +61,12 @@ function status {
 
 case "$1" in 
    start) 
-      DETACHED='-detached'
       start 
    ;; 
-   start_attached)
-      start
-   ;;
    stop) 
       stop 
    ;; 
    restart) 
-      DETACHED='-detached'
       restart 
    ;; 
    status) 
