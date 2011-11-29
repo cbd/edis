@@ -168,8 +168,13 @@ graph(Results, Options) ->
      end || {K,V,M} <- Results],
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
   Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
-  Step = (Top - Bottom) / proplists:get_value(rows, Options, 70),
-  io:format("8"),
+  Step = 
+    case {Top, Bottom} of
+      {error, _} -> throw(everything_is_an_error);
+      {_, error} -> throw(everything_is_an_error);
+      _ ->
+        (Top - Bottom) / proplists:get_value(rows, Options, 70)
+    end,
   graph(Top, Bottom, Step, proplists:get_value(symbols, Options, #symbols{}), Data).
 
 graph(Top, Bottom, _Step, _Symbols, Data) when Top =< Bottom ->
