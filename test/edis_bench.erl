@@ -38,14 +38,14 @@
 -spec behaviour_info(callbacks|term()) -> [{atom(), non_neg_integer()}].
 behaviour_info(callbacks) ->
   [{all, 0},
-   {init, 0}, {init_per_testcase, 1}, {init_per_round, 2},
-   {quit, 0}, {quit_per_testcase, 1}, {quit_per_round, 2}].
+   {init, 1}, {init_per_testcase, 2}, {init_per_round, 3},
+   {quit, 1}, {quit_per_testcase, 2}, {quit_per_round, 3}].
 
 %% @doc Runs all the benchmarking functions on Module against {@link zero/0} function.
 %%      The list is obtained calling Module:all().
 -spec bench(atom(), [option()]) -> ok.
 bench(Module, Options) ->
-  ok = try Module:init() catch _:undef -> ok end,
+  ok = try Module:init(proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end,
   try
     lists:foreach(
       fun(Function) ->
@@ -53,7 +53,7 @@ bench(Module, Options) ->
               bench(Module, Function, zero, Options)
       end, Module:all())
   after
-      try Module:quit() catch _:undef -> ok end
+      try Module:quit(proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end
   end.
 
 %% @doc Compares the different runs of Module:Function to a given function.
@@ -116,14 +116,14 @@ exponential(N) -> math:pow(2.71828182845904523536028747135266249775724709369995,
 %% @doc Runs the benchmarking function Module:Function using options.
 -spec run(atom(), atom(), [option()]) -> [{pos_integer(), error | pos_integer()}].
 run(Module, Function, Options) ->
-  ok = try Module:init() catch _:undef -> ok end,
+  ok = try Module:init(proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end,
   try do_run(Module, Function, Options)
   after
-      try Module:quit() catch _:undef -> ok end
+      try Module:quit(proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end
   end.
 
 do_run(Module, Function, Options) ->
-  ok = try Module:init_per_testcase(Function) catch _:undef -> ok end,
+  ok = try Module:init_per_testcase(Function, proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end,
   Start = proplists:get_value(start, Options, 1),
   try lists:map(fun(N) -> do_run(Module, Function, N, Options) end,
         lists:seq(Start,
@@ -131,12 +131,12 @@ do_run(Module, Function, Options) ->
                     proplists:get_value(step, Options, 1),
                   proplists:get_value(step, Options, 1)))
   after
-      try Module:quit_per_testcase(Function) catch _:undef -> ok end
+      try Module:quit_per_testcase(Function, proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end
   end.
 
 do_run(Module, Function, N, Options) ->
   Items = lists:reverse(lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, N))),
-  ok = try Module:init_per_round(Function, Items) catch _:undef -> ok end,
+  ok = try Module:init_per_round(Function, Items, proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end,
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
     {Time, Result} ->
       case proplists:get_bool(debug, Options) of
@@ -149,7 +149,7 @@ do_run(Module, Function, N, Options) ->
       ?ERROR("Error on ~p:~p (N: ~p):~n\t~p~n", [Module, Function, N, Error]),
       {N, error}
   after
-      try Module:quit_per_round(Function, Items) catch _:undef -> ok end
+      try Module:quit_per_round(Function, Items, proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end
   end.
 
 graph(Results, Options) ->

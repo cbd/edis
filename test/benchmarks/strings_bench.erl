@@ -16,8 +16,8 @@
 -define(KEY, <<"test-string">>).
 
 -export([all/0,
-         init/0, init_per_testcase/1, init_per_round/2,
-         quit/0, quit_per_testcase/1, quit_per_round/2]).
+         init/1, init_per_testcase/2, init_per_round/3,
+         quit/1, quit_per_testcase/2, quit_per_round/3]).
 -export([append/1, decr/1, decrby/1, get/1, getbit/1, getrange/1, getset/1, incr/1, incrby/1,
          mget/1, mset/1, msetnx/1, set/1, setex/1, setnx/1, setbit/1, setrange/1, strlen/1]).
 
@@ -28,55 +28,55 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init() -> ok.
-init() -> ok.
+-spec init([]) -> ok.
+init(_Extra) -> ok.
 
--spec quit() -> ok.
-quit() -> ok.
+-spec quit([]) -> ok.
+quit(_Extra) -> ok.
 
--spec init_per_testcase(atom()) -> ok.
-init_per_testcase(_Function) -> ok.
+-spec init_per_testcase(atom(), []) -> ok.
+init_per_testcase(_Function, _Extra) -> ok.
 
--spec quit_per_testcase(atom()) -> ok.
-quit_per_testcase(_Function) -> ok.
+-spec quit_per_testcase(atom(), []) -> ok.
+quit_per_testcase(_Function, _Extra) -> ok.
 
--spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(Fun, Keys) when Fun =:= decr;
-                               Fun =:= decrby;
-                               Fun =:= incr;
-                               Fun =:= incrby ->
+-spec init_per_round(atom(), [binary()], []) -> ok.
+init_per_round(Fun, Keys, _Extra) when Fun =:= decr;
+                                       Fun =:= decrby;
+                                       Fun =:= incr;
+                                       Fun =:= incrby ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SET">>,
                   args = [?KEY, edis_util:integer_to_binary(length(Keys))],
                   result_type = ok, group = strings});
-init_per_round(mget, Keys) ->
+init_per_round(mget, Keys, _Extra) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"MSET">>, args = [{Key, <<"X">>} || Key <- Keys],
                   result_type = ok, group = strings});
-init_per_round(Fun, Keys) when Fun =:= mset;
-                               Fun =:= msetnx ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= mset;
+                                       Fun =:= msetnx ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = Keys, result_type = ok, group = keys}),
   ok;
-init_per_round(Fun, _Keys) when Fun =:= set;
-                                Fun =:= setex;
-                                Fun =:= setnx->
+init_per_round(Fun, _Keys, _Extra) when Fun =:= set;
+                                        Fun =:= setex;
+                                        Fun =:= setnx->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY], result_type = ok, group = keys}),
   ok;
-init_per_round(_Fun, Keys) ->
+init_per_round(_Fun, Keys, _Extra) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SET">>,
                   args = [?KEY, list_to_binary(lists:duplicate(length(Keys), $X))],
                   result_type = ok, group = strings}).
 
--spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(_, _Keys) -> ok.
+-spec quit_per_round(atom(), [binary()], []) -> ok.
+quit_per_round(_, _Keys, _Extra) -> ok.
 
 -spec append([binary()]) -> pos_integer().
 append([Key|_]) ->
