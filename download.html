@@ -56,6 +56,9 @@ edis$ make</code></pre>
          <pre><code>~$ edis</code></pre>
          <p>You can even install it as a deamon:</p>
          <pre><code>edis$ sudo make service</code></pre>
+         <p class="comment">Edis accepts one parameter on command-line: the config file to use.
+         This file should be a regular <a href="http://www.erlang.org/doc/man/config.html" target="_blank">Erlang config file</a>.</p> 
+         <p class="comment">The default config file (used by the edis daemon) is installed at <code>/etc/edis/edis.config</code></p>
          <p>Then you can start it by just running:</p>
          <pre><code>edis$ sudo service edis start</code></pre>
 		<p>Now, You can access to the server with any <a href="http://redis.io/clients" target="_blank">client</a>.
@@ -65,8 +68,6 @@ edis$ make</code></pre>
 {ok,&lt;0.81.0&gt;}</code></pre>
 		<p>Also with the redis client:</p>
 		<pre><code>$ redis-cli</code></pre>
-		<p>edis accepts one parameter on command-line: the config file to use. This file should be a regular <a href="http://www.erlang.org/doc/man/config.html" target="_blank">Erlang config file</a></p>
-		<p>The default config file (used by the edis daemon) is installed at <code>/etc/edis/edis.config</code></p>
 	</div>
 	<footer>
 		<p>

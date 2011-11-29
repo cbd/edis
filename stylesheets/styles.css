@@ -451,6 +451,12 @@ a {
 	float: none;
 }
 
+p.comment {
+font-style: italic;
+margin-top: 0px;
+margin-left: 5px;
+}
+
 hr {
 	border: 0;
 	width: 80%;
