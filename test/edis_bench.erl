@@ -156,10 +156,12 @@ graph(Results, Options) ->
     true -> ?INFO("RawData:~n\t~p~n", [RawData]);
     false -> ok
   end,
-  SortedData = lists:keysort(2, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
+  SortedBy2 = lists:keysort(2, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
+  SortedBy3 = lists:keysort(3, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
   Outliers =
     [{K, error, M} || {K, error, M} <- RawData] ++ [{K, V, error} || {K, V, error} <- RawData] ++
-      lists:sublist(lists:reverse(SortedData), 1, proplists:get_value(outliers, Options, 20)),
+      lists:sublist(lists:reverse(SortedBy2), 1, erlang:trunc(proplists:get_value(outliers, Options, 20)/2) + 1) ++
+      lists:sublist(lists:reverse(SortedBy3), 1, erlang:trunc(proplists:get_value(outliers, Options, 20)/2) + 1),
   Data =
     [case lists:member({K,V,M}, Outliers) of
        true -> {K, 0, M};
