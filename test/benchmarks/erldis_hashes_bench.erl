@@ -14,7 +14,9 @@
 -define(KEY, <<"test-hash">>).
 
 -include("edis.hrl").
+-include("edis_bench.hrl").
 
+-export([bench/1, bench/2, bench/4]).
 -export([all/0,
          init/1, init_per_testcase/2, init_per_round/3,
          quit/1, quit_per_testcase/2, quit_per_round/3]).
@@ -24,20 +26,40 @@
 %% ====================================================================
 %% External functions
 %% ====================================================================
+-spec bench(atom()) -> ok.
+bench(Function) -> bench(Function, []).
+
+-spec bench(atom(), [edis_bench:option()]) -> ok.
+bench(Function, Options) -> bench(Function, 6380, 6379, Options).
+
+-spec bench(atom(), pos_integer(), pos_integer(), [edis_bench:option()]) -> ok.
+bench(Function, P1, P2, Options) ->
+  edis_bench:bench({?MODULE, Function, [P1]}, {?MODULE, Function, [P2]},
+                   Options ++
+                     [{outliers,100}, {symbols, #symbols{down_down  = $x,
+                                                         up_up      = $x,
+                                                         up_down    = $x,
+                                                         down_up    = $x,
+                                                         down_none  = $e,
+                                                         up_none    = $e,
+                                                         none_down  = $r,
+                                                         none_up    = $r}}]).
+
 -spec all() -> [atom()].
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
 -spec init([pos_integer()]) -> ok.
 init([Port]) ->
-  case erldis:connect(localhost,16380) of
+  case erldis:connect(localhost,Port) of
     {ok, Client} ->
       Name = process(Port),
       case erlang:whereis(Name) of
         undefined -> true;
         _ -> erlang:unregister(Name)
       end,
-      erlang:register(Name, Client);
+      erlang:register(Name, Client),
+      ok;
     Error -> throw(Error)
   end.
 
@@ -45,10 +67,8 @@ init([Port]) ->
 quit([Port]) ->
   Name = process(Port),
   case erlang:whereis(Name) of
-    undefined -> true;
-    Client ->
-      erldis_client:stop(Client),
-      erlang:unregister(Name)
+    undefined -> ok;
+    Client -> erldis_client:stop(Client)
   end,
   ok.
 
@@ -66,19 +86,14 @@ init_per_round(Fun, Keys, [Port]) when Fun =:= hgetall;
                                        Fun =:= hkeys;
                                        Fun =:= hvals;
                                        Fun =:= hlen ->
-  erldis:hmset(process(Port), ?KEY, lists:flatmap(fun(Key) -> [Key, <<"x">>] end, Keys));
+  erldis:hmset(process(Port), ?KEY, [{Key, <<"x">>} || Key <- Keys]);
 init_per_round(Fun, _Keys, [Port]) when Fun =:= hmget; Fun =:= hmset ->
   erldis:hmset(process(Port),
-               ?KEY,
-               lists:flatmap(
-                 fun(Key) -> [edis_util:integer_to_binary(Key), <<"x">>] end,
-                 lists:seq(1, 5000)));
+               ?KEY, [{edis_util:integer_to_binary(Key), <<"x">>} || Key <- lists:seq(1, 5000)]);
 init_per_round(_Fun, Keys, [Port]) ->
   erldis:hmset(process(Port),
-               ?KEY,
-               lists:flatmap(
-                 fun(Key) -> [Key, <<"x">>, <<Key/binary, "-2">>, <<"y">>] end,
-                 Keys)).
+               ?KEY, [{Key, <<"x">>} || Key <- Keys] ++
+                 [{<<Key/binary, "-2">>, <<"y">>} || Key <- Keys]).
 
 -spec quit_per_round(atom(), [binary()], [pos_integer()]) -> ok.
 quit_per_round(_, _Keys, [Port]) ->
@@ -88,15 +103,11 @@ quit_per_round(_, _Keys, [Port]) ->
 
 -spec hdel([binary()], pos_integer()) -> pos_integer().
 hdel(Keys, Port) ->
-  edis_db:run(
-    edis_db:process(0),
-    #edis_command{cmd = <<"HDEL">>, args = [?KEY | Keys], group = hashes, result_type = number}).
+  erldis:hdel(process(Port), ?KEY, Keys).
 
 -spec hexists([binary(),...], pos_integer()) -> boolean().
 hexists([Key|_], Port) ->
-  edis_db:run(
-    edis_db:process(0),
-    #edis_command{cmd = <<"HEXISTS">>, args = [?KEY, Key], result_type = boolean, group = hashes}).
+  erldis:hexists(process(Port), ?KEY, Key).
 
 -spec hget([binary()], pos_integer()) -> binary().
 hget([Key|_], Port) ->

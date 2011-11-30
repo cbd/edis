@@ -11,20 +11,15 @@
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -include("edis.hrl").
+-include("edis_bench.hrl").
 
--record(symbols, {up_up     = $" :: char(),
-                  up_down   = $= :: char(),
-                  up_none   = $^ :: char(),
-                  none_up   = $¨ :: char(),
-                  none_down = $_ :: char(),
-                  none_none = $\s:: char(),
-                  down_up   = $+ :: char(),
-                  down_down = $. :: char(),
-                  down_none = $, :: char()}).
+-type symbols() :: #symbols{}.
+-export_type([symbols/0]).
 
 -type option() :: {start, pos_integer} | {step, pos_integer()} | {rounds, pos_integer()} |
         {extra_args, [term()]} | {outliers, pos_integer()} | {columns, pos_integer()} |
-        {first_col, pos_integer()} | {rows, pos_integer()} | debug | {k, number()} | {x, number()}.
+        {first_col, pos_integer()} | {rows, pos_integer()} | debug | {k, number()} | {x, number()} |
+        {symbols, symbols()}.
 -export_type([option/0]).
 
 -export([bench/4, bench/3, bench/2, behaviour_info/1]).
