@@ -1067,21 +1067,25 @@ handle_call(#edis_command{cmd = <<"SDIFF">>, args = [Key]}, _From, State) ->
     end,
   {reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"SDIFF">>, args = [Key | Keys]}, _From, State) ->
-  Reply =
-    case get_item(State#state.backend_mod, State#state.backend_ref, set, Key) of
-      #edis_item{value = Value} ->
-        {ok, gb_sets:to_list(
-           lists:foldl(
-             fun(SKey, AccSet) ->
-                     case get_item(State#state.backend_mod, State#state.backend_ref, set, SKey) of
-                       #edis_item{value = SValue} -> gb_sets:subtract(AccSet, SValue);
-                       not_found -> AccSet;
-                       {error, Reason} -> throw(Reason)
-                     end
-             end, Value, Keys))};
-      not_found -> {ok, []};
-      {error, Reason} -> {error, Reason}
-    end,
+	Reply =
+		case get_item(State#state.backend_mod, State#state.backend_ref, set, Key) of
+			#edis_item{value = Value} ->
+				try
+					{ok, gb_sets:to_list(
+					   lists:foldl(
+						 fun(SKey, AccSet) ->
+								 case get_item(State#state.backend_mod, State#state.backend_ref, set, SKey) of
+									 #edis_item{value = SValue} -> gb_sets:subtract(AccSet, SValue);
+									 not_found -> AccSet;
+									 {error, Reason} -> throw(Reason)
+								 end
+						 end, Value, Keys))}
+				catch
+					_:Reason -> {error, Reason}
+				end;
+			not_found -> {ok, []};
+			{error, Reason} -> {error, Reason}
+		end,
   {reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"SDIFFSTORE">>, args = [Destination | Keys]}, From, State) ->
     case handle_call(#edis_command{cmd = <<"SDIFF">>, args = Keys}, From, State) of
