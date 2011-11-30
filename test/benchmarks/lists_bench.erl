@@ -16,8 +16,8 @@
 -include("edis.hrl").
 
 -export([all/0,
-         init/0, init_per_testcase/1, init_per_round/2,
-         quit/0, quit_per_testcase/1, quit_per_round/2]).
+         init/1, init_per_testcase/2, init_per_round/3,
+         quit/1, quit_per_testcase/2, quit_per_round/3]).
 -export([blpop/1, blpop_nothing/1, brpop/1, brpop_nothing/1, brpoplpush/1, lindex/1, linsert/1,
          llen/1, lpop/1, lpush/1, lpushx/1, lrange_s/1, lrange_n/1, lrem_x/1, lrem_y/1, lrem_0/1,
          lset/1, ltrim/1, rpop/1, rpoplpush/1, rpoplpush_self/1, rpush/1, rpushx/1]).
@@ -29,30 +29,30 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init() -> ok.
-init() -> ok.
+-spec init([]) -> ok.
+init(_Extra) -> ok.
 
--spec quit() -> ok.
-quit() -> ok.
+-spec quit([]) -> ok.
+quit(_Extra) -> ok.
 
--spec init_per_testcase(atom()) -> ok.
-init_per_testcase(_Function) -> ok.
+-spec init_per_testcase(atom(), []) -> ok.
+init_per_testcase(_Function, _Extra) -> ok.
 
--spec quit_per_testcase(atom()) -> ok.
-quit_per_testcase(_Function) -> ok.
+-spec quit_per_testcase(atom(), []) -> ok.
+quit_per_testcase(_Function, _Extra) -> ok.
 
--spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(Fun, Keys) when Fun =:= blpop_nothing;
-                               Fun =:= brpop_nothing ->
+-spec init_per_round(atom(), [binary()], []) -> ok.
+init_per_round(Fun, Keys, _Extra) when Fun =:= blpop_nothing;
+                                       Fun =:= brpop_nothing ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY | Keys], group = keys, result_type = number}),
   ok;
-init_per_round(Fun, Keys) when Fun =:= lindex;
-                               Fun =:= lrange_s;
-                               Fun =:= lrange_n;
-                               Fun =:= lrem;
-                               Fun =:= ltrim ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= lindex;
+                                       Fun =:= lrange_s;
+                                       Fun =:= lrange_n;
+                                       Fun =:= lrem;
+                                       Fun =:= ltrim ->
   _ =
     edis_db:run(
       edis_db:process(0),
@@ -60,22 +60,22 @@ init_per_round(Fun, Keys) when Fun =:= lindex;
                     args = [?KEY | [<<"x">> || _ <- lists:seq(1, erlang:max(5000, length(Keys)))]],
                     group = hashes, result_type = ok}),
   ok;
-init_per_round(lset, Keys) ->
+init_per_round(lset, Keys, _Extra) ->
   _ =
     edis_db:run(
       edis_db:process(0),
       #edis_command{cmd = <<"LPUSH">>, args = [?KEY | [<<"y">> || _ <- Keys]],
                     group = lists, result_type = number}),
   ok;
-init_per_round(_Fun, Keys) ->
+init_per_round(_Fun, Keys, _Extra) ->
   _ =
     edis_db:run(
       edis_db:process(0),
       #edis_command{cmd = <<"LPUSH">>, args = [?KEY | Keys], group = lists, result_type = number}),
   ok.
 
--spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(_, _Keys) ->
+-spec quit_per_round(atom(), [binary()], []) -> ok.
+quit_per_round(_, _Keys, _Extra) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY], group = keys, result_type = number}

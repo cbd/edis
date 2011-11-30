@@ -2,10 +2,10 @@
 %%% @author Fernando Benavides <fernando.benavides@inakanetworks.com>
 %%% @author Chad DePue <chad@inakanetworks.com>
 %%% @copyright (C) 2011 InakaLabs SRL
-%%% @doc Benchmarks for hashes commands
+%%% @doc Benchmarks for hashes commands using erldis
 %%% @end
 %%%-------------------------------------------------------------------
--module(hashes_bench).
+-module(erldis_hashes_bench).
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
@@ -16,8 +16,8 @@
 -include("edis.hrl").
 
 -export([all/0,
-         init/1, init_per_testcase/2, init_per_round/3,
-         quit/1, quit_per_testcase/2, quit_per_round/3]).
+         init/0, init_per_testcase/1, init_per_round/2,
+         quit/0, quit_per_testcase/1, quit_per_round/2]).
 -export([hdel/1, hexists/1, hget/1, hgetall/1, hincrby/1, hkeys/1, hlen/1, hmget/1, hmset/1,
          hset/1, hsetnx/1, hvals/1]).
 
@@ -28,27 +28,27 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init([]) -> ok.
-init(_Extra) -> ok.
+-spec init() -> ok.
+init() -> ok.
 
--spec quit([]) -> ok.
-quit(_Extra) -> ok.
+-spec quit() -> ok.
+quit() -> ok.
 
--spec init_per_testcase(atom(), []) -> ok.
-init_per_testcase(_Function, _Extra) -> ok.
+-spec init_per_testcase(atom()) -> ok.
+init_per_testcase(_Function) -> ok.
 
--spec quit_per_testcase(atom(), []) -> ok.
-quit_per_testcase(_Function, _Extra) -> ok.
+-spec quit_per_testcase(atom()) -> ok.
+quit_per_testcase(_Function) -> ok.
 
--spec init_per_round(atom(), [binary()], []) -> ok.
-init_per_round(incrby, Keys, _Extra) ->
+-spec init_per_round(atom(), [binary()]) -> ok.
+init_per_round(incrby, Keys) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"HSET">>,
                       args = [?KEY, ?KEY, edis_util:integer_to_binary(length(Keys))],
                       result_type = boolean, group = hashes}),
   ok;
-init_per_round(Fun, Keys, _Extra) when Fun =:= hgetall;
+init_per_round(Fun, Keys) when Fun =:= hgetall;
                                Fun =:= hkeys;
                                Fun =:= hvals;
                                Fun =:= hlen ->
@@ -58,7 +58,7 @@ init_per_round(Fun, Keys, _Extra) when Fun =:= hgetall;
       #edis_command{cmd = <<"HMSET">>, args = [?KEY, [{Key, <<"x">>} || Key <- Keys]],
                     group = hashes, result_type = ok}),
   ok;
-init_per_round(Fun, _Keys, _Extra) when Fun =:= hmget;
+init_per_round(Fun, _Keys) when Fun =:= hmget;
                                 Fun =:= hmset ->
   _ =
     edis_db:run(
@@ -68,7 +68,7 @@ init_per_round(Fun, _Keys, _Extra) when Fun =:= hmget;
                             [{edis_util:integer_to_binary(Key), <<"x">>} || Key <- lists:seq(1, 5000)]],
                     group = hashes, result_type = ok}),
   ok;
-init_per_round(_Fun, Keys, _Extra) ->
+init_per_round(_Fun, Keys) ->
   _ =
     edis_db:run(
       edis_db:process(0),
@@ -77,8 +77,8 @@ init_per_round(_Fun, Keys, _Extra) ->
                     group = hashes, result_type = ok}),
   ok.
 
--spec quit_per_round(atom(), [binary()], []) -> ok.
-quit_per_round(_, _Keys, _Extra) ->
+-spec quit_per_round(atom(), [binary()]) -> ok.
+quit_per_round(_, _Keys) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY], group = keys, result_type = number}

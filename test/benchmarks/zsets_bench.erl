@@ -17,8 +17,8 @@
 -include("edis.hrl").
 
 -export([all/0,
-         init/0, init_per_testcase/1, init_per_round/2,
-         quit/0, quit_per_testcase/1, quit_per_round/2]).
+         init/1, init_per_testcase/2, init_per_round/3,
+         quit/1, quit_per_testcase/2, quit_per_round/3]).
 -export([zadd/1, zadd_one/1, zcard/1, zcount_n/1, zcount_m/1, zincrby/1,
          zinterstore_min/1, zinterstore_n/1, zinterstore_k/1, zinterstore_m/1,
          zrange_n/1, zrange_m/1, zrangebyscore_n/1, zrangebyscore_m/1, zrank/1,
@@ -34,32 +34,32 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init() -> ok.
-init() -> ok.
+-spec init([]) -> ok.
+init(_Extra) -> ok.
 
--spec quit() -> ok.
-quit() -> ok.
+-spec quit([]) -> ok.
+quit(_Extra) -> ok.
 
--spec init_per_testcase(atom()) -> ok.
-init_per_testcase(_Function) -> ok.
+-spec init_per_testcase(atom(), []) -> ok.
+init_per_testcase(_Function, _Extra) -> ok.
 
--spec quit_per_testcase(atom()) -> ok.
-quit_per_testcase(_Function) -> ok.
+-spec quit_per_testcase(atom(), []) -> ok.
+quit_per_testcase(_Function, _Extra) -> ok.
 
--spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(Fun, Keys) when Fun =:= zcard;
-                               Fun =:= zadd_one;
-                               Fun =:= zcount_n;
-                               Fun =:= zincrby;
-                               Fun =:= zrange_n;
-                               Fun =:= zrangebyscore_n;
-                               Fun =:= zremrangebyrank_n;
-                               Fun =:= zremrangebyscore_n;
-                               Fun =:= zrevrange_n;
-                               Fun =:= zrevrangebyscore_n ->
+-spec init_per_round(atom(), [binary()], []) -> ok.
+init_per_round(Fun, Keys, _Extra) when Fun =:= zcard;
+                                       Fun =:= zadd_one;
+                                       Fun =:= zcount_n;
+                                       Fun =:= zincrby;
+                                       Fun =:= zrange_n;
+                                       Fun =:= zrangebyscore_n;
+                                       Fun =:= zremrangebyrank_n;
+                                       Fun =:= zremrangebyscore_n;
+                                       Fun =:= zrevrange_n;
+                                       Fun =:= zrevrangebyscore_n ->
   zadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= zinterstore_min ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zinterstore_min ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>, args = [?KEY2, [{1.0, <<"1">>}] ++
@@ -68,7 +68,7 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_min ->
                   group = zsets, result_type = number}),
   zadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= zinterstore_n ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zinterstore_n ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
@@ -78,7 +78,7 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_n ->
                   group = zsets, result_type = number}),
   zadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= zinterstore_k ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zinterstore_k ->
   lists:foreach(fun(Key) ->
                         edis_db:run(
                           edis_db:process(0),
@@ -86,7 +86,7 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_k ->
                                         args = [Key, [{1.0, ?KEY}, {2.0, ?KEY2}, {3.0, Key}]],
                                         group = zsets, result_type = number})
                 end, Keys);
-init_per_round(Fun, Keys) when Fun =:= zinterstore_m ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zinterstore_m ->
   L = length(Keys),
   edis_db:run(
     edis_db:process(0),
@@ -104,7 +104,7 @@ init_per_round(Fun, Keys) when Fun =:= zinterstore_m ->
                          ],
                   group = zsets, result_type = number}),
   ok;
-init_per_round(Fun, Keys) when Fun =:= zunionstore_n ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zunionstore_n ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
@@ -113,7 +113,7 @@ init_per_round(Fun, Keys) when Fun =:= zunionstore_n ->
                   group = zsets, result_type = number}),
   zadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= zunionstore_m ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zunionstore_m ->
   L = length(Keys),
   edis_db:run(
     edis_db:process(0),
@@ -130,38 +130,38 @@ init_per_round(Fun, Keys) when Fun =:= zunionstore_m ->
                          ],
                   group = zsets, result_type = number}),
   ok;
-init_per_round(Fun, _Keys) when Fun =:= zcount_m;
-                                Fun =:= zrange_m;
-                                Fun =:= zrem;
-                                Fun =:= zrangebyscore_m;
-                                Fun =:= zremrangebyrank_m;
-                                Fun =:= zremrangebyscore_m;
-                                Fun =:= zrevrange_m;
-                                Fun =:= zrevrangebyscore_m ->
+init_per_round(Fun, _Keys, _Extra) when Fun =:= zcount_m;
+                                        Fun =:= zrange_m;
+                                        Fun =:= zrem;
+                                        Fun =:= zrangebyscore_m;
+                                        Fun =:= zremrangebyrank_m;
+                                        Fun =:= zremrangebyscore_m;
+                                        Fun =:= zrevrange_m;
+                                        Fun =:= zrevrangebyscore_m ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
                   args = [?KEY, [{1.0 * I, edis_util:integer_to_binary(I)} || I <- lists:seq(1, 10000)]],
                   group = zsets, result_type = number}),
   ok;
-init_per_round(Fun, Keys) when Fun =:= zrank;
-                               Fun =:= zrevrank;
-                               Fun =:= zrem_one;
-                               Fun =:= zscore ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= zrank;
+                                       Fun =:= zrevrank;
+                                       Fun =:= zrem_one;
+                                       Fun =:= zscore ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"ZADD">>,
                   args = [?KEY, [{edis_util:binary_to_float(Key), Key} || Key <- Keys]],
                   group = zsets, result_type = number}),
   ok;
-init_per_round(_Fun, _Keys) ->
+init_per_round(_Fun, _Keys, _Extra) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY], group = keys, result_type = number}),
   ok.
 
--spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(_, Keys) ->
+-spec quit_per_round(atom(), [binary()], []) -> ok.
+quit_per_round(_, Keys, _Extra) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY, ?KEY2 | Keys], group = keys, result_type = number}

@@ -14,8 +14,8 @@
 -include("edis.hrl").
 
 -export([all/0,
-         init/0, init_per_testcase/1, init_per_round/2,
-         quit/0, quit_per_testcase/1, quit_per_round/2]).
+         init/1, init_per_testcase/2, init_per_round/3,
+         quit/1, quit_per_testcase/2, quit_per_round/3]).
 -export([psubscribe/1, publish/1, punsubscribe/1, subscribe/1, unsubscribe/1]).
 
 %% ====================================================================
@@ -25,22 +25,20 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init() -> ok.
-init() -> ok.
+-spec init([]) -> ok.
+init(_Extra) -> ok.
 
--spec quit() -> ok.
-quit() -> ok.
+-spec quit([]) -> ok.
+quit(_Extra) -> ok.
 
--spec init_per_testcase(atom()) -> ok.
-init_per_testcase(publish) -> ok;
-init_per_testcase(_Function) -> edis_pubsub:add_sup_handler().
+-spec init_per_testcase(atom(), []) -> ok.
+init_per_testcase(_Function, _Extra) -> ok.
 
--spec quit_per_testcase(atom()) -> ok.
-quit_per_testcase(publish) -> ok;
-quit_per_testcase(_Function) -> edis_pubsub:delete_handler().
+-spec quit_per_testcase(atom(), []) -> ok.
+quit_per_testcase(_Function, _Extra) -> ok.
 
--spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(publish, Keys) ->
+-spec init_per_round(atom(), [binary()], []) -> ok.
+init_per_round(publish, Keys, _Extra) ->
   lists:foreach(
     fun(Key) ->
             P = proc_lib:spawn(
@@ -58,16 +56,16 @@ init_per_round(publish, Keys) ->
             erlang:register(Name, P)
     end, Keys),
   wait_for_handlers(length(Keys));
-init_per_round(_Fun, _Keys) -> ok.
+init_per_round(_Fun, _Keys, _Extra) -> ok.
 
--spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(publish, Keys) ->
+-spec quit_per_round(atom(), [binary()], []) -> ok.
+quit_per_round(publish, Keys, _Extra) ->
   lists:foreach(
     fun(Key) ->
             binary_to_atom(<<"pubsub-bench-", Key/binary>>, utf8) ! stop
     end, Keys),
   wait_for_handlers(0);
-quit_per_round(_Fun, _Keys) -> ok.
+quit_per_round(_Fun, _Keys, _Extra) -> ok.
 
 -spec psubscribe([binary()]) -> {[term()], gb_set()}.
 psubscribe(Patterns) ->

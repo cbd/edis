@@ -14,8 +14,8 @@
 -include("edis.hrl").
 
 -export([all/0,
-         init/0, init_per_testcase/1, init_per_round/2,
-         quit/0, quit_per_testcase/1, quit_per_round/2]).
+         init/1, init_per_testcase/2, init_per_round/3,
+         quit/1, quit_per_testcase/2, quit_per_round/3]).
 -export([del/1, exists/1, expire/1, expireat/1, keys/1, move/1, object_refcount/1, ttl/1, type/1,
          object_encoding/1, object_idletime/1, persist/1, randomkey/1, rename/1, renamenx/1,
          sort_list_n/1, sort_list_m/1, sort_set_n/1, sort_set_m/1, sort_zset_n/1, sort_zset_m/1]).
@@ -27,20 +27,20 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init() -> ok.
-init() -> ok.
+-spec init([]) -> ok.
+init(_Extra) -> ok.
 
--spec quit() -> ok.
-quit() -> ok.
+-spec quit([]) -> ok.
+quit(_Extra) -> ok.
 
--spec init_per_testcase(atom()) -> ok.
-init_per_testcase(_Function) -> ok.
+-spec init_per_testcase(atom(), []) -> ok.
+init_per_testcase(_Function, _Extra) -> ok.
 
--spec quit_per_testcase(atom()) -> ok.
-quit_per_testcase(_Function) -> ok.
+-spec quit_per_testcase(atom(), []) -> ok.
+quit_per_testcase(_Function, _Extra) -> ok.
 
--spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(move, Keys) ->
+-spec init_per_round(atom(), [binary()], []) -> ok.
+init_per_round(move, Keys, _Extra) ->
   edis_db:run(edis_db:process(1),
               #edis_command{cmd = <<"DEL">>, db = 1, args = Keys, result_type = ok, group = server}),
   [ok,ok] =
@@ -51,12 +51,12 @@ init_per_round(move, Keys) ->
                             #edis_command{cmd = <<"MSET">>, args = [{Key, Key} || Key <- Keys],
                                           group = keys, result_type = ok}]}),
   ok;
-init_per_round(keys, Keys) ->
+init_per_round(keys, Keys, _Extra) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"MSET">>, args = [{Key, Key} || Key <- Keys],
                   group = keys, result_type = ok});
-init_per_round(sort_list_n, Keys) ->
+init_per_round(sort_list_n, Keys, _Extra) ->
   [{ok, Deleted}, {ok, Pushed}] =
     edis_db:run(
       edis_db:process(0),
@@ -71,7 +71,7 @@ init_per_round(sort_list_n, Keys) ->
   end,
   Pushed = length(Keys),
   ok;
-init_per_round(sort_list_m, _Keys) ->
+init_per_round(sort_list_m, _Keys, _Extra) ->
   [{ok, Deleted}, {ok, 1000}] =
     edis_db:run(
       edis_db:process(0),
@@ -86,7 +86,7 @@ init_per_round(sort_list_m, _Keys) ->
     0 -> ok;
     1 -> ok
   end;
-init_per_round(sort_set_n, Keys) ->
+init_per_round(sort_set_n, Keys, _Extra) ->
   [{ok, Deleted}, {ok, Pushed}] =
     edis_db:run(
       edis_db:process(0),
@@ -101,7 +101,7 @@ init_per_round(sort_set_n, Keys) ->
   end,
   Pushed = length(Keys),
   ok;
-init_per_round(sort_set_m, _Keys) ->
+init_per_round(sort_set_m, _Keys, _Extra) ->
   [{ok, Deleted}, {ok, 1000}] =
     edis_db:run(
       edis_db:process(0),
@@ -116,7 +116,7 @@ init_per_round(sort_set_m, _Keys) ->
     0 -> ok;
     1 -> ok
   end;
-init_per_round(sort_zset_n, Keys) ->
+init_per_round(sort_zset_n, Keys, _Extra) ->
   [{ok, Deleted}, {ok, Pushed}] =
     edis_db:run(
       edis_db:process(0),
@@ -132,7 +132,7 @@ init_per_round(sort_zset_n, Keys) ->
   end,
   Pushed = length(Keys),
   ok;
-init_per_round(sort_zset_m, _Keys) ->
+init_per_round(sort_zset_m, _Keys, _Extra) ->
   [{ok, Deleted}, {ok, 1000}] =
     edis_db:run(
       edis_db:process(0),
@@ -147,26 +147,26 @@ init_per_round(sort_zset_m, _Keys) ->
     0 -> ok;
     1 -> ok
   end;
-init_per_round(_Fun, Keys) ->
+init_per_round(_Fun, Keys, _Extra) ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"MSET">>, args = [{Key, iolist_to_binary(Keys)} || Key <- Keys],
                   group = keys, result_type = ok}).
 
--spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(exists, Keys) -> del(Keys), ok;
-quit_per_round(expire, Keys) -> del(Keys), ok;
-quit_per_round(expireat, Keys) -> del(Keys), ok;
-quit_per_round(move, Keys) -> del(Keys), ok;
-quit_per_round(object_refcount, Keys) -> del(Keys), ok;
-quit_per_round(object_encoding, Keys) -> del(Keys), ok;
-quit_per_round(object_idletime, Keys) -> del(Keys), ok;
-quit_per_round(persist, Keys) -> del(Keys), ok;
-quit_per_round(rename, Keys) -> del([<<"test-new">>|Keys]), ok;
-quit_per_round(renamenx, Keys) -> del([<<"test-new">>|Keys]), ok;
-quit_per_round(ttl, Keys) -> del(Keys), ok;
-quit_per_round(type, Keys) -> del(Keys), ok;
-quit_per_round(_, _Keys) -> ok.
+-spec quit_per_round(atom(), [binary()], []) -> ok.
+quit_per_round(exists, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(expire, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(expireat, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(move, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(object_refcount, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(object_encoding, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(object_idletime, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(persist, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(rename, Keys, _Extra) -> del([<<"test-new">>|Keys]), ok;
+quit_per_round(renamenx, Keys, _Extra) -> del([<<"test-new">>|Keys]), ok;
+quit_per_round(ttl, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(type, Keys, _Extra) -> del(Keys), ok;
+quit_per_round(_, _Keys, _Extra) -> ok.
 
 -spec del([binary()]) -> pos_integer().
 del(Keys) ->

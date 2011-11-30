@@ -17,8 +17,8 @@
 -include("edis.hrl").
 
 -export([all/0,
-         init/0, init_per_testcase/1, init_per_round/2,
-         quit/0, quit_per_testcase/1, quit_per_round/2]).
+         init/1, init_per_testcase/2, init_per_round/3,
+         quit/1, quit_per_testcase/2, quit_per_round/3]).
 -export([sadd/1, scard/1, sdiff/1, sdiffstore/1, sinter_min/1, sinter_n/1, sinter_m/1,
          sinterstore_min/1, sinterstore_n/1, sinterstore_m/1, sismember/1, smembers/1,
          smove/1, spop/1, srandmember/1, srem/1, sunion/1, sunionstore/1]).
@@ -30,55 +30,55 @@
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
                  Fun =/= module_info].
 
--spec init() -> ok.
-init() -> ok.
+-spec init([]) -> ok.
+init(_Extra) -> ok.
 
--spec quit() -> ok.
-quit() -> ok.
+-spec quit([]) -> ok.
+quit(_Extra) -> ok.
 
--spec init_per_testcase(atom()) -> ok.
-init_per_testcase(_Function) -> ok.
+-spec init_per_testcase(atom(), []) -> ok.
+init_per_testcase(_Function, _Extra) -> ok.
 
--spec quit_per_testcase(atom()) -> ok.
-quit_per_testcase(_Function) -> ok.
+-spec quit_per_testcase(atom(), []) -> ok.
+quit_per_testcase(_Function, _Extra) -> ok.
 
--spec init_per_round(atom(), [binary()]) -> ok.
-init_per_round(Fun, Keys) when Fun =:= scard;
-                               Fun =:= sismember;
-                               Fun =:= smembers;
-                               Fun =:= smove;
-                               Fun =:= spop;
-                               Fun =:= srandmember ->
+-spec init_per_round(atom(), [binary()], []) -> ok.
+init_per_round(Fun, Keys, _Extra) when Fun =:= scard;
+                                       Fun =:= sismember;
+                                       Fun =:= smembers;
+                                       Fun =:= smove;
+                                       Fun =:= spop;
+                                       Fun =:= srandmember ->
   sadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= sinter_min;
-                               Fun =:= sinterstore_min ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= sinter_min;
+                                       Fun =:= sinterstore_min ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SADD">>, args = [?KEY2, <<"1">>],
                   group = sets, result_type = number}),
   sadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= sinter_n;
-                               Fun =:= sinterstore_n ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= sinter_n;
+                                       Fun =:= sinterstore_n ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SADD">>, args = [?KEY2 | Keys],
                   group = sets, result_type = number}),
   sadd(Keys),
   ok;
-init_per_round(Fun, Keys) when Fun =:= sinter_m;
-                               Fun =:= sinterstore_m ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= sinter_m;
+                                       Fun =:= sinterstore_m ->
   lists:foreach(fun(Key) ->
                         edis_db:run(
                           edis_db:process(0),
                           #edis_command{cmd = <<"SADD">>, args = [Key, ?KEY, ?KEY2, Key],
                                         group = sets, result_type = number})
                 end, Keys);
-init_per_round(Fun, Keys) when Fun =:= sdiff;
-                               Fun =:= sdiffstore;
-                               Fun =:= sunion;
-                               Fun =:= sunionstore ->
+init_per_round(Fun, Keys, _Extra) when Fun =:= sdiff;
+                                       Fun =:= sdiffstore;
+                                       Fun =:= sunion;
+                                       Fun =:= sunionstore ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SADD">>,
@@ -86,21 +86,21 @@ init_per_round(Fun, Keys) when Fun =:= sdiff;
                   group = sets, result_type = number}),
   sadd(Keys),
   ok;
-init_per_round(Fun, _Keys) when Fun =:= srem ->
+init_per_round(Fun, _Keys, _Extra) when Fun =:= srem ->
   edis_db:run(
     edis_db:process(0),
     #edis_command{cmd = <<"SADD">>,
                   args = [?KEY | lists:map(fun edis_util:integer_to_binary/1, lists:seq(1, 10000))],
                   group = sets, result_type = number}),
   ok;
-init_per_round(_Fun, _Keys) ->
+init_per_round(_Fun, _Keys, _Extra) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY], group = keys, result_type = number}),
   ok.
 
--spec quit_per_round(atom(), [binary()]) -> ok.
-quit_per_round(_, Keys) ->
+-spec quit_per_round(atom(), [binary()], []) -> ok.
+quit_per_round(_, Keys, _Extra) ->
   _ = edis_db:run(
         edis_db:process(0),
         #edis_command{cmd = <<"DEL">>, args = [?KEY, ?KEY2 | Keys], group = keys, result_type = number}
