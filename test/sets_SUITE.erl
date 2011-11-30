@@ -4,7 +4,7 @@
 
 all() ->
 	[basic,sadd,srem,sinter,sinterstore,
-	 sunion].
+	 sunion,sunionstore,sdiff].
 
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -155,3 +155,55 @@ sunion(Config)->
     {error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sunion">>,<<"key1">>,<<"set1">>]),
 	%% Bad Arguments
 	{error,<<"ERR wrong number of arguments for 'SUNION' command">>}= erldis_client:sr_scall(Client,[<<"sunion">>]).
+
+sunionstore(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	create_numeric_sets(Client),
+	%% SUNIONSTORE with two sets
+	Expected = lists:sort(sets:to_list(sets:from_list(
+											erldis_client:scall(Client,[<<"smembers">>,<<"set1">>]) ++
+			     							erldis_client:scall(Client,[<<"smembers">>,<<"set2">>]) ))),
+	395 = erldis_client:sr_scall(Client,[<<"sunionstore">>,<<"setres">>,<<"set1">>,<<"set2">>]),
+	Expected = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"setres">>])),
+	%% SUNIONSTORE with three sets
+	Expected2 = lists:sort(sets:to_list(sets:from_list(
+											erldis_client:scall(Client,[<<"smembers">>,<<"set1">>]) ++
+			     							erldis_client:scall(Client,[<<"smembers">>,<<"set2">>]) ++
+			     							erldis_client:scall(Client,[<<"smembers">>,<<"set3">>]) ))),
+	397 = erldis_client:sr_scall(Client,[<<"sunionstore">>,<<"setres">>,<<"set1">>,<<"set2">>,<<"set3">>]),
+	Expected2 = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"setres">>])),
+	%% SUNIONSTORE against non existing keys should delete dstkey
+	false = erldis_client:sr_scall(Client,[<<"sunionstore">>,<<"setres">>,<<"set111">>,<<"set222">>]),
+	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"setres">>]),
+	%% SUNIONSTORE with non-set destkey
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"foo">>]),
+	395 = erldis_client:sr_scall(Client,[<<"sunionstore">>,<<"key1">>,<<"set1">>,<<"set2">>]),
+	Expected = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"key1">>])),
+	%% SUNIONSTORE with non-set
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key2">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sunionstore">>,<<"setres">>,<<"key2">>,<<"set2">>]),
+	%% Bad Arguments
+	{error,<<"ERR wrong number of arguments for 'SUNIONSTORE' command">>}= erldis_client:sr_scall(Client,[<<"sunionstore">>]),
+	{error,<<"ERR wrong number of arguments for 'SUNIONSTORE' command">>}= erldis_client:sr_scall(Client,[<<"sunionstore">>,<<"setres">>]).
+
+sdiff(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	create_numeric_sets(Client),
+	[true = erldis_client:sr_scall(Client,[<<"sadd">>,<<"set4">>,Int])
+	 || Int <- lists:seq(5,200)],
+	true = erldis_client:sr_scall(Client,[<<"sadd">>,<<"set5">>,0]),
+	%% SDIFF with one set
+	[<<"0">>] = erldis_client:scall(Client,[<<"sdiff">>,<<"set5">>]),
+	%% SDIFF with two sets
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>] = lists:sort(erldis_client:scall(Client,[<<"sdiff">>,<<"set1">>,<<"set4">>])),
+	%% SDIFF with three sets
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>] = lists:sort(erldis_client:scall(Client,[<<"sdiff">>,<<"set1">>,<<"set4">>,<<"set5">>])),
+	%% SDIFF against non existing keys
+	[] = erldis_client:scall(Client,[<<"sdiff">>,<<"set111">>,<<"set4">>]),
+ 	[<<"0">>] = erldis_client:scall(Client,[<<"sdiff">>,<<"set5">>,<<"set111">>]),
+	%% SDIFF against non-set
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sdiff">>,<<"set2">>,<<"key1">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sdiff">>,<<"key1">>,<<"set2">>]),
+	%% Bad Arguments
+	{error,<<"ERR wrong number of arguments for 'SDIFF' command">>}= erldis_client:sr_scall(Client,[<<"sdiff">>]).
