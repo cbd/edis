@@ -4,7 +4,8 @@
 
 all() ->
 	[basic,sadd,srem,sinter,sinterstore,
-	 sunion,sunionstore,sdiff].
+	 sunion,sunionstore,sdiff,sdiffstore,
+	 spop,srandmember,smove].
 
 init_per_testcase(_TestCase,Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -207,3 +208,92 @@ sdiff(Config)->
 	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sdiff">>,<<"key1">>,<<"set2">>]),
 	%% Bad Arguments
 	{error,<<"ERR wrong number of arguments for 'SDIFF' command">>}= erldis_client:sr_scall(Client,[<<"sdiff">>]).
+
+sdiffstore(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	create_numeric_sets(Client),
+	[true = erldis_client:sr_scall(Client,[<<"sadd">>,<<"set4">>,Int])
+	 || Int <- lists:seq(5,200)],
+	true = erldis_client:sr_scall(Client,[<<"sadd">>,<<"set5">>,0]),
+	%% SDIFFSTORE with one set
+	196 = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"set4">>]),
+	true = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"setres">>])) == lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"set4">>])), 
+	%% SDIFFSTORE with two sets
+	5 = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"set1">>,<<"set4">>]),
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"setres">>])),
+	%% SDIFFSTORE with three sets
+	4 = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"set1">>,<<"set4">>,<<"set5">>]),
+	[<<"1">>,<<"2">>,<<"3">>,<<"4">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"setres">>])),
+	%% SDIFFSTORE against non existing keys
+	false = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"set111">>,<<"set4">>]),
+	[] = erldis_client:scall(Client,[<<"smembers">>,<<"setres">>]),
+ 	true = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"set5">>,<<"set111">>]),
+	[<<"0">>] = erldis_client:scall(Client,[<<"smembers">>,<<"setres">>]),
+	%% SDIFFSTORE against non-set
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"set2">>,<<"key1">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>,<<"key1">>,<<"set2">>]),
+	5 = erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"key1">>,<<"set1">>,<<"set4">>]),	
+	[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"key1">>])),
+	%% Bad Arguments
+	{error,<<"ERR wrong number of arguments for 'SDIFFSTORE' command">>}= erldis_client:sr_scall(Client,[<<"sdiffstore">>]),
+	{error,<<"ERR wrong number of arguments for 'SDIFFSTORE' command">>}= erldis_client:sr_scall(Client,[<<"sdiffstore">>,<<"setres">>]).
+
+spop(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	%% SPOP basic
+	3 = erldis_client:sr_scall(Client,[<<"sadd">>,<<"set1">>,0,1,2]),
+	[<<"0">>,<<"1">>,<<"2">>] = lists:sort([ 
+								  erldis_client:sr_scall(Client,[<<"spop">>,<<"set1">>]),
+								  erldis_client:sr_scall(Client,[<<"spop">>,<<"set1">>]),
+								  erldis_client:sr_scall(Client,[<<"spop">>,<<"set1">>]) ]),
+	false = erldis_client:sr_scall(Client,[<<"scard">>,<<"set1">>]),
+	nil = erldis_client:sr_scall(Client,[<<"spop">>,<<"set1">>]),
+	%% Bad Arguments
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"spop">>,<<"key1">>]),
+	{error,<<"ERR wrong number of arguments for 'SPOP' command">>}= erldis_client:sr_scall(Client,[<<"spop">>]),
+	{error,<<"ERR wrong number of arguments for 'SPOP' command">>}= erldis_client:sr_scall(Client,[<<"spop">>,<<"set1">>,<<"set2">>]).
+
+srandmember(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	%% SRANDMEMBER basic
+	8 = erldis_client:sr_scall(Client,[<<"sadd">>,<<"set1">>,0,1,2,3,4,5,6,7]),
+	[true = lists:member(erldis_client:sr_scall(Client,[<<"srandmember">>,<<"set1">>]),
+						[<<"0">>,<<"1">>,<<"2">>,<<"3">>,<<"4">>,<<"5">>,<<"6">>,<<"7">>])
+	 || _ <- lists:seq(1,40)],
+	8 = erldis_client:sr_scall(Client,[<<"scard">>,<<"set1">>]),
+	%% Bad Arguments
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"srandmember">>,<<"key1">>]),
+	{error,<<"ERR wrong number of arguments for 'SRANDMEMBER' command">>} = erldis_client:sr_scall(Client,[<<"srandmember">>]),
+	{error,<<"ERR wrong number of arguments for 'SRANDMEMBER' command">>} = erldis_client:sr_scall(Client,[<<"srandmember">>,<<"set1">>,<<"set2">>]).
+
+smove(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	3 = erldis_client:sr_scall(Client,[<<"sadd">>,<<"myset1">>,1,<<"a">>,<<"b">>]),
+	3 = erldis_client:sr_scall(Client,[<<"sadd">>,<<"myset2">>,2,3,4]),
+	%% SMOVE basics
+	true = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>,<<"a">>]),
+	[<<"1">>,<<"b">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset1">>])),
+	[<<"2">>,<<"3">>,<<"4">>,<<"a">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset2">>])),
+	%% SMOVE non existing key
+    false = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>,<<"foo">>]),
+	[<<"1">>,<<"b">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset1">>])),
+	[<<"2">>,<<"3">>,<<"4">>,<<"a">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset2">>])),
+	%% SMOVE non existing src set
+    false = erldis_client:sr_scall(Client,[<<"smove">>,<<"noset">>,<<"myset2">>,<<"foo">>]),
+	[<<"2">>,<<"3">>,<<"4">>,<<"a">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset2">>])),
+	%% SMOVE from regular set to non existing destination set
+	true = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset3">>,<<"b">>]),
+	[<<"1">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset1">>])),
+	[<<"b">>] = lists:sort(erldis_client:scall(Client,[<<"smembers">>,<<"myset3">>])),
+	%% SMOVE wrong key type
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"key">>,<<"myset3">>,<<"foo">>]),
+	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset3">>,<<"key">>,<<"a">>]),
+	%% Bad Arguments
+	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>]),
+	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>]),
+	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>]),
+	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>,<<"1">>,<<"2">>]).
