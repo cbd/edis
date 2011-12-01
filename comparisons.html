@@ -68,6 +68,13 @@
        			On the other hand it runs in <em>O(1)</em> because it's asynchronous, it just dispatches the message.</dd>
        		</dl>
        </li>
+       	<li>
+       		<dl>
+       			<dt><em>SPOP</em></dt>
+       			<dd>This command always returns an specific element of the set instead of a <b>random</b> one.
+       				That was needed to make the function really <em>O(1)</em>.</dd>
+       		</dl>
+       </li>
        </ul>
        <h3>Missing Features</h3>
        <ul class="features">
