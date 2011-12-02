@@ -293,7 +293,7 @@ smove(Config)->
 	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"key">>,<<"myset3">>,<<"foo">>]),
 	{error,<<"ERR Operation against a key holding the wrong kind of value">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset3">>,<<"key">>,<<"a">>]),
 	%% Bad Arguments
-	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>]),
-	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>]),
-	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>]),
-	{error,<<"ERR wrong number of arguments for 'MOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>,<<"1">>,<<"2">>]).
+	{error,<<"ERR wrong number of arguments for 'SMOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>]),
+	{error,<<"ERR wrong number of arguments for 'SMOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>]),
+	{error,<<"ERR wrong number of arguments for 'SMOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>]),
+	{error,<<"ERR wrong number of arguments for 'SMOVE' command">>} = erldis_client:sr_scall(Client,[<<"smove">>,<<"myset1">>,<<"myset2">>,<<"1">>,<<"2">>]).
