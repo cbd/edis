@@ -1156,37 +1156,40 @@ handle_call(#edis_command{cmd = <<"SMEMBERS">>, args = [Key]}, _From, State) ->
     end,
   {reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"SMOVE">>, args = [Source, Destination, Member]}, _From, State) ->
-  Reply =
-    case update(State#state.backend_mod, State#state.backend_ref, Source, set,
-                fun(Item) ->
-                        case gb_sets:is_element(Member, Item#edis_item.value) of
-                          false ->
-                            {false, Item};
-                          true ->
-                            NewValue = gb_sets:del_element(Member, Item#edis_item.value),
-                            case gb_sets:size(NewValue) of
-                              0 -> {delete, Item#edis_item{value = NewValue}};
-                              _ -> {true, Item#edis_item{value = NewValue}}
-                            end
-                        end
-                end, false) of
-      {ok, delete} ->
-        _ = (State#state.backend_mod):delete(State#state.backend_ref, Source),
-        update(State#state.backend_mod, State#state.backend_ref, Destination, set, hashtable,
-               fun(Item) ->
-                       {true, Item#edis_item{value =
-                                               gb_sets:add_element(Member, Item#edis_item.value)}}
-               end, gb_sets:empty());
-      {ok, true} ->
-        update(State#state.backend_mod, State#state.backend_ref, Destination, set, hashtable,
-               fun(Item) ->
-                       {true, Item#edis_item{value =
-                                               gb_sets:add_element(Member, Item#edis_item.value)}}
-               end, gb_sets:empty());
-      OtherReply ->
-        OtherReply
-    end,
-  {reply, Reply, stamp([Source, Destination], write, State)};
+	Reply =
+		try
+			DestinationAction = 
+				case get_item(State#state.backend_mod, State#state.backend_ref, set, Destination) of
+					{error, DReason} -> throw(DReason);
+					not_found -> 
+						{put, Destination, #edis_item{key = Destination, type = set, encoding = hashtable, value = gb_sets:singleton(Member)}};
+					DestinationItem -> 
+						{put, Destination, DestinationItem#edis_item{value = gb_sets:add_element(Member, DestinationItem#edis_item.value)}}
+				end,
+			SourceAction = 
+				case get_item(State#state.backend_mod, State#state.backend_ref, set, Source) of
+					{error, SReason} -> throw(SReason);
+					not_found -> throw(empty);
+					Item ->
+						case gb_sets:is_element(Member, Item#edis_item.value) of
+							false -> throw(empty);
+							true ->
+								case gb_sets:size(Item#edis_item.value) of
+									1 -> {delete, Item#edis_item.key};
+									_ -> {put, Source,Item#edis_item{value = gb_sets:del_element(Member, Item#edis_item.value)}}
+								end
+						end
+				end,
+			case (State#state.backend_mod):write(State#state.backend_ref,
+																					 [SourceAction,DestinationAction]) of
+				ok -> {ok,true};
+				{error, Reason} -> {error, Reason}
+			end
+			catch
+				_:empty -> {ok,false};
+				_:Error -> {error, Error}
+			end,
+	{reply, Reply, stamp([Source, Destination], write, State)};
 handle_call(#edis_command{cmd = <<"SPOP">>, args = [Key]}, _From, State) ->
   Reply =
     case update(State#state.backend_mod, State#state.backend_ref, Key, set,
