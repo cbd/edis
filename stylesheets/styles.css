@@ -50,13 +50,12 @@ body>header>.container {
 body>header>.container>a {
 	float: left;
 	border-right: 1px solid #243;
-	padding: 7.5px 20px 7.5px 0;
+	padding: 0 20px 0 0;
 }
 
 body>header>.container>a img {
 	display: block;
-	height: 30px;
-	width: 93px;
+	height: 45px;
 }
 
 body>header nav {
