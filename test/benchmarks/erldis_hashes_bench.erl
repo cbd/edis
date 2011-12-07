@@ -32,7 +32,7 @@ bench(Function) -> bench(Function, []).
 -spec bench(atom(), [edis_bench:option()]) -> ok.
 bench(Function, Options) -> bench(Function, 6380, 6379, Options).
 
--spec bench(atom(), pos_integer(), pos_integer(), [edis_bench:option()]) -> ok.
+-spec bench(atom(), pos_integer(), pos_integer(), [edis_bench:option()]) -> float().
 bench(Function, P1, P2, Options) ->
   edis_bench:bench({?MODULE, Function, [P1]}, {?MODULE, Function, [P2]},
                    Options ++

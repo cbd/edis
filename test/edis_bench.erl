@@ -67,12 +67,18 @@ bench(Module, Function, MathFunction, Options) ->
 %% @doc Compares the different runs of Module1:Function1 with Module2:Function2
 %%      Returns the standard deviation of the distances between them (outliers excluded).
 %%      The higher the value the more different functions are.
--spec bench({atom(), atom(), [term()]}, {atom(), atom(), [term()]}, [option()]) -> ok.
-bench({Module1, Function1, ExtraArgs1}, {Module2, Function2, ExtraArgs2}, GlobalOptions) ->
-  RawResults1 = run(Module1, Function1, [{extra_args, ExtraArgs1}|GlobalOptions]),
-  RawResults2 = run(Module2, Function2, [{extra_args, ExtraArgs2}|GlobalOptions]),
+-spec bench({atom(), atom(), [term()]}, {atom(), atom(), [term()]}, [option()]) -> float().
+bench({Module1, Function1, ExtraArgs1}, {Module2, Function2, ExtraArgs2}, Options) ->
+  RawResults1 = run(Module1, Function1, [{extra_args, ExtraArgs1}|Options]),
+  RawResults2 = run(Module2, Function2, [{extra_args, ExtraArgs2}|Options]),
   RawResults = lists:zipwith(fun({K,V1}, {K,V2}) -> {K, V1, V2} end, RawResults1, RawResults2),
-  graph(RawResults, GlobalOptions).
+  graph(RawResults, Options),
+  Diffs = [(V1-V2)/V2 || {_K,V1,V2} <- RawResults, V1 /= 0, V2 /= 0],
+  case proplists:get_bool(debug, Options) of
+    true -> ?INFO("Diffs: ~p~n", [Diffs]);
+    false -> ok
+  end,
+  lists:sum(Diffs) / erlang:length(Diffs).
 
 %% ====================================================================
 %% Math functions
