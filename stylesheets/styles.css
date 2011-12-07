@@ -87,8 +87,8 @@ body>header nav a:hover {
 }
 
 body>footer {
-	background: url(/images/redis-small.png) no-repeat left top;
-	padding: 10px 10px 10px 50px;
+	background: url(../images/edis-small.png) no-repeat left top;
+	padding: 10px 10px 20px 50px;
 	max-width: 840px;
 	margin: 20px auto;
 	color: #777777;
@@ -99,7 +99,9 @@ body>footer {
 body>footer a {
 	color: #444444;
 }
-
+.footer img {
+	height: 45px;
+}
 @media screen and (max-device-width: 480px) {
 	body {
 		padding: 0;
