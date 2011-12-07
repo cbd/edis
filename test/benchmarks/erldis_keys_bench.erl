@@ -29,15 +29,30 @@
 %% ====================================================================
 -spec bench_all() -> [{atom(), float()}].
 bench_all() ->
-  lists:map(fun(F) -> {F, bench(F)} end, all()).
+  lists:map(fun(F) ->
+                    io:format("Benchmarking ~p...~n", [F]),
+                    Bench = bench(F),
+                    io:format("~n~n\t~p: ~p~n", [F, Bench]),
+                    {F, Bench}
+            end, all()).
 
 -spec bench_all([edis_bench:option()]) -> [{atom(), float()}].
 bench_all(Options) ->
-  lists:map(fun(F) -> {F, bench(F, Options)} end, all()).
+  lists:map(fun(F) ->
+                    io:format("Benchmarking ~p...~n", [F]),
+                    Bench = bench(F, Options),
+                    io:format("~n~n\t~p: ~p~n", [F, Bench]),
+                    {F, Bench}
+            end, all()).
 
 -spec bench_all(pos_integer(), pos_integer(), [edis_bench:option()]) -> [{atom(), float()}].
 bench_all(P1, P2, Options) ->
-  lists:map(fun(F) -> {F, bench(F, P1, P2, Options)} end, all()).
+  lists:map(fun(F) ->
+                    io:format("Benchmarking ~p...~n", [F]),
+                    Bench = bench(F, P1, P2, Options),
+                    io:format("~n~n\t~p: ~p~n", [F, Bench]),
+                    {F, Bench}
+            end, all()).
 
 -spec bench(atom()) -> float().
 bench(Function) -> bench(Function, []).

@@ -372,7 +372,7 @@ handle_call(#edis_command{cmd = <<"MOVE">>, args = [Key, NewDb]}, _From, State) 
       {error, Reason} ->
         {{error, Reason}, read};
       Item ->
-        try run(NewDb, #edis_command{cmd = <<"-INTERNAL-RECV">>, args = [Item]}) of
+        try run(process(NewDb), #edis_command{cmd = <<"-INTERNAL-RECV">>, args = [Item]}) of
           ok ->
             case (State#state.backend_mod):delete(State#state.backend_ref, Key) of
               ok ->
