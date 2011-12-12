@@ -212,7 +212,7 @@ lset([Key|_]) ->
 ltrim([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"LTRIM">>, args = [?KEY, 0, edis_util:binary_to_integer(Key)],
+    #edis_command{cmd = <<"LTRIM">>, args = [?KEY, edis_util:binary_to_integer(Key), -1],
                   group = lists, result_type = ok}).
 
 -spec rpop([binary()]) -> binary().
