@@ -204,8 +204,7 @@ keys(_Keys) ->
 move([Key|_]) ->
   edis_db:run(
     edis_db:process(0),
-    #edis_command{cmd = <<"MOVE">>, args = [Key, edis_db:process(1)],
-                  result_type = boolean, group = keys}).
+    #edis_command{cmd = <<"MOVE">>, args = [Key, 1], result_type = boolean, group = keys}).
 
 -spec object_refcount([binary(),...]) -> integer().
 object_refcount([Key|_]) ->
