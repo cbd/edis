@@ -450,6 +450,9 @@ parse_command(#edis_command{cmd = <<"SUNIONSTORE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZADD">>, args = [Key | SMs]}) when SMs =/= [], length(SMs) rem 2 =:= 0 ->
   ParsedSMs = [{edis_util:binary_to_float(S), M} || {S, M} <- edis_util:make_pairs(SMs)],
   C#edis_command{args = [Key, ParsedSMs], result_type = number, group= zsets};
+%% Redis returns 'ERR syntax error' when receives zadd command with odd arguments bigger than one
+parse_command(#edis_command{cmd = <<"ZADD">>, args = [_Key | SMs]}) when SMs =/= [], length(SMs) > 1,length(SMs) rem 2 =:= 1 ->
+	throw(syntax);
 parse_command(#edis_command{cmd = <<"ZADD">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZCARD">>, args = [_Key]}) -> 
   C#edis_command{result_type=number, group=zsets};
