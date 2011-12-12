@@ -11,7 +11,7 @@
 -define(ERR_BAD_KEY, {error,<<"ERR Operation against a key holding the wrong kind of value">>}).
 
 all() -> [zadd,zincrby,zcard,zrem,zrange,
-					zrevrange].
+					zrevrange,zrank_zrevrank].
 
 init_per_suite(Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -191,3 +191,37 @@ zrevrange(Config)->
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zrevrange">>]),
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zrevrange">>,<<"ztmp">>]),
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zrevrange">>,<<"ztmp">>,0]).
+
+zrank_zrevrank(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ERR_NUM_ARGS_ZRANK = ?ERR_NUM_ARGS(<<"ZRANK">>),
+	ERR_NUM_ARGS_ZREVRANK = ?ERR_NUM_ARGS(<<"ZREVRANK">>),
+	%% Basic
+	3 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,10,<<"x">>,20,<<"y">>,30,<<"z">>]),
+	false = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"x">>]),
+	true = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"y">>]),
+	2 = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"z">>]),
+	nil = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"foo">>]),
+	2 = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"x">>]),
+	true = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"y">>]),
+	false = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"z">>]),
+	nil = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"foo">>]),
+	%% After deletion	
+	true = erldis_client:sr_scall(Client,[<<"zrem">>,<<"ztmp">>,<<"y">>]),
+	false = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"x">>]),
+	true = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"z">>]),
+	true = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"x">>]),
+	false = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"z">>]),
+	%% Non existing zset
+	nil = erldis_client:sr_scall(Client,[<<"zrank">>,<<"nonexist">>,<<"x">>]),
+	nil = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"nonexist">>,<<"x">>]),
+	%% Against non zset
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrank">>,<<"string">>,<<"x">>]),
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"string">>,<<"x">>]),
+	%% Wrong numbers of arguments
+	ERR_NUM_ARGS_ZRANK = erldis_client:sr_scall(Client,[<<"zrank">>]),
+	ERR_NUM_ARGS_ZRANK = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>]),
+	ERR_NUM_ARGS_ZRANK = erldis_client:sr_scall(Client,[<<"zrank">>,<<"ztmp">>,<<"x">>,<<"z">>]),
+	ERR_NUM_ARGS_ZREVRANK = erldis_client:sr_scall(Client,[<<"zrevrank">>]),
+	ERR_NUM_ARGS_ZREVRANK = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>]),
+	ERR_NUM_ARGS_ZREVRANK = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"x">>,<<"z">>]).
