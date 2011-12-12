@@ -1376,7 +1376,7 @@ handle_call(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop | Options
             StopPos -> {ok,
                         case lists:member(with_scores, Options) of
                           true ->
-                            lists:flatmap(fun tuple_to_list/1, zsets:range(StartPos, StopPos, Value));
+                            lists:flatmap(fun edis_util:reverse_tuple_to_list/1, zsets:range(StartPos, StopPos, Value));
                           false ->
                             [Member || {_Score, Member} <- zsets:range(StartPos, StopPos, Value)]
                         end}
@@ -1472,7 +1472,7 @@ handle_call(#edis_command{cmd = <<"ZREVRANGE">>, args = [Key, Start, Stop | Opti
             StopPos -> {ok,
                         case lists:member(with_scores, Options) of
                           true ->
-                            lists:flatmap(fun tuple_to_list/1,
+                            lists:flatmap(fun edis_util:reverse_tuple_to_list/1,
                                           zsets:range(StartPos, StopPos, Value, backwards));
                           false ->
                             [Member || {_Score, Member} <- zsets:range(StartPos, StopPos, Value, backwards)]

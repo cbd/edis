@@ -10,8 +10,8 @@
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
-         integer_to_binary/1, binary_to_float/1, binary_to_float/2,
-         make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1]).
+         integer_to_binary/1, binary_to_float/1, binary_to_float/2, reverse_tuple_to_list/1,
+				 make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1]).
 
 -include("elog.hrl").
 
@@ -115,6 +115,10 @@ binary_to_float(Bin, Default) ->
 -spec integer_to_binary(binary()) -> integer().
 integer_to_binary(Int) ->
   list_to_binary(integer_to_list(Int)).
+
+-spec reverse_tuple_to_list({any(),any()}) -> [any()].
+reverse_tuple_to_list({F,S}) ->
+		[S,F].
 
 %% @doc returns a list of binary tuples. The first tuple contains the first pair of elements in the received list,
 %% the second tuple contains the second pair and so on. 
