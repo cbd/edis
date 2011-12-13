@@ -16,7 +16,7 @@
 -include("edis.hrl").
 -include("edis_bench.hrl").
 
--export([bench/1, bench/2, bench/4]).
+-export([bench/1, bench/2, bench/4, bench_all/0, bench_all/1, bench_all/3]).
 -export([all/0,
          init/1, init_per_testcase/2, init_per_round/3,
          quit/1, quit_per_testcase/2, quit_per_round/3]).
@@ -26,6 +26,33 @@
 %% ====================================================================
 %% External functions
 %% ====================================================================
+-spec bench_all() -> [{atom(), float()}].
+bench_all() ->
+  lists:map(fun(F) ->
+                    io:format("Benchmarking ~p...~n", [F]),
+                    Bench = bench(F),
+                    io:format("~n~n\t~p: ~p~n", [F, Bench]),
+                    {F, Bench}
+            end, all()).
+
+-spec bench_all([edis_bench:option()]) -> [{atom(), float()}].
+bench_all(Options) ->
+  lists:map(fun(F) ->
+                    io:format("Benchmarking ~p...~n", [F]),
+                    Bench = bench(F, Options),
+                    io:format("~n~n\t~p: ~p~n", [F, Bench]),
+                    {F, Bench}
+            end, all()).
+
+-spec bench_all(pos_integer(), pos_integer(), [edis_bench:option()]) -> [{atom(), float()}].
+bench_all(P1, P2, Options) ->
+  lists:map(fun(F) ->
+                    io:format("Benchmarking ~p...~n", [F]),
+                    Bench = bench(F, P1, P2, Options),
+                    io:format("~n~n\t~p: ~p~n", [F, Bench]),
+                    {F, Bench}
+            end, all()).
+
 -spec bench(atom()) -> ok.
 bench(Function) -> bench(Function, []).
 
@@ -47,7 +74,7 @@ bench(Function, P1, P2, Options) ->
 
 -spec all() -> [atom()].
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
-                 Fun =/= module_info].
+                 Fun =/= module_info, Fun =/= module_info, Fun =/= bench_all, Fun =/= bench].
 
 -spec init([pos_integer()]) -> ok.
 init([Port]) ->

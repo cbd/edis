@@ -76,7 +76,8 @@ bench(Function, P1, P2, Options) ->
 
 -spec all() -> [atom()].
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
-                 Fun =/= module_info, Fun =/= bench_all, Fun =/= bench].
+                 Fun =/= module_info, Fun =/= bench_all, Fun =/= bench, Fun =/= blpop_nothing,
+                 Fun =/= brpop_nothing].
 
 -spec init([pos_integer()]) -> ok.
 init([Port]) ->
@@ -134,23 +135,23 @@ quit_per_round(_, _Keys, [Port]) ->
 
 -spec blpop_nothing([binary()], pos_integer()) -> timeout.
 blpop_nothing(Keys, Port) ->
-  erldis:blpop(process(Port), Keys, 10).
+  erldis:blpop(process(Port), Keys ++ [1]).
 
--spec blpop([binary()], pos_integer()) -> undefined.
+-spec blpop([binary()], pos_integer()) -> [binary()].
 blpop(_Keys, Port) ->
-  erldis:blpop(process(Port), [?KEY], 1000).
+  erldis:blpop(process(Port), [?KEY, 1000]).
 
 -spec brpop_nothing([binary()], pos_integer()) -> timeout.
 brpop_nothing(Keys, Port) ->
-  erldis:brpop(process(Port), Keys, 10).
+  erldis:brpop(process(Port), Keys ++ [1]).
 
 -spec brpop([binary()], pos_integer()) -> undefined.
 brpop(_Keys, Port) ->
-  erldis:brpop(process(Port), [?KEY], 1000).
+  erldis:brpop(process(Port), [?KEY, 1000]).
 
 -spec brpoplpush([binary()], pos_integer()) -> undefined.
 brpoplpush(_Keys, Port) ->
-  erldis:brpoplpush(process(Port), [?KEY, <<(?KEY)/binary, "-2">>], 1000).
+  erldis:brpoplpush(process(Port), [?KEY, <<(?KEY)/binary, "-2">>, 1000], infinity).
 
 -spec lindex([binary()], pos_integer()) -> binary().
 lindex(Keys, Port) ->
@@ -202,7 +203,7 @@ lset([Key|_], Port) ->
 
 -spec ltrim([binary()], pos_integer()) -> ok.
 ltrim([Key|_], Port) ->
-  erldis:ltrim(process(Port), ?KEY, 0, edis_util:binary_to_integer(Key)).
+  erldis:ltrim(process(Port), ?KEY, edis_util:binary_to_integer(Key), -1).
 
 -spec rpop([binary()], pos_integer()) -> binary().
 rpop(_Keys, Port) ->

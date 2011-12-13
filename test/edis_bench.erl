@@ -73,7 +73,7 @@ bench({Module1, Function1, ExtraArgs1}, {Module2, Function2, ExtraArgs2}, Option
   RawResults2 = run(Module2, Function2, [{extra_args, ExtraArgs2}|Options]),
   RawResults = lists:zipwith(fun({K,V1}, {K,V2}) -> {K, V1, V2} end, RawResults1, RawResults2),
   graph(RawResults, Options),
-  Diffs = [(V1-V2)/V2 || {_K,V1,V2} <- RawResults, V1 /= 0, V2 /= 0],
+  Diffs = [(V1-V2)/V2 || {_K,V1,V2} <- remove_outliers(RawResults, Options), V1 /= 0, V2 /= 0],
   case proplists:get_bool(debug, Options) of
     true -> ?INFO("Diffs: ~p~n", [Diffs]);
     false -> ok
@@ -109,7 +109,7 @@ xlogarithmic(N) -> N * math:log(N) + 1.
 
 %% @doc O(e^n) comparer
 -spec exponential(pos_integer()) -> float().
-exponential(N) -> math:pow(2.71828182845904523536028747135266249775724709369995, N).
+exponential(N) -> math:pow(2.718281828459045, N).
 
 %% ====================================================================
 %% Internal functions
@@ -162,17 +162,7 @@ graph(Results, Options) ->
     true -> ?INFO("RawData:~n\t~p~n", [RawData]);
     false -> ok
   end,
-  SortedBy2 = lists:keysort(2, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
-  SortedBy3 = lists:keysort(3, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
-  Outliers =
-    [{K, error, M} || {K, error, M} <- RawData] ++ [{K, V, error} || {K, V, error} <- RawData] ++
-      lists:sublist(lists:reverse(SortedBy2), 1, erlang:trunc(proplists:get_value(outliers, Options, 20)/2) + 1) ++
-      lists:sublist(lists:reverse(SortedBy3), 1, erlang:trunc(proplists:get_value(outliers, Options, 20)/2) + 1),
-  Data =
-    [case lists:member({K,V,M}, Outliers) of
-       true -> {K, 0, M};
-       false -> {K, V, M}
-     end || {K,V,M} <- Results],
+  Data = remove_outliers(RawData, Options),
   Top = lists:max([erlang:max(V, M) || {_, V, M} <- Data]),
   Bottom = erlang:trunc(lists:min([erlang:min(V, M) || {_, V, M} <- Data, V > 0, M > 0]) / 2),
   Step = 
@@ -183,6 +173,18 @@ graph(Results, Options) ->
         (Top - Bottom) / proplists:get_value(rows, Options, 70)
     end,
   graph(Top, Bottom, Step, proplists:get_value(symbols, Options, #symbols{}), Data).
+
+remove_outliers(RawData, Options) ->
+    SortedBy2 = lists:keysort(2, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
+    SortedBy3 = lists:keysort(3, [{K, V, M} || {K, V, M} <- RawData, V =/= error, M =/= error]),
+    Outliers =
+      [{K, error, M} || {K, error, M} <- RawData] ++ [{K, V, error} || {K, V, error} <- RawData] ++
+        lists:sublist(lists:reverse(SortedBy2), 1, erlang:trunc(proplists:get_value(outliers, Options, 20) / 2) + 1) ++
+        lists:sublist(lists:reverse(SortedBy3), 1, erlang:trunc(proplists:get_value(outliers, Options, 20) / 2) + 1),
+    [case lists:member({K,V,M}, Outliers) of
+       true -> {K, 0, M};
+       false -> {K, V, M}
+     end || {K,V,M} <- RawData].
 
 graph(Top, Bottom, _Step, _Symbols, Data) when Top =< Bottom ->
   io:format("       ~s~n", [lists:duplicate(length(Data), $-)]),
