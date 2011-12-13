@@ -11,7 +11,8 @@
 -define(ERR_BAD_KEY, {error,<<"ERR Operation against a key holding the wrong kind of value">>}).
 
 all() -> [zadd,zincrby,zcard,zrem,zrange,
-					zrevrange,zrank_zrevrank].
+					zrevrange,zrank_zrevrank,zcount,
+					zrangebyscore_zrevrangebyscore].
 
 init_per_suite(Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -71,7 +72,18 @@ zincrby(Config) ->
 	{client,Client} = lists:keyfind(client, 1, Config),
 	ERR_NUM_ARGS = ?ERR_NUM_ARGS(<<"ZINCRBY">>),
 	%% Non existing zset
-	<<"5">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"nonexist">>,5,<<"xyz">>]),
+	<<"5">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"newzset">>,5,<<"xyz">>]),
+	[<<"xyz">>] = erldis_client:scall(Client,[<<"zrange">>,<<"newzset">>,0,-1]),
+	%% Increment and decrement
+	<<"2">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"zset">>,2,<<"foo">>]),
+	<<"1">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"zset">>,1,<<"bar">>]),
+	[<<"bar">>,<<"foo">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+	<<"11">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"zset">>,10,<<"bar">>]),
+	<<"-3">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"zset">>,-5,<<"foo">>]),
+	<<"6">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"zset">>,-5,<<"bar">>]),
+	[<<"foo">>,<<"bar">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+	<<"-3">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zset">>,<<"foo">>]),
+	<<"6">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zset">>,<<"bar">>]),
 	%% Element can't be set to NaN with ZINCRBY
 	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"nan">>,<<"x">>]),
 	%% ZINCRBY does not work variadic 
@@ -225,3 +237,97 @@ zrank_zrevrank(Config)->
 	ERR_NUM_ARGS_ZREVRANK = erldis_client:sr_scall(Client,[<<"zrevrank">>]),
 	ERR_NUM_ARGS_ZREVRANK = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>]),
 	ERR_NUM_ARGS_ZREVRANK = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"ztmp">>,<<"x">>,<<"z">>]).
+
+zcount(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ERR_NUM_ARGS = ?ERR_NUM_ARGS(<<"ZCOUNT">>),
+	7 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"myset">>,-50,<<"a">>,1,<<"b">>,
+																		 2,<<"c">>,3,<<"d">>,4,<<"e">>,5,<<"f">>,50,<<"g">>]),
+	%% Inclusive range
+	3 = erldis_client:sr_scall(Client,[<<"zcount">>,<<"myset">>,0,3]),
+	%% Exclusive range
+	2 = erldis_client:sr_scall(Client,[<<"zcount">>,<<"myset">>,<<"(0">>,<<"(3">>]),
+	%% Non existing zset
+	false = erldis_client:sr_scall(Client,[<<"zcount">>,<<"nonexist">>,0,3]),
+	%% Against non zset
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zcount">>,<<"string">>,0,3]),
+	%% Wrong numbers of arguments
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zcount">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zcount">>,<<"myset">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zcount">>,<<"myset">>,0]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zcount">>,<<"myset">>,0,1,2]).
+	
+zrangebyscore_zrevrangebyscore(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ERR_NUM_ARGS_ZRANGEBYSCORE = ?ERR_NUM_ARGS(<<"ZRANGEBYSCORE">>),
+	ERR_NUM_ARGS_ZREVRANGEBYSCORE = ?ERR_NUM_ARGS(<<"ZREVRANGEBYSCORE">>),
+	7 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"myset">>,-50,<<"a">>,1,<<"b">>,
+																		 2,<<"c">>,3,<<"d">>,4,<<"e">>,5,<<"f">>,50,<<"g">>]),
+	%% Inclusive range
+ 	[<<"a">>,<<"b">>,<<"c">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"-inf">>,2]),
+	[<<"b">>,<<"c">>,<<"d">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,0,3]),
+	[<<"d">>,<<"e">>,<<"f">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,3,6]),
+	[<<"e">>,<<"f">>,<<"g">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,4,<<"+inf">>]),
+	[<<"c">>,<<"b">>,<<"a">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,2,<<"-inf">>]),
+	[<<"d">>,<<"c">>,<<"b">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,3,0]),
+	[<<"f">>,<<"e">>,<<"d">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,6,3]),
+	[<<"g">>,<<"f">>,<<"e">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"+inf">>,4]),
+	%% Exclusive range
+	[<<"a">>,<<"b">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(-inf">>,<<"(2">>]),
+	[<<"b">>,<<"c">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(0">>,<<"(3">>]),
+	[<<"e">>,<<"f">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(3">>,<<"(6">>]),
+	[<<"f">>,<<"g">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(4">>,<<"(inf">>]),
+	[<<"b">>,<<"a">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"(2">>,<<"(-inf">>]),
+	[<<"c">>,<<"b">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"(3">>,<<"(0">>]),
+	[<<"f">>,<<"e">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"(6">>,<<"(3">>]),
+	[<<"g">>,<<"f">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"(inf">>,<<"(4">>]),
+	%% Empty ranges - Inclusive
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,4,2]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,51,<<"inf">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"-inf">>,-51]),
+	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"+inf">>,51]),
+	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,-51,<<"-inf">>]),
+	%% Empty ranges - Exclusive
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(4">>,<<"(2">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"2">>,<<"(2">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(2">>,<<"2">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(50">>,<<"(inf">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(-inf">>,<<"(-51">>]),
+	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"(+inf">>,<<"(51">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(-51">>,<<"(-inf">>]),
+	%% Empty inner range
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,2.4,2.6]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(2.4">>,2.6]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,2.4,<<"(2.6">>]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"(2.4">>,<<"(2.6">>]),
+	%% With WITHSCORES
+	[<<"b">>,<<"1">>,<<"c">>,<<"2">>,<<"d">>,<<"3">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,0,3,<<"withscores">>]),
+	[<<"d">>,<<"3">>,<<"c">>,<<"2">>,<<"b">>,<<"1">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,3,0,<<"withscores">>]),
+	%% With LIMIT
+	[<<"b">>,<<"c">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,0,10,<<"LIMIT">>,0,2]),
+	[<<"d">>,<<"e">>,<<"f">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,0,10,<<"LIMIT">>,2,3]),
+	[<<"d">>,<<"e">>,<<"f">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,0,10,<<"LIMIT">>,2,10]),
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,0,10,<<"LIMIT">>,20,10]),
+	[<<"f">>,<<"e">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,10,0,<<"LIMIT">>,0,2]),
+	[<<"d">>,<<"c">>,<<"b">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,10,0,<<"LIMIT">>,2,3]),
+	[<<"d">>,<<"c">>,<<"b">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,10,0,<<"LIMIT">>,2,10]),
+	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,10,0,<<"LIMIT">>,20,10]),
+	%% With LIMIT and WITHSCORES
+	[<<"e">>,<<"4">>,<<"f">>,<<"5">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,2,5,<<"LIMIT">>,2,3,<<"withscores">>]),
+	[<<"d">>,<<"3">>,<<"c">>,<<"2">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,5,2,<<"LIMIT">>,2,3,<<"withscores">>]),
+	%% Non existing zset
+	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"nonexist">>,2,5]),
+	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"nonexist">>,5,2]),
+	%% Against non zset
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"string">>,0,3]),
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"string">>,0,3]),
+	%% Syntax error
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>,2,4,8]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,2,4,8]),
+	%% Wrong numbers of arguments
+	ERR_NUM_ARGS_ZRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>]),
+	ERR_NUM_ARGS_ZRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>]),
+	ERR_NUM_ARGS_ZRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>,2]),
+	ERR_NUM_ARGS_ZREVRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>]),
+	ERR_NUM_ARGS_ZREVRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>]),
+	ERR_NUM_ARGS_ZREVRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,2]).
