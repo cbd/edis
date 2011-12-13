@@ -930,11 +930,17 @@ tcp_send(Message, State) ->
 parse_float_limit(Bin) ->
   do_parse_float_limit(edis_util:lower(Bin)).
 
+do_parse_float_limit(<<"(-inf">>) -> neg_infinity;
 do_parse_float_limit(<<"-inf">>) -> neg_infinity;
+do_parse_float_limit(<<"(inf">>) -> infinity;
 do_parse_float_limit(<<"inf">>) -> infinity;
+do_parse_float_limit(<<"(+inf">>) -> infinity;
 do_parse_float_limit(<<"+inf">>) -> infinity;
+do_parse_float_limit(<<"(-infinity">>) -> neg_infinity;
 do_parse_float_limit(<<"-infinity">>) -> neg_infinity;
+do_parse_float_limit(<<"(infinity">>) -> infinity;
 do_parse_float_limit(<<"infinity">>) -> infinity;
+do_parse_float_limit(<<"(+infinity">>) -> infinity;
 do_parse_float_limit(<<"+infinity">>) -> infinity;
 do_parse_float_limit(<<$(, Rest/binary>>) -> {exc, edis_util:binary_to_float(Rest)};
 do_parse_float_limit(Bin) -> {inc, edis_util:binary_to_float(Bin)}.
@@ -1014,7 +1020,7 @@ parse_zrange_command(C) ->
       _ ->
         throw(syntax)
     end,
-  C#edis_command{args = [Key, parse_float_limit(Min), parse_float_limit(Max), ShowScores, Limit]}.
+  C#edis_command{args = [Key, parse_float_limit(Min), parse_float_limit(Max), ShowScores, Limit], group = zsets, result_type = zrange}.
 
 tcp_zrange(Range, ShowScores, Limit, State) ->
   Reply =
