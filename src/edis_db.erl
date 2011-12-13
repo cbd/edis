@@ -1392,7 +1392,7 @@ handle_call(#edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [Key, Min, Max | _Op
   Reply =
     case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value)};
-      not_found -> {ok, 0};
+      not_found -> {ok, []};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, read, State)};
@@ -1489,7 +1489,7 @@ handle_call(#edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [Key, Min, Max | 
   Reply =
     case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value, backwards)};
-      not_found -> {ok, 0};
+      not_found -> {ok, []};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, read, State)};
