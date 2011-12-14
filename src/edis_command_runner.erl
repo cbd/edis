@@ -470,7 +470,7 @@ parse_command(#edis_command{cmd = <<"ZINCRBY">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZINTERSTORE">>, args = [_Destination, _NumKeys | _Rest]}) -> parse_zstore_command(C);
 parse_command(#edis_command{cmd = <<"ZINTERSTORE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}) ->
-  C#edis_command{args = [Key, edis_util:binary_to_integer(Start, 0), edis_util:binary_to_integer(Stop, 0)],result_type=multi_bulk, group=zsets};
+  C#edis_command{args = [Key, edis_util:binary_to_integer(Start), edis_util:binary_to_integer(Stop)],result_type=multi_bulk, group=zsets};
 parse_command(C = #edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop, Option]}) ->
   case edis_util:upper(Option) of
     <<"WITHSCORES">> -> 
@@ -488,7 +488,7 @@ parse_command(C = #edis_command{cmd = <<"ZREM">>, args = [_Key, _Member | _Membe
   C#edis_command{result_type=number, group=zsets};
 parse_command(#edis_command{cmd = <<"ZREM">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [Key, Start, Stop]}) ->
-  C#edis_command{args = [Key, edis_util:binary_to_integer(Start, 0), edis_util:binary_to_integer(Stop, 0)],result_type=number,group=zsets};
+  C#edis_command{args = [Key, edis_util:binary_to_integer(Start), edis_util:binary_to_integer(Stop)],result_type=number,group=zsets};
 parse_command(#edis_command{cmd = <<"ZREMRANGEBYRANK">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [Key, Min, Max]}) -> 
   try

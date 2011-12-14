@@ -1432,9 +1432,9 @@ handle_call(#edis_command{cmd = <<"ZREM">>, args = [Key | Members]}, _From, Stat
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [Key, Start, Stop]}, From, State) ->
   case handle_call(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}, From, State) of
-    {reply, {ok, SMs}, NewState} ->
+    {reply, {ok, Members}, NewState} ->
       handle_call(#edis_command{cmd = <<"ZREM">>,
-                                args = [Key | [Member || {_Score, Member} <- SMs]]}, From, NewState);
+                                args = [Key | Members]}, From, NewState);
     OtherReply ->
       OtherReply
   end;
@@ -1442,7 +1442,7 @@ handle_call(#edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [Key, Min, Max]},
   case handle_call(#edis_command{cmd = <<"ZRANGEBYSCORE">>,
                                  args = [Key, Min, Max]}, From, State) of
     {reply, {ok, SMs}, NewState} ->
-      handle_call(#edis_command{cmd = <<"ZREM">>,
+			handle_call(#edis_command{cmd = <<"ZREM">>,
                                 args = [Key | [Member || {_Score, Member} <- SMs]]}, From, NewState);
     OtherReply ->
       OtherReply
