@@ -979,7 +979,7 @@ parse_zstore_command(C) ->
             {try lists:map(fun edis_util:binary_to_float/1, Rest2)
              catch
                _:not_float ->
-                 throw({not_float, "weight"})
+                 throw({not_float, "weight value"})
              end, sum};
           {NK, R2L} when R2L == NK + 1 ->
             throw(syntax);
@@ -987,7 +987,7 @@ parse_zstore_command(C) ->
             {try lists:map(fun edis_util:binary_to_float/1, lists:sublist(Rest2, 1, NK))
              catch
                _:not_float ->
-                 throw({not_float, "weight"})
+                 throw({not_float, "weight value"})
              end,
              case lists:nthtail(NK, Rest2) of
                [<<"AGGREGATE">>, <<"SUM">>] -> sum;

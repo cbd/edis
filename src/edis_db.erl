@@ -1521,8 +1521,12 @@ handle_call(#edis_command{cmd = <<"ZUNIONSTORE">>, args = [Destination, Weighted
   Reply =
     try weighted_union(
           Aggregate,
-          [case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
-              #edis_item{value = Value} -> {Value, Weight};
+          [case get_item(State#state.backend_mod, State#state.backend_ref, [zset,set], Key) of
+              #edis_item{value = Value, type = set} -> 
+									ZValue = zset_from_set(Value),
+									{ZValue, Weight};
+							#edis_item{value = Value} -> 
+									{Value, Weight};
               not_found -> {zsets:new(), 0.0};
               {error, Reason} -> throw(Reason)
             end || {Key, Weight} <- WeightedKeys]) of
@@ -1815,6 +1819,12 @@ update(Mod, Ref, Key, Type, Encoding, Fun, Default) ->
       ?ERROR("~p~n", [Error]),
       {error, Error}
   end.
+
+%% @private
+zset_from_set(Set) ->
+		gb_sets:fold(fun(Member,Zset) ->
+										zsets:enter({1,Member}, Zset)
+								 end, zsets:new(),Set).
 
 %% @private
 key_at(Mod, Ref, 0) ->

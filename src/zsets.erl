@@ -253,9 +253,9 @@ union(Aggregate, [], [{M, S2} | D2], Acc) ->
   union(Aggregate, [], D2, enter(Aggregate(undefined, S2), M, Acc));
 union(Aggregate, [{M, S1} | D1], [{M, S2} | D2], Acc) ->
   union(Aggregate, D1, D2, enter(Aggregate(S1, S2), M, Acc));
-union(Aggregate, [{M1, S1} | D1], [{M2, S2} | D2], Acc) when M1 < M2 ->
+union(Aggregate, [{M1, S1} | D1], [{M2, S2} | D2], Acc) when M1 > M2 ->
   union(Aggregate, D1, [{M2, S2} | D2], enter(Aggregate(S1, undefined), M1, Acc));
-union(Aggregate, [{M1, S1} | D1], [{M2, S2} | D2], Acc) when M1 >= M2 ->
+union(Aggregate, [{M1, S1} | D1], [{M2, S2} | D2], Acc) when M1 =< M2 ->
   union(Aggregate, [{M1, S1} | D1], D2, enter(Aggregate(undefined, S2), M2, Acc)).
 
 %% @private
