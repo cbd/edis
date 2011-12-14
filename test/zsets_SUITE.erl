@@ -10,6 +10,7 @@
 -define(ERR_MIN_MAX_NOTDOUBLE, {error,<<"ERR min or max is not a double">>}).
 -define(ERR_SYNTAX, {error,<<"ERR syntax error">>}).
 -define(ERR_BAD_KEY, {error,<<"ERR Operation against a key holding the wrong kind of value">>}).
+-define(ERR_NOT_INTEGER, {error,<<"ERR value is not an integer or out of range">>}).
 
 all() -> [zadd,zincrby,zcard,zrem,zrange,
 					zrevrange,zrank_zrevrank,zcount,
@@ -167,6 +168,8 @@ zrange(Config)->
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrange">>,<<"string">>,0,-1]),
 	%% Syntax error
 	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zrange">>,<<"ztmp">>,0,-1,<<"withoutscores">>]),
+	?ERR_NOT_INTEGER = erldis_client:sr_scall(Client,[<<"zrange">>,<<"ztmp">>,0,<<"two">>]),
+	?ERR_NOT_INTEGER = erldis_client:sr_scall(Client,[<<"zrange">>,<<"ztmp">>,<<"one">>,4]),
 	%% Wrong numbers of arguments
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zrange">>]),
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zrange">>,<<"ztmp">>]),
@@ -431,8 +434,8 @@ zremrangebyrank(Config)->
   5 = remrangebyrank(Client,0,4),
   false = erldis_client:sr_scall(Client,[<<"exists">>,<<"zset">>]),    
 	%% With non-value min or max
-	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,<<"one">>,4]),
-	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,1,<<"four">>]),
+	?ERR_NOT_INTEGER = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,<<"one">>,4]),
+	?ERR_NOT_INTEGER = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,1,<<"four">>]),
 	%% Non existing zset
 	false = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"nonexist">>,2,5]),
 	%% Against non zset
