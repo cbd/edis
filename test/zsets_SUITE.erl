@@ -11,11 +11,13 @@
 -define(ERR_SYNTAX, {error,<<"ERR syntax error">>}).
 -define(ERR_BAD_KEY, {error,<<"ERR Operation against a key holding the wrong kind of value">>}).
 -define(ERR_NOT_INTEGER, {error,<<"ERR value is not an integer or out of range">>}).
-
+-define(ERR_KEY_NEEDED,{error, <<"ERR at least 1 input key is needed for ZUNIONSTORE/ZINTERSTORE">>}).
+-define(ERR_WEIGHT_VALUE,{error,<<"ERR weight value is not a double">>}).
 all() -> [zadd,zincrby,zcard,zrem,zrange,
 					zrevrange,zrank_zrevrank,zcount,
 					zrangebyscore_zrevrangebyscore,
-					zremrangebyscore,zremrangebyrank].
+					zremrangebyscore,zremrangebyrank,
+					zunionstore].
 
 init_per_suite(Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -446,3 +448,66 @@ zremrangebyrank(Config)->
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,2]),
 	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,3,5,8]).
 
+zunionstore(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ERR_NUM_ARGS = ?ERR_NUM_ARGS(<<"ZUNIONSTORE">>),
+	%% Against non-existing key doesn't set destination 
+  false = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"dst_key">>,1,<<"zseta">>]),
+  false = erldis_client:sr_scall(Client,[<<"exists">>,<<"dst_key">>]),
+	%% With empty set
+	2 =	erldis_client:sr_scall(Client,[<<"zadd">>,<<"zseta">>,1,<<"a">>,2,<<"b">>]),
+  2 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>]),
+	[<<"a">>,<<"1">>,<<"b">>,<<"2">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% Basics	
+	2 = erldis_client:sr_scall(Client,[<<"del">>,<<"zsetc">>,<<"zseta">>,<<"zsetb">>]),
+	3 =	erldis_client:sr_scall(Client,[<<"zadd">>,<<"zseta">>,1,<<"a">>,2,<<"b">>,3,<<"c">>]),
+	3 =	erldis_client:sr_scall(Client,[<<"zadd">>,<<"zsetb">>,1,<<"b">>,2,<<"c">>,3,<<"d">>]),
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>]),
+	[<<"a">>,<<"1">>,<<"b">>,<<"3">>,<<"d">>,<<"3">>,<<"c">>,<<"5">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% With weights
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,2,3]),
+ [<<"a">>,<<"2">>,<<"b">>,<<"7">>,<<"d">>,<<"9">>,<<"c">>,<<"12">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% With a regular set and weights
+	3 =	erldis_client:sr_scall(Client,[<<"sadd">>,<<"seta">>,<<"a">>,<<"b">>,<<"c">>]),
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"seta">>,<<"zsetb">>,<<"weights">>,2,3]),
+	[<<"a">>,<<"2">>,<<"b">>,<<"5">>,<<"c">>,<<"8">>,<<"d">>,<<"9">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% With AGGREGATE MIN
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"aggregate">>,<<"min">>]),
+	[<<"a">>,<<"1">>,<<"b">>,<<"1">>,<<"c">>,<<"2">>,<<"d">>,<<"3">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% With AGGREGATE MAX
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"aggregate">>,<<"max">>]),
+  [<<"a">>,<<"1">>,<<"b">>,<<"2">>,<<"c">>,<<"3">>,<<"d">>,<<"3">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% With WEIGHTS and AGGREGATE MIN
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,2,3,<<"aggregate">>,<<"min">>]),
+  [<<"a">>,<<"2">>,<<"b">>,<<"3">>,<<"c">>,<<"6">>,<<"d">>,<<"9">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,4,3,<<"aggregate">>,<<"min">>]),
+  [<<"b">>,<<"3">>,<<"a">>,<<"4">>,<<"c">>,<<"6">>,<<"d">>,<<"9">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% With WEIGHTS and AGGREGATE MAX
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,2,3,<<"aggregate">>,<<"max">>]),
+  [<<"a">>,<<"2">>,<<"b">>,<<"4">>,<<"c">>,<<"6">>,<<"d">>,<<"9">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,4,3,<<"aggregate">>,<<"max">>]),
+  [<<"a">>,<<"4">>,<<"b">>,<<"8">>,<<"d">>,<<"9">>,<<"c">>,<<"12">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"zsetc">>,0,-1,<<"withscores">>]),
+	%% Against non zset key
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"string">>,<<"zsetb">>]),
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"string">>]),
+	%% Against non zset destination - Should work
+	4 = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"string">>,2,<<"zseta">>,<<"zsetb">>]),
+	[<<"a">>,<<"1">>,<<"b">>,<<"3">>,<<"d">>,<<"3">>,<<"c">>,<<"5">>] =	erldis_client:scall(Client,[<<"zrange">>,<<"string">>,0,-1,<<"withscores">>]),
+	%% Syntax error
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,1,<<"zseta">>,<<"zsetb">>]),
+	?ERR_KEY_NEEDED = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,<<"zseta">>,1,<<"zsetb">>]),
+	?ERR_KEY_NEEDED = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,<<"zseta">>,2]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,2]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,2,3,4]),
+	?ERR_WEIGHT_VALUE = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,2,<<"four">>]),
+	?ERR_WEIGHT_VALUE = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"weights">>,<<"two">>,4]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"aggregate">>]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"aggregate">>,<<"average">>]),
+	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"zsetb">>,<<"aggregate">>,<<"min">>,<<"max">>]),
+	%% Wrong numbers of arguments
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zunionstore">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,<<"zseta">>]).
