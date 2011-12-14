@@ -7,12 +7,14 @@
 
 -define(ERR_NUM_ARGS(Command), {error,<<"ERR wrong number of arguments for '",Command/binary,"' command">>}).
 -define(ERR_NOTDOUBLE, {error,<<"ERR value is not a double">>}).
+-define(ERR_MIN_MAX_NOTDOUBLE, {error,<<"ERR min or max is not a double">>}).
 -define(ERR_SYNTAX, {error,<<"ERR syntax error">>}).
 -define(ERR_BAD_KEY, {error,<<"ERR Operation against a key holding the wrong kind of value">>}).
 
 all() -> [zadd,zincrby,zcard,zrem,zrange,
 					zrevrange,zrank_zrevrank,zcount,
-					zrangebyscore_zrevrangebyscore].
+					zrangebyscore_zrevrangebyscore,
+					zremrangebyscore,zremrangebyrank].
 
 init_per_suite(Config) ->
 	{ok,Client} = connect_erldis(10),
@@ -324,6 +326,10 @@ zrangebyscore_zrevrangebyscore(Config)->
 	%% Syntax error
 	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>,2,4,8]),
 	?ERR_SYNTAX = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,2,4,8]),
+	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>,<<"two">>,4]),
+	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>,2,<<"four">>]),
+	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,<<"two">>,4]),
+	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,2,<<"four">>]),
 	%% Wrong numbers of arguments
 	ERR_NUM_ARGS_ZRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>]),
 	ERR_NUM_ARGS_ZRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrangebyscore">>,<<"myset">>]),
@@ -331,3 +337,109 @@ zrangebyscore_zrevrangebyscore(Config)->
 	ERR_NUM_ARGS_ZREVRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>]),
 	ERR_NUM_ARGS_ZREVRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>]),
 	ERR_NUM_ARGS_ZREVRANGEBYSCORE = erldis_client:sr_scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,2]).
+
+%% Creates a default zset and runs the command zremrangebyscore on it.
+-spec remrangebyscore(pid(),integer()|binary(),integer()|binary()) -> integer()|boolean().
+remrangebyscore(Client,Min,Max) ->	
+	erldis_client:sr_scall(Client,[<<"del">>,<<"zset">>]),
+	erldis_client:sr_scall(Client,[<<"zadd">>,<<"zset">>,1,<<"a">>,2,<<"b">>,
+																 3,<<"c">>,4,<<"d">>,5,<<"e">>]),
+	true = erldis_client:sr_scall(Client,[<<"exists">>,<<"zset">>]),
+	erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"zset">>,Min,Max]).
+
+zremrangebyscore(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ERR_NUM_ARGS = ?ERR_NUM_ARGS(<<"ZREMRANGEBYSCORE">>),
+	%% Inner range
+  3 = remrangebyscore(Client,2,4),
+  [<<"a">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+	%% Start underflow
+	true = remrangebyscore(Client,-10,1),
+  [<<"b">>,<<"c">>,<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% End overflow
+  true = remrangebyscore(Client,5,10),
+  [<<"a">>,<<"b">>,<<"c">>,<<"d">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% Switch min and max
+  false = remrangebyscore(Client,4,2),
+  [<<"a">>,<<"b">>,<<"c">>,<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+	%% -inf to mid
+	3 = remrangebyscore(Client,<<"-inf">>,3),
+  [<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% Mid to +inf
+  3 = remrangebyscore(Client,3,<<"+inf">>),
+  [<<"a">>,<<"b">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% -inf to +inf
+  5 = remrangebyscore(Client,<<"-inf">>,<<"+inf">>),
+  [] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),  
+  %% Exclusive min
+  4 = remrangebyscore(Client,<<"(1">>,5),
+  [<<"a">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+	3 = remrangebyscore(Client,<<"(2">>,5),
+  [<<"a">>,<<"b">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% Exclusive max
+	4 = remrangebyscore(Client,1,<<"(5">>),
+  [<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  3 = remrangebyscore(Client,1,<<"(4">>),
+  [<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% Exclusive min and max
+  3 = remrangebyscore(Client,<<"(1">>,<<"(5">>),
+  [<<"a">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),    
+  %% Destroy when empty
+	5 = remrangebyscore(Client,1,5),
+  false = erldis_client:sr_scall(Client,[<<"exists">>,<<"zset">>]),
+	%% With non-value min or max
+	?ERR_MIN_MAX_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"zset">>,<<"one">>,4]),
+	?ERR_MIN_MAX_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"zset">>,1,<<"four">>]),
+	%% Non existing zset
+	false = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"nonexist">>,2,5]),
+	%% Against non zset
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"string">>,0,3]),
+	%% Wrong numbers of arguments
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"zset">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"zset">>,2]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyscore">>,<<"zset">>,3,5,8]).
+
+%% Creates a default zset and runs the command zremrangebyrank on it.
+-spec remrangebyrank(pid(),integer()|binary(),integer()|binary()) -> integer()|boolean().
+remrangebyrank(Client,Min,Max) ->	
+	erldis_client:sr_scall(Client,[<<"del">>,<<"zset">>]),
+	erldis_client:sr_scall(Client,[<<"zadd">>,<<"zset">>,1,<<"a">>,2,<<"b">>,
+																 3,<<"c">>,4,<<"d">>,5,<<"e">>]),
+	true = erldis_client:sr_scall(Client,[<<"exists">>,<<"zset">>]),
+	erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,Min,Max]).
+
+zremrangebyrank(Config)->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	ERR_NUM_ARGS = ?ERR_NUM_ARGS(<<"ZREMRANGEBYRANK">>),
+	%% Inner range
+  3 = remrangebyrank(Client,1,3),
+  [<<"a">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% Start underflow
+	true = remrangebyrank(Client,-10,0),
+  [<<"b">>,<<"c">>,<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% Start overflow
+  false = remrangebyrank(Client,10,-1),
+  [<<"a">>,<<"b">>,<<"c">>,<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+	%% End underflow
+	false = remrangebyrank(Client,0,-10),
+  [<<"a">>,<<"b">>,<<"c">>,<<"d">>,<<"e">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
+  %% End overflow
+  5 = remrangebyrank(Client,0,10),
+  [] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),    
+  %% Destroy when empty
+  5 = remrangebyrank(Client,0,4),
+  false = erldis_client:sr_scall(Client,[<<"exists">>,<<"zset">>]),    
+	%% With non-value min or max
+	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,<<"one">>,4]),
+	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,1,<<"four">>]),
+	%% Non existing zset
+	false = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"nonexist">>,2,5]),
+	%% Against non zset
+	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"string">>,0,3]),
+	%% Wrong numbers of arguments
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,2]),
+	ERR_NUM_ARGS = erldis_client:sr_scall(Client,[<<"zremrangebyrank">>,<<"zset">>,3,5,8]).
+
