@@ -467,7 +467,7 @@ parse_command(#edis_command{cmd = <<"ZCOUNT">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZINCRBY">>, args = [Key, Increment, Member]}) -> 
   C#edis_command{args = [Key, edis_util:binary_to_float(Increment), Member],result_type=float, group=zsets};
 parse_command(#edis_command{cmd = <<"ZINCRBY">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"ZINTERSTORE">>, args = [_Destination, _NumKeys | _Rest]}) -> parse_zstore_command(C);
+parse_command(C = #edis_command{cmd = <<"ZINTERSTORE">>, args = [_Destination, _NumKeys , _FirstKey | _Rest]}) -> parse_zstore_command(C);
 parse_command(#edis_command{cmd = <<"ZINTERSTORE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}) ->
   C#edis_command{args = [Key, edis_util:binary_to_integer(Start), edis_util:binary_to_integer(Stop)],result_type=multi_bulk, group=zsets};
@@ -515,7 +515,7 @@ parse_command(#edis_command{cmd = <<"ZREVRANK">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZSCORE">>, args = [_Key, _Member]}) -> 
   C#edis_command{result_type=float, group=zsets};
 parse_command(#edis_command{cmd = <<"ZSCORE">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"ZUNIONSTORE">>, args = [_Destination, _NumKeys | _Rest]}) -> parse_zstore_command(C);
+parse_command(C = #edis_command{cmd = <<"ZUNIONSTORE">>, args = [_Destination, _NumKeys, _FirstKey | _Rest ]}) -> parse_zstore_command(C);
 parse_command(#edis_command{cmd = <<"ZUNIONSTORE">>}) -> throw(bad_arg_num);
 %% -- Server ---------------------------------------------------------------------------------------
 parse_command(C = #edis_command{cmd = <<"CONFIG">>, args = [SubCommand | Rest]}) ->
