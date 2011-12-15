@@ -1323,8 +1323,11 @@ handle_call(#edis_command{cmd = <<"ZINTERSTORE">>, args = [Destination, Weighted
   Reply =
     try weighted_intersection(
           Aggregate,
-          [case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
-              #edis_item{value = Value} -> {Value, Weight};
+          [case get_item(State#state.backend_mod, State#state.backend_ref, [zset,set], Key) of
+              #edis_item{value = Value, type = set} -> 
+									ZValue = zset_from_set(Value),
+									{ZValue, Weight};
+							#edis_item{value = Value} -> {Value, Weight};
               not_found -> throw(empty);
               {error, Reason} -> throw(Reason)
             end || {Key, Weight} <- WeightedKeys]) of
