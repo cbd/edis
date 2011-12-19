@@ -1,5 +1,8 @@
 -include("elog.hrl").
 
+-define(POS_INFINITY,1.7976931348623157e308).
+-define(NEG_INFINITY,-1.7976931348623157e308).
+
 -type edis_sort_field() :: self | binary() | {binary(), binary()}.
 -record(edis_sort_options, {by = self         :: edis_sort_field(),
                             limit = undefined :: undefined | {integer(), integer()},

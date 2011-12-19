@@ -13,7 +13,7 @@
          integer_to_binary/1, binary_to_float/1, binary_to_float/2, reverse_tuple_to_list/1,
 				 make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1]).
 
--include("elog.hrl").
+-include("edis.hrl").
 
 -define(EPOCH, 62167219200).
 
@@ -70,17 +70,26 @@ binary_to_integer(Bin) ->
   end.
 
 %% @doc returns a float whose binary representation is Bin
--spec binary_to_float(binary()) -> integer().
+-spec binary_to_float(binary()) -> float().
 binary_to_float(Bin) ->
-  try list_to_float(binary_to_list(Bin))
-  catch
-    _:badarg ->
-      try 1.0 * list_to_integer(binary_to_list(Bin))
-      catch
-        _:badarg ->
-          throw(not_float)
-      end
-  end.
+		case lower(Bin) of
+				<<"inf">>  -> ?POS_INFINITY;
+				<<"infinity">>  -> ?POS_INFINITY;
+				<<"+infinity">>  -> ?POS_INFINITY;
+				<<"+inf">> -> ?POS_INFINITY;
+				<<"-inf">> -> ?NEG_INFINITY;
+				<<"-infinity">>  -> ?NEG_INFINITY;
+				_ ->
+						try list_to_float(binary_to_list(Bin))
+						catch
+								_:badarg ->
+										try 1.0 * list_to_integer(binary_to_list(Bin))
+										catch
+												_:badarg ->
+														throw(not_float)
+										end
+						end
+		end.
 
 %% @doc returns an integer whose binary representation is Bin.
 %% If Bin is not a integer, Default is returned

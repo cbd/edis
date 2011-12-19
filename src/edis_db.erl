@@ -1405,7 +1405,7 @@ handle_call(#edis_command{cmd = <<"ZRANK">>, args = [Key, Member]}, _From, State
       #edis_item{value = Value} ->
         case zsets:find(Member, Value) of
           error -> {ok, undefined};
-          {ok, Score} -> {ok, zsets:count(neg_infinity, {exc, Score}, Value)}
+          {ok, Score} -> {ok, zsets:count({inc,?NEG_INFINITY}, {exc, Score}, Value)}
         end;
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
@@ -1502,7 +1502,7 @@ handle_call(#edis_command{cmd = <<"ZREVRANK">>, args = [Key, Member]}, _From, St
       #edis_item{value = Value} ->
         case zsets:find(Member, Value) of
           error -> {ok, undefined};
-          {ok, Score} -> {ok, zsets:count(infinity, {exc, Score}, Value, backwards)}
+          {ok, Score} -> {ok, zsets:count({inc,?POS_INFINITY}, {exc, Score}, Value, backwards)}
         end;
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}

@@ -9,11 +9,11 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
--record(zset, {dict :: dict(),
+-record(zset, {dict :: dict(),							 
                tree :: edis_gb_trees:edis_gb_tree()}).
 -opaque zset(_Scores, _Members) :: #zset{}.
 
--type limit(Scores) :: neg_infinity | infinity | {exc, Scores} | {inc, Scores}.
+-type limit(Scores) :: {exc, Scores} | {inc, Scores}.
 -type aggregate() :: sum | max | min.
 -export_type([limit/1, aggregate/0]).
 
@@ -210,26 +210,18 @@ range(Start, Stop, {Score, Member, Iter}, Pos, Acc) when Pos =< Stop ->
 range(_, _, _, _, Acc) -> Acc.
 
 %% @private
-check_limit(min, neg_infinity, _, forward) -> in;
-check_limit(min, infinity, _, forward) -> out;
 check_limit(min, {exc, Min}, Score, forward) when Min < Score -> in;
 check_limit(min, {exc, Min}, Score, forward) when Min >= Score -> out;
 check_limit(min, {inc, Min}, Score, forward) when Min =< Score -> in;
 check_limit(min, {inc, Min}, Score, forward) when Min > Score -> out;
-check_limit(max, neg_infinity, _, forward) -> out;
-check_limit(max, infinity, _, forward) -> in;
 check_limit(max, {exc, Max}, Score, forward) when Max > Score -> in;
 check_limit(max, {exc, Max}, Score, forward) when Max =< Score -> out;
 check_limit(max, {inc, Max}, Score, forward) when Max >= Score -> in;
 check_limit(max, {inc, Max}, Score, forward) when Max < Score -> out;
-check_limit(min, neg_infinity, _, backwards) -> out;
-check_limit(min, infinity, _, backwards) -> in;
 check_limit(min, {exc, Min}, Score, backwards) when Min > Score -> in;
 check_limit(min, {exc, Min}, Score, backwards) when Min =< Score -> out;
 check_limit(min, {inc, Min}, Score, backwards) when Min >= Score -> in;
 check_limit(min, {inc, Min}, Score, backwards) when Min < Score -> out;
-check_limit(max, neg_infinity, _, backwards) -> in;
-check_limit(max, infinity, _, backwards) -> out;
 check_limit(max, {exc, Max}, Score, backwards) when Max < Score -> in;
 check_limit(max, {exc, Max}, Score, backwards) when Max >= Score -> out;
 check_limit(max, {inc, Max}, Score, backwards) when Max =< Score -> in;
