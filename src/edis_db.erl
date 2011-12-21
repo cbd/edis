@@ -1307,18 +1307,23 @@ handle_call(#edis_command{cmd = <<"ZCOUNT">>, args = [Key, Min, Max]}, _From, St
     end,
   {reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"ZINCRBY">>, args = [Key, Increment, Member]}, _From, State) ->
-  Reply =
-    update(State#state.backend_mod, State#state.backend_ref, Key, zset, skiplist,
-           fun(Item) ->
-                   NewScore =
-                     case zsets:find(Member, Item#edis_item.value) of
-                       error -> Increment;
-                       {ok, Score} -> Score + Increment
-                     end,
-                   {NewScore, 
-                    Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
-           end, zsets:new()),
-  {reply, Reply, stamp(Key, read, State)};
+		Reply =
+				update(State#state.backend_mod, State#state.backend_ref, Key, zset, skiplist,
+							 fun(Item) ->
+											 NewScore =
+													 case zsets:find(Member, Item#edis_item.value) of
+															 error -> Increment;
+															 {ok, Score} -> 	
+																	 case {Score,Increment} of
+																			 {?POS_INFINITY,?NEG_INFINITY} -> throw(nan_result);
+																			 {?NEG_INFINITY,?POS_INFINITY} -> throw(nan_result);
+																			 {_,_} -> edis_util:sum(Score, Increment)
+																	 end
+													 end,
+											 {NewScore, 
+												Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
+							 end, zsets:new()),
+		{reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"ZINTERSTORE">>, args = [Destination, WeightedKeys, Aggregate]}, _From, State) ->
   Reply =
     try weighted_intersection(
@@ -1885,11 +1890,14 @@ weighted_union(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
     Aggregate, Rest, 1.0,
     zsets:union(
       fun(undefined, AccScore) ->
-              AccScore * AccWeight;
+%%               AccScore * AccWeight;
+				 			edis_util:multiply(AccScore,AccWeight);
          (Score, undefined) ->
-              Score * Weight;
+%%               Score * Weight;
+							edis_util:multiply(Score,Weight);
          (Score, AccScore) ->
-              lists:Aggregate([Score * Weight, AccScore * AccWeight])
+%%               lists:Aggregate([Score * Weight, AccScore * AccWeight])
+							edis_util:Aggregate(edis_util:multiply(Score,Weight),edis_util:multiply(AccScore,AccWeight))
       end, ZSet, AccZSet)).
 
 sort(_Mod, _Ref, _Item, #edis_sort_options{limit = {_Off, 0}}) -> {ok, []};

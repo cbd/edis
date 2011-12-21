@@ -1059,6 +1059,7 @@ parse_error(_Cmd, source_equals_destination) -> <<"source and destinantion objec
 parse_error(Cmd, bad_arg_num) -> <<"wrong number of arguments for '", Cmd/binary, "' command">>;
 parse_error(_Cmd, {bad_arg_num, SubCmd}) -> ["wrong number of arguments for ", SubCmd];
 parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
+parse_error(_Cmd, nan_result) -> <<"resulting score is not a number (NaN)">>;
 parse_error(_Cmd, {error, Reason}) -> Reason;
 parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
 

@@ -11,7 +11,8 @@
 
 -export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
          integer_to_binary/1, binary_to_float/1, binary_to_float/2, reverse_tuple_to_list/1,
-				 make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1]).
+				 make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1,
+				 multiply/2, sum/2, min/2, max/2]).
 
 -include("edis.hrl").
 
@@ -170,6 +171,45 @@ join([Bin|Bins], Sep) -> join(Bins, Sep, Bin).
 
 join([], _, Acc) -> Acc;
 join([Bin|Bins], Sep, Acc) -> join(Bins, Sep, <<Acc/binary, Sep/binary, Bin/binary>>).
+
+-spec multiply(float(),float()) -> float().
+multiply(0.0,_) -> 0.0;
+multiply(_,0.0) -> 0.0;
+multiply(?POS_INFINITY,V) when V > 0.0 -> ?POS_INFINITY;
+multiply(?POS_INFINITY,V) when V < 0.0 -> ?NEG_INFINITY;
+multiply(?NEG_INFINITY,V) when V > 0.0 -> ?NEG_INFINITY;
+multiply(?NEG_INFINITY,V) when V < 0.0 -> ?POS_INFINITY;
+multiply(V,?POS_INFINITY) when V > 0.0 -> ?POS_INFINITY;
+multiply(V,?POS_INFINITY) when V < 0.0 -> ?NEG_INFINITY;
+multiply(V,?NEG_INFINITY) when V > 0.0 -> ?NEG_INFINITY;
+multiply(V,?NEG_INFINITY) when V < 0.0 -> ?POS_INFINITY;
+multiply(V1,V2) -> V1*V2.
+
+-spec sum(float(),float()) -> float().
+sum(?POS_INFINITY,?NEG_INFINITY) -> 0.0;
+sum(?NEG_INFINITY,?POS_INFINITY) -> 0.0;
+sum(?POS_INFINITY,_) -> ?POS_INFINITY;
+sum(?NEG_INFINITY,_) -> ?NEG_INFINITY;
+sum(_,?POS_INFINITY) -> ?POS_INFINITY;
+sum(_,?NEG_INFINITY) -> ?NEG_INFINITY;
+sum(V1,V2) when V1/V2 < 0.0 -> V1+V2;
+sum(V1,V2) when V1 > 0.0, ?POS_INFINITY-V1 < V2 -> ?POS_INFINITY;
+sum(V1,V2) when V1 < 0.0, ?NEG_INFINITY-V1 > V2 -> ?NEG_INFINITY;
+sum(V1,V2) -> V1+V2.
+
+-spec min(float(),float()) -> float().
+min(?POS_INFINITY,V) -> V;
+min(V,?POS_INFINITY) -> V;
+min(?NEG_INFINITY,_) -> ?NEG_INFINITY;
+min(_,?NEG_INFINITY) -> ?NEG_INFINITY;
+min(V1,V2) -> erlang:min(V1,V2).
+
+-spec max(float(),float()) -> float().
+max(?POS_INFINITY,_) -> ?POS_INFINITY;
+max(_,?POS_INFINITY) -> ?POS_INFINITY;
+max(?NEG_INFINITY,V) -> V;
+max(V,?NEG_INFINITY) -> V;
+max(V1,V2) -> erlang:max(V1,V2).
 
 %% @doc Loads an Erlang config file and sets the corresponding application environment variables
 -spec load_config(string()) -> ok.
