@@ -1876,7 +1876,7 @@ weighted_intersection(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
     Aggregate, Rest, 1.0,
     zsets:intersection(
       fun(Score, AccScore) ->
-              lists:Aggregate([Score * Weight, AccScore * AccWeight])
+              edis_util:Aggregate(edis_util:multiply(Score,Weight),edis_util:multiply(AccScore,AccWeight))
       end, ZSet, AccZSet)).
 
 weighted_union(_Aggregate, [{ZSet, Weight}]) ->
@@ -1890,13 +1890,10 @@ weighted_union(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
     Aggregate, Rest, 1.0,
     zsets:union(
       fun(undefined, AccScore) ->
-%%               AccScore * AccWeight;
 				 			edis_util:multiply(AccScore,AccWeight);
          (Score, undefined) ->
-%%               Score * Weight;
 							edis_util:multiply(Score,Weight);
          (Score, AccScore) ->
-%%               lists:Aggregate([Score * Weight, AccScore * AccWeight])
 							edis_util:Aggregate(edis_util:multiply(Score,Weight),edis_util:multiply(AccScore,AccWeight))
       end, ZSet, AccZSet)).
 
