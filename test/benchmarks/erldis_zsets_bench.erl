@@ -115,14 +115,9 @@ quit_per_testcase(_Function, _Extra) -> ok.
 -spec init_per_round(atom(), [binary()], [pos_integer()]) -> ok.
 init_per_round(Fun, Keys, [Port]) when Fun =:= zcard;
                                        Fun =:= zadd_one;
-                                       Fun =:= zcount_n;
                                        Fun =:= zincrby;
-                                       Fun =:= zrange_n;
-                                       Fun =:= zrangebyscore_n;
                                        Fun =:= zremrangebyrank_n;
-                                       Fun =:= zremrangebyscore_n;
-                                       Fun =:= zrevrange_n;
-                                       Fun =:= zrevrangebyscore_n ->
+                                       Fun =:= zrevrange_n ->
   zadd(Keys, Port),
   ok;
 init_per_round(Fun, Keys, [Port]) when Fun =:= zinterstore_min ->
@@ -186,8 +181,13 @@ init_per_round(Fun, _Keys, [Port]) when Fun =:= zcount_m;
   erldis:zadd(process(Port), ?KEY,
               [{1.0 * I, edis_util:integer_to_binary(I)} || I <- lists:seq(1, 10000)]),
   ok;
-init_per_round(Fun, Keys, [Port]) when Fun =:= zrank;
+init_per_round(Fun, Keys, [Port]) when Fun =:= zcount_n;
+                                       Fun =:= zrange_n;
+                                       Fun =:= zrank;
                                        Fun =:= zrevrank;
+                                       Fun =:= zrangebyscore_n;
+                                       Fun =:= zremrangebyscore_n;
+                                       Fun =:= zrevrangebyscore_n;
                                        Fun =:= zrem_one;
                                        Fun =:= zscore ->
   erldis:zadd(process(Port), ?KEY, [{edis_util:binary_to_float(Key), Key} || Key <- Keys]),
@@ -246,8 +246,8 @@ zrange_n(_Keys, Port) ->
   erldis:zrange(process(Port), ?KEY, -2, -1).
 
 -spec zrange_m([binary()], pos_integer()) -> [binary()].
-zrange_m(_Keys, Port) ->
-  erldis:zrange_withscores(process(Port), ?KEY, -20, -10).
+zrange_m([Key|_], Port) ->
+  erldis:zrange_withscores(process(Port), ?KEY, 0, edis_util:binary_to_integer(Key)).
 
 -spec zrangebyscore_n([binary()], pos_integer()) -> [binary()].
 zrangebyscore_n(_Keys, Port) ->
@@ -266,8 +266,8 @@ zrem_one([Key|_], Port) ->
   erldis:zrem(process(Port), ?KEY, Key).
 
 -spec zrem([binary()], pos_integer()) -> pos_integer().
-zrem(Keys, Port) ->
-  erldis:zrem(process(Port), ?KEY, Keys).
+zrem([Key|_], Port) ->
+  erldis:zrem(process(Port), ?KEY, [Key]).
 
 -spec zremrangebyrank_n([binary()], pos_integer()) -> number().
 zremrangebyrank_n(_Keys, Port) ->
@@ -296,11 +296,11 @@ zrevrange_m([Key|_], Port) ->
 
 -spec zrevrangebyscore_n([binary()], pos_integer()) -> [binary()].
 zrevrangebyscore_n(_Keys, Port) ->
-  erldis:zrevrangebyscore(process(Port), ?KEY, <<"-inf">>, 1.0).
+  erldis:zrevrangebyscore(process(Port), ?KEY, 1.0, <<"-inf">>).
 
 -spec zrevrangebyscore_m([binary()], pos_integer()) -> [binary()].
 zrevrangebyscore_m([Key|_], Port) ->
-  erldis:zrevrangebyscore(process(Port), ?KEY, {inc, edis_util:binary_to_float(Key)}, <<"-inf">>).
+  erldis:zrevrangebyscore(process(Port), ?KEY, edis_util:binary_to_float(Key), <<"-inf">>).
 
 -spec zrevrank([binary()], pos_integer()) -> number().
 zrevrank(_Keys, Port) ->
