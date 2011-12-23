@@ -450,6 +450,9 @@ parse_command(#edis_command{cmd = <<"SUNIONSTORE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZADD">>, args = [Key | SMs]}) when SMs =/= [], length(SMs) rem 2 =:= 0 ->
   ParsedSMs = [{edis_util:binary_to_float(S), M} || {S, M} <- edis_util:make_pairs(SMs)],
   C#edis_command{args = [Key, ParsedSMs], result_type = number, group= zsets};
+%% Redis returns 'ERR syntax error' when receives zadd command with odd arguments bigger than one
+parse_command(#edis_command{cmd = <<"ZADD">>, args = [_Key | SMs]}) when SMs =/= [], length(SMs) > 1,length(SMs) rem 2 =:= 1 ->
+	throw(syntax);
 parse_command(#edis_command{cmd = <<"ZADD">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZCARD">>, args = [_Key]}) -> 
   C#edis_command{result_type=number, group=zsets};
@@ -464,10 +467,10 @@ parse_command(#edis_command{cmd = <<"ZCOUNT">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZINCRBY">>, args = [Key, Increment, Member]}) -> 
   C#edis_command{args = [Key, edis_util:binary_to_float(Increment), Member],result_type=float, group=zsets};
 parse_command(#edis_command{cmd = <<"ZINCRBY">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"ZINTERSTORE">>, args = [_Destination, _NumKeys | _Rest]}) -> parse_zstore_command(C);
+parse_command(C = #edis_command{cmd = <<"ZINTERSTORE">>, args = [_Destination, _NumKeys , _FirstKey | _Rest]}) -> parse_zstore_command(C);
 parse_command(#edis_command{cmd = <<"ZINTERSTORE">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}) ->
-  C#edis_command{args = [Key, edis_util:binary_to_integer(Start, 0), edis_util:binary_to_integer(Stop, 0)],result_type=multi_bulk, group=zsets};
+  C#edis_command{args = [Key, edis_util:binary_to_integer(Start), edis_util:binary_to_integer(Stop)],result_type=multi_bulk, group=zsets};
 parse_command(C = #edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop, Option]}) ->
   case edis_util:upper(Option) of
     <<"WITHSCORES">> -> 
@@ -485,7 +488,7 @@ parse_command(C = #edis_command{cmd = <<"ZREM">>, args = [_Key, _Member | _Membe
   C#edis_command{result_type=number, group=zsets};
 parse_command(#edis_command{cmd = <<"ZREM">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [Key, Start, Stop]}) ->
-  C#edis_command{args = [Key, edis_util:binary_to_integer(Start, 0), edis_util:binary_to_integer(Stop, 0)],result_type=number,group=zsets};
+  C#edis_command{args = [Key, edis_util:binary_to_integer(Start), edis_util:binary_to_integer(Stop)],result_type=number,group=zsets};
 parse_command(#edis_command{cmd = <<"ZREMRANGEBYRANK">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [Key, Min, Max]}) -> 
   try
@@ -512,7 +515,7 @@ parse_command(#edis_command{cmd = <<"ZREVRANK">>}) -> throw(bad_arg_num);
 parse_command(C = #edis_command{cmd = <<"ZSCORE">>, args = [_Key, _Member]}) -> 
   C#edis_command{result_type=float, group=zsets};
 parse_command(#edis_command{cmd = <<"ZSCORE">>}) -> throw(bad_arg_num);
-parse_command(C = #edis_command{cmd = <<"ZUNIONSTORE">>, args = [_Destination, _NumKeys | _Rest]}) -> parse_zstore_command(C);
+parse_command(C = #edis_command{cmd = <<"ZUNIONSTORE">>, args = [_Destination, _NumKeys, _FirstKey | _Rest ]}) -> parse_zstore_command(C);
 parse_command(#edis_command{cmd = <<"ZUNIONSTORE">>}) -> throw(bad_arg_num);
 %% -- Server ---------------------------------------------------------------------------------------
 parse_command(C = #edis_command{cmd = <<"CONFIG">>, args = [SubCommand | Rest]}) ->
@@ -880,6 +883,10 @@ tcp_number(Number, State) ->
 -spec tcp_float(undefined | float(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_float(undefined, State) ->
   tcp_bulk(undefined, State);
+tcp_float(?POS_INFINITY, State) ->
+		tcp_bulk("inf",State);
+tcp_float(?NEG_INFINITY, State) ->
+		tcp_bulk("-inf",State);
 tcp_float(Float, State) ->
   case erlang:trunc(Float) * 1.0 of
     Float -> tcp_bulk(integer_to_list(erlang:trunc(Float)), State);
@@ -924,17 +931,8 @@ tcp_send(Message, State) ->
       {stop, normal, State}
   end.
 
-parse_float_limit(Bin) ->
-  do_parse_float_limit(edis_util:lower(Bin)).
-
-do_parse_float_limit(<<"-inf">>) -> neg_infinity;
-do_parse_float_limit(<<"inf">>) -> infinity;
-do_parse_float_limit(<<"+inf">>) -> infinity;
-do_parse_float_limit(<<"-infinity">>) -> neg_infinity;
-do_parse_float_limit(<<"infinity">>) -> infinity;
-do_parse_float_limit(<<"+infinity">>) -> infinity;
-do_parse_float_limit(<<$(, Rest/binary>>) -> {exc, edis_util:binary_to_float(Rest)};
-do_parse_float_limit(Bin) -> {inc, edis_util:binary_to_float(Bin)}.
+parse_float_limit(<<$(, Rest/binary>>) -> {exc, edis_util:binary_to_float(Rest)};
+parse_float_limit(Bin) -> {inc, edis_util:binary_to_float(Bin)}.
 
 parse_zstore_command(C) ->
   [Destination, NumKeys | Rest] = C#edis_command.args,
@@ -970,7 +968,7 @@ parse_zstore_command(C) ->
             {try lists:map(fun edis_util:binary_to_float/1, Rest2)
              catch
                _:not_float ->
-                 throw({not_float, "weight"})
+                 throw({not_float, "weight value"})
              end, sum};
           {NK, R2L} when R2L == NK + 1 ->
             throw(syntax);
@@ -978,7 +976,7 @@ parse_zstore_command(C) ->
             {try lists:map(fun edis_util:binary_to_float/1, lists:sublist(Rest2, 1, NK))
              catch
                _:not_float ->
-                 throw({not_float, "weight"})
+                 throw({not_float, "weight value"})
              end,
              case lists:nthtail(NK, Rest2) of
                [<<"AGGREGATE">>, <<"SUM">>] -> sum;
@@ -1011,7 +1009,7 @@ parse_zrange_command(C) ->
       _ ->
         throw(syntax)
     end,
-  C#edis_command{args = [Key, parse_float_limit(Min), parse_float_limit(Max), ShowScores, Limit]}.
+  C#edis_command{args = [Key, parse_float_limit(Min), parse_float_limit(Max), ShowScores, Limit], group = zsets, result_type = zrange}.
 
 tcp_zrange(Range, ShowScores, Limit, State) ->
   Reply =
@@ -1061,6 +1059,7 @@ parse_error(_Cmd, source_equals_destination) -> <<"source and destinantion objec
 parse_error(Cmd, bad_arg_num) -> <<"wrong number of arguments for '", Cmd/binary, "' command">>;
 parse_error(_Cmd, {bad_arg_num, SubCmd}) -> ["wrong number of arguments for ", SubCmd];
 parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
+parse_error(_Cmd, nan_result) -> <<"resulting score is not a number (NaN)">>;
 parse_error(_Cmd, {error, Reason}) -> Reason;
 parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
 

@@ -5,21 +5,25 @@
 
 -include_lib("common_test/include/ct.hrl").
 
-all() ->
+all() -> 
      [push_llen_lindex,del,long_list,
 	  blpop_brpop,brpoplpush,lpushx_rpushx,
 	  linsert,rpoplpush,lpop_rpop,lrange,
 	  ltrim,lset,lrem].
  	
-init_per_testcase(_TestCase,Config) ->
+init_per_suite(Config) ->
 	{ok,Client} = connect_erldis(10),
-
-    erldis_client:sr_scall(Client,[<<"flushdb">>]),
-	
-	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
-
 	NewConfig = lists:keystore(client,1,Config,{client,Client}),
 	NewConfig.
+
+init_per_testcase(_TestCase,Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"string">>,<<"I'm not a list">>]),
+	Config.
+
+end_per_suite(_Config) ->
+		ok.
 
 connect_erldis(0) -> {error,{socket_error,econnrefused}};
 connect_erldis(Times) ->
@@ -505,7 +509,7 @@ lset(Config) ->
 	[<<"foobar">>,<<"foo">>,<<"2">>,<<"bar">>] = erldis_client:scall(Client,[<<"lrange">>,<<"list">>,0,-1]),
 	
 	%% Out of Range
-	{error,<<"ERR index out of range">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,10,<<"foo">>]),
+	{error,<<"ERR index is out of range">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"list">>,10,<<"foo">>]),
 	%% Non existing key
 	{error,<<"ERR no such key">>} = erldis_client:sr_scall(Client,[<<"lset">>,<<"nosuchkey">>,1,<<"foo">>]),
 	%% Non list value

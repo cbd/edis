@@ -1307,24 +1307,32 @@ handle_call(#edis_command{cmd = <<"ZCOUNT">>, args = [Key, Min, Max]}, _From, St
     end,
   {reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"ZINCRBY">>, args = [Key, Increment, Member]}, _From, State) ->
-  Reply =
-    update(State#state.backend_mod, State#state.backend_ref, Key, zset, skiplist,
-           fun(Item) ->
-                   NewScore =
-                     case zsets:find(Member, Item#edis_item.value) of
-                       error -> Increment;
-                       {ok, Score} -> Score + Increment
-                     end,
-                   {NewScore, 
-                    Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
-           end, zsets:new()),
-  {reply, Reply, stamp(Key, read, State)};
+		Reply =
+				update(State#state.backend_mod, State#state.backend_ref, Key, zset, skiplist,
+							 fun(Item) ->
+											 NewScore =
+													 case zsets:find(Member, Item#edis_item.value) of
+															 error -> Increment;
+															 {ok, Score} -> 	
+																	 case {Score,Increment} of
+																			 {?POS_INFINITY,?NEG_INFINITY} -> throw(nan_result);
+																			 {?NEG_INFINITY,?POS_INFINITY} -> throw(nan_result);
+																			 {_,_} -> edis_util:sum(Score, Increment)
+																	 end
+													 end,
+											 {NewScore, 
+												Item#edis_item{value = zsets:enter(NewScore, Member, Item#edis_item.value)}}
+							 end, zsets:new()),
+		{reply, Reply, stamp(Key, read, State)};
 handle_call(#edis_command{cmd = <<"ZINTERSTORE">>, args = [Destination, WeightedKeys, Aggregate]}, _From, State) ->
   Reply =
     try weighted_intersection(
           Aggregate,
-          [case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
-              #edis_item{value = Value} -> {Value, Weight};
+          [case get_item(State#state.backend_mod, State#state.backend_ref, [zset,set], Key) of
+              #edis_item{value = Value, type = set} -> 
+									ZValue = zset_from_set(Value),
+									{ZValue, Weight};
+							#edis_item{value = Value} -> {Value, Weight};
               not_found -> throw(empty);
               {error, Reason} -> throw(Reason)
             end || {Key, Weight} <- WeightedKeys]) of
@@ -1376,7 +1384,7 @@ handle_call(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop | Options
             StopPos -> {ok,
                         case lists:member(with_scores, Options) of
                           true ->
-                            lists:flatmap(fun tuple_to_list/1, zsets:range(StartPos, StopPos, Value));
+                            lists:flatmap(fun edis_util:reverse_tuple_to_list/1, zsets:range(StartPos, StopPos, Value));
                           false ->
                             [Member || {_Score, Member} <- zsets:range(StartPos, StopPos, Value)]
                         end}
@@ -1392,7 +1400,7 @@ handle_call(#edis_command{cmd = <<"ZRANGEBYSCORE">>, args = [Key, Min, Max | _Op
   Reply =
     case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value)};
-      not_found -> {ok, 0};
+      not_found -> {ok, []};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, read, State)};
@@ -1402,7 +1410,7 @@ handle_call(#edis_command{cmd = <<"ZRANK">>, args = [Key, Member]}, _From, State
       #edis_item{value = Value} ->
         case zsets:find(Member, Value) of
           error -> {ok, undefined};
-          {ok, Score} -> {ok, zsets:count(neg_infinity, {exc, Score}, Value)}
+          {ok, Score} -> {ok, zsets:count({inc,?NEG_INFINITY}, {exc, Score}, Value)}
         end;
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
@@ -1432,9 +1440,9 @@ handle_call(#edis_command{cmd = <<"ZREM">>, args = [Key | Members]}, _From, Stat
   {reply, Reply, stamp(Key, write, State)};
 handle_call(#edis_command{cmd = <<"ZREMRANGEBYRANK">>, args = [Key, Start, Stop]}, From, State) ->
   case handle_call(#edis_command{cmd = <<"ZRANGE">>, args = [Key, Start, Stop]}, From, State) of
-    {reply, {ok, SMs}, NewState} ->
+    {reply, {ok, Members}, NewState} ->
       handle_call(#edis_command{cmd = <<"ZREM">>,
-                                args = [Key | [Member || {_Score, Member} <- SMs]]}, From, NewState);
+                                args = [Key | Members]}, From, NewState);
     OtherReply ->
       OtherReply
   end;
@@ -1442,7 +1450,7 @@ handle_call(#edis_command{cmd = <<"ZREMRANGEBYSCORE">>, args = [Key, Min, Max]},
   case handle_call(#edis_command{cmd = <<"ZRANGEBYSCORE">>,
                                  args = [Key, Min, Max]}, From, State) of
     {reply, {ok, SMs}, NewState} ->
-      handle_call(#edis_command{cmd = <<"ZREM">>,
+			handle_call(#edis_command{cmd = <<"ZREM">>,
                                 args = [Key | [Member || {_Score, Member} <- SMs]]}, From, NewState);
     OtherReply ->
       OtherReply
@@ -1472,7 +1480,7 @@ handle_call(#edis_command{cmd = <<"ZREVRANGE">>, args = [Key, Start, Stop | Opti
             StopPos -> {ok,
                         case lists:member(with_scores, Options) of
                           true ->
-                            lists:flatmap(fun tuple_to_list/1,
+                            lists:flatmap(fun edis_util:reverse_tuple_to_list/1,
                                           zsets:range(StartPos, StopPos, Value, backwards));
                           false ->
                             [Member || {_Score, Member} <- zsets:range(StartPos, StopPos, Value, backwards)]
@@ -1489,7 +1497,7 @@ handle_call(#edis_command{cmd = <<"ZREVRANGEBYSCORE">>, args = [Key, Min, Max | 
   Reply =
     case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
       #edis_item{value = Value} -> {ok, zsets:list(Min, Max, Value, backwards)};
-      not_found -> {ok, 0};
+      not_found -> {ok, []};
       {error, Reason} -> {error, Reason}
     end,
   {reply, Reply, stamp(Key, read, State)};
@@ -1499,7 +1507,7 @@ handle_call(#edis_command{cmd = <<"ZREVRANK">>, args = [Key, Member]}, _From, St
       #edis_item{value = Value} ->
         case zsets:find(Member, Value) of
           error -> {ok, undefined};
-          {ok, Score} -> {ok, zsets:count(infinity, {exc, Score}, Value, backwards)}
+          {ok, Score} -> {ok, zsets:count({inc,?POS_INFINITY}, {exc, Score}, Value, backwards)}
         end;
       not_found -> {ok, undefined};
       {error, Reason} -> {error, Reason}
@@ -1521,8 +1529,12 @@ handle_call(#edis_command{cmd = <<"ZUNIONSTORE">>, args = [Destination, Weighted
   Reply =
     try weighted_union(
           Aggregate,
-          [case get_item(State#state.backend_mod, State#state.backend_ref, zset, Key) of
-              #edis_item{value = Value} -> {Value, Weight};
+          [case get_item(State#state.backend_mod, State#state.backend_ref, [zset,set], Key) of
+              #edis_item{value = Value, type = set} -> 
+									ZValue = zset_from_set(Value),
+									{ZValue, Weight};
+							#edis_item{value = Value} -> 
+									{Value, Weight};
               not_found -> {zsets:new(), 0.0};
               {error, Reason} -> throw(Reason)
             end || {Key, Weight} <- WeightedKeys]) of
@@ -1817,6 +1829,12 @@ update(Mod, Ref, Key, Type, Encoding, Fun, Default) ->
   end.
 
 %% @private
+zset_from_set(Set) ->
+		gb_sets:fold(fun(Member,Zset) ->
+										zsets:enter({1,Member}, Zset)
+								 end, zsets:new(),Set).
+
+%% @private
 key_at(Mod, Ref, 0) ->
   try
     Now = edis_util:now(),
@@ -1858,7 +1876,7 @@ weighted_intersection(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
     Aggregate, Rest, 1.0,
     zsets:intersection(
       fun(Score, AccScore) ->
-              lists:Aggregate([Score * Weight, AccScore * AccWeight])
+              edis_util:Aggregate(edis_util:multiply(Score,Weight),edis_util:multiply(AccScore,AccWeight))
       end, ZSet, AccZSet)).
 
 weighted_union(_Aggregate, [{ZSet, Weight}]) ->
@@ -1872,11 +1890,11 @@ weighted_union(Aggregate, [{ZSet, Weight} | Rest], AccWeight, AccZSet) ->
     Aggregate, Rest, 1.0,
     zsets:union(
       fun(undefined, AccScore) ->
-              AccScore * AccWeight;
+				 			edis_util:multiply(AccScore,AccWeight);
          (Score, undefined) ->
-              Score * Weight;
+							edis_util:multiply(Score,Weight);
          (Score, AccScore) ->
-              lists:Aggregate([Score * Weight, AccScore * AccWeight])
+							edis_util:Aggregate(edis_util:multiply(Score,Weight),edis_util:multiply(AccScore,AccWeight))
       end, ZSet, AccZSet)).
 
 sort(_Mod, _Ref, _Item, #edis_sort_options{limit = {_Off, 0}}) -> {ok, []};

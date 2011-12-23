@@ -10,10 +10,11 @@
 -author('Chad DePue <chad@inakanetworks.com>').
 
 -export([timestamp/0, now/0, upper/1, lower/1, binary_to_integer/1, binary_to_integer/2,
-         integer_to_binary/1, binary_to_float/1, binary_to_float/2,
-         make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1]).
+         integer_to_binary/1, binary_to_float/1, binary_to_float/2, reverse_tuple_to_list/1,
+				 make_pairs/1, glob_to_re/1,random_binary/0, join/2, load_config/1,
+				 multiply/2, sum/2, min/2, max/2]).
 
--include("elog.hrl").
+-include("edis.hrl").
 
 -define(EPOCH, 62167219200).
 
@@ -70,17 +71,26 @@ binary_to_integer(Bin) ->
   end.
 
 %% @doc returns a float whose binary representation is Bin
--spec binary_to_float(binary()) -> integer().
+-spec binary_to_float(binary()) -> float().
 binary_to_float(Bin) ->
-  try list_to_float(binary_to_list(Bin))
-  catch
-    _:badarg ->
-      try 1.0 * list_to_integer(binary_to_list(Bin))
-      catch
-        _:badarg ->
-          throw(not_float)
-      end
-  end.
+		case lower(Bin) of
+				<<"inf">>  -> ?POS_INFINITY;
+				<<"infinity">>  -> ?POS_INFINITY;
+				<<"+infinity">>  -> ?POS_INFINITY;
+				<<"+inf">> -> ?POS_INFINITY;
+				<<"-inf">> -> ?NEG_INFINITY;
+				<<"-infinity">>  -> ?NEG_INFINITY;
+				_ ->
+						try list_to_float(binary_to_list(Bin))
+						catch
+								_:badarg ->
+										try 1.0 * list_to_integer(binary_to_list(Bin))
+										catch
+												_:badarg ->
+														throw(not_float)
+										end
+						end
+		end.
 
 %% @doc returns an integer whose binary representation is Bin.
 %% If Bin is not a integer, Default is returned
@@ -115,6 +125,10 @@ binary_to_float(Bin, Default) ->
 -spec integer_to_binary(binary()) -> integer().
 integer_to_binary(Int) ->
   list_to_binary(integer_to_list(Int)).
+
+-spec reverse_tuple_to_list({any(),any()}) -> [any()].
+reverse_tuple_to_list({F,S}) ->
+		[S,F].
 
 %% @doc returns a list of binary tuples. The first tuple contains the first pair of elements in the received list,
 %% the second tuple contains the second pair and so on. 
@@ -157,6 +171,45 @@ join([Bin|Bins], Sep) -> join(Bins, Sep, Bin).
 
 join([], _, Acc) -> Acc;
 join([Bin|Bins], Sep, Acc) -> join(Bins, Sep, <<Acc/binary, Sep/binary, Bin/binary>>).
+
+-spec multiply(float(),float()) -> float().
+multiply(0.0,_) -> 0.0;
+multiply(_,0.0) -> 0.0;
+multiply(?POS_INFINITY,V) when V > 0.0 -> ?POS_INFINITY;
+multiply(?POS_INFINITY,V) when V < 0.0 -> ?NEG_INFINITY;
+multiply(?NEG_INFINITY,V) when V > 0.0 -> ?NEG_INFINITY;
+multiply(?NEG_INFINITY,V) when V < 0.0 -> ?POS_INFINITY;
+multiply(V,?POS_INFINITY) when V > 0.0 -> ?POS_INFINITY;
+multiply(V,?POS_INFINITY) when V < 0.0 -> ?NEG_INFINITY;
+multiply(V,?NEG_INFINITY) when V > 0.0 -> ?NEG_INFINITY;
+multiply(V,?NEG_INFINITY) when V < 0.0 -> ?POS_INFINITY;
+multiply(V1,V2) -> V1*V2.
+
+-spec sum(float(),float()) -> float().
+sum(?POS_INFINITY,?NEG_INFINITY) -> 0.0;
+sum(?NEG_INFINITY,?POS_INFINITY) -> 0.0;
+sum(?POS_INFINITY,_) -> ?POS_INFINITY;
+sum(?NEG_INFINITY,_) -> ?NEG_INFINITY;
+sum(_,?POS_INFINITY) -> ?POS_INFINITY;
+sum(_,?NEG_INFINITY) -> ?NEG_INFINITY;
+sum(V1,V2) when V1/V2 < 0.0 -> V1+V2;
+sum(V1,V2) when V1 > 0.0, ?POS_INFINITY-V1 < V2 -> ?POS_INFINITY;
+sum(V1,V2) when V1 < 0.0, ?NEG_INFINITY-V1 > V2 -> ?NEG_INFINITY;
+sum(V1,V2) -> V1+V2.
+
+-spec min(float(),float()) -> float().
+min(?POS_INFINITY,V) -> V;
+min(V,?POS_INFINITY) -> V;
+min(?NEG_INFINITY,_) -> ?NEG_INFINITY;
+min(_,?NEG_INFINITY) -> ?NEG_INFINITY;
+min(V1,V2) -> erlang:min(V1,V2).
+
+-spec max(float(),float()) -> float().
+max(?POS_INFINITY,_) -> ?POS_INFINITY;
+max(_,?POS_INFINITY) -> ?POS_INFINITY;
+max(?NEG_INFINITY,V) -> V;
+max(V,?NEG_INFINITY) -> V;
+max(V1,V2) -> erlang:max(V1,V2).
 
 %% @doc Loads an Erlang config file and sets the corresponding application environment variables
 -spec load_config(string()) -> ok.

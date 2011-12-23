@@ -4,17 +4,22 @@
 
 -include_lib("common_test/include/ct.hrl").
 
-all() ->
-	[set_and_get,append,decr,incr,decrby,incrby,
+all() -> [set_and_get,append,decr,incr,decrby,incrby,
 	 setbit,getbit,setrange,getrange,mset,mget,
 	 setnx,msetnx,setex,getset,strlen].
 
-init_per_testcase(_TestCase,Config) ->
+init_per_suite(Config) ->
 	{ok,Client} = connect_erldis(10),
-    erldis_client:sr_scall(Client,[<<"flushdb">>]),
-	
 	NewConfig = lists:keystore(client,1,Config,{client,Client}),
 	NewConfig.
+
+init_per_testcase(_TestCase,Config) ->
+	{client,Client} = lists:keyfind(client, 1, Config),
+	erldis_client:sr_scall(Client,[<<"flushdb">>]),
+	Config.
+
+end_per_suite(_Config) ->
+	ok.
 
 connect_erldis(0) -> {error,{socket_error,econnrefused}};
 connect_erldis(Times) ->
