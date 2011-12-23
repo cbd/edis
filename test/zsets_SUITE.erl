@@ -14,6 +14,7 @@
 -define(ERR_KEY_NEEDED,{error, <<"ERR at least 1 input key is needed for ZUNIONSTORE/ZINTERSTORE">>}).
 -define(ERR_WEIGHT_VALUE,{error,<<"ERR weight value is not a double">>}).
 -define(ERR_NEG_LENGTH,{error,<<"ERR negative length (-1)">>}).
+-define(ERR_NAN_RES,{error,<<"ERR resulting score is not a number (NaN)">>}).
 
 all() -> [zadd,zincrby,zcard,zrem,zrange,
 					zrevrange,zrank_zrevrank,zcount,
@@ -53,6 +54,12 @@ zadd(Config) ->
 	[<<"x">>,<<"y">>,<<"z">>] = erldis_client:scall(Client,[<<"zrange">>,<<"ztmp">>,0,-1]),
 	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,1,<<"y">>]),
 	[<<"y">>,<<"x">>,<<"z">>] = erldis_client:scall(Client,[<<"zrange">>,<<"ztmp">>,0,-1]),
+	%% With +inf/-inf scores
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"inf">>,<<"a">>]),
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"-inf">>,<<"b">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"ztmp">>,<<"a">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"ztmp">>,<<"b">>]),
+	[<<"b">>,<<"-inf">>,<<"y">>,<<"1">>,<<"x">>,<<"10">>,<<"z">>,<<"30">>,<<"a">>,<<"inf">>] = erldis_client:scall(Client,[<<"zrange">>,<<"ztmp">>,0,-1,<<"withscores">>]),
 	%% element can't be set to NaN with ZADD
 	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"nan">>,<<"x">>]),
 	%% Variadic version base case
@@ -91,6 +98,20 @@ zincrby(Config) ->
 	[<<"foo">>,<<"bar">>] = erldis_client:scall(Client,[<<"zrange">>,<<"zset">>,0,-1]),
 	<<"-3">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zset">>,<<"foo">>]),
 	<<"6">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zset">>,<<"bar">>]),
+	%% With +inf/-inf scores
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"inf">>,<<"pos_inf">>]),
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"-inf">>,<<"neg_inf">>]),
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"5">>,<<"value">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"+inf">>,<<"pos_inf">>]),
+	?ERR_NAN_RES = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"-inf">>,<<"pos_inf">>]),
+	?ERR_NAN_RES = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"+inf">>,<<"neg_inf">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,630,<<"pos_inf">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,-630,<<"pos_inf">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,630,<<"neg_inf">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,-630,<<"neg_inf">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"-inf">>,<<"value">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"ztmp">>,<<"5">>,<<"value">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"inf">>,<<"value">>]),
 	%% Element can't be set to NaN with ZINCRBY
 	?ERR_NOTDOUBLE = erldis_client:sr_scall(Client,[<<"zincrby">>,<<"ztmp">>,<<"nan">>,<<"x">>]),
 	%% ZINCRBY does not work variadic 
@@ -106,7 +127,7 @@ zincrby(Config) ->
 zcard(Config)->
 	{client,Client} = lists:keyfind(client, 1, Config),
 	ERR_NUM_ARGS = ?ERR_NUM_ARGS(<<"ZCARD">>),
-	3 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"myset">>,10,<<"x">>,20,<<"y">>,30,<<"z">>]),
+	3 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"myset">>,<<"inf">>,<<"x">>,20,<<"y">>,30,<<"z">>]),
 	3 = erldis_client:sr_scall(Client,[<<"zcard">>,<<"myset">>]),
   false = erldis_client:sr_scall(Client,[<<"zcard">>,<<"otherset">>]),
 	%% Against non zset
@@ -168,6 +189,9 @@ zrange(Config)->
 	[<<"a">>,<<"1">>,<<"b">>,<<"2">>,<<"c">>,<<"3">>,<<"d">>,<<"4">>] = erldis_client:scall(Client,[<<"zrange">>,<<"ztmp">>,0,-1,<<"withscores">>]),
 	%% Non existing zset
 	[] = erldis_client:scall(Client,[<<"zrange">>,<<"nonexist">>,0,-1]),
+	%% With +inf/-inf scores
+	3 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"infset">>,<<"+inf">>,<<"a">>,<<"-inf">>,<<"b">>,4,<<"c">>]),
+	[<<"b">>,<<"-inf">>,<<"c">>,<<"4">>,<<"a">>,<<"inf">>] = erldis_client:scall(Client,[<<"zrange">>,<<"infset">>,0,-1,<<"withscores">>]),
 	%% Against non zset
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrange">>,<<"string">>,0,-1]),
 	%% Syntax error
@@ -202,6 +226,9 @@ zrevrange(Config)->
 	[] = erldis_client:scall(Client,[<<"zrevrange">>,<<"ztmp">>,1,-5]),
 	%% Withscores            
 	[<<"d">>,<<"4">>,<<"c">>,<<"3">>,<<"b">>,<<"2">>,<<"a">>,<<"1">>] = erldis_client:scall(Client,[<<"zrevrange">>,<<"ztmp">>,0,-1,<<"withscores">>]),
+	%% With +inf/-inf scores
+	3 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"infset">>,<<"inf">>,<<"a">>,<<"-inf">>,<<"b">>,3,<<"c">>]),
+	[<<"a">>,<<"inf">>,<<"c">>,<<"3">>,<<"b">>,<<"-inf">>] = erldis_client:scall(Client,[<<"zrevrange">>,<<"infset">>,0,-1,<<"withscores">>]),
 	%% Non existing zset
 	[] = erldis_client:scall(Client,[<<"zrevrange">>,<<"nonexist">>,0,-1]),
 	%% Against non zset
@@ -236,6 +263,14 @@ zrank_zrevrank(Config)->
 	%% Non existing zset
 	nil = erldis_client:sr_scall(Client,[<<"zrank">>,<<"nonexist">>,<<"x">>]),
 	nil = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"nonexist">>,<<"x">>]),
+	%% With +inf/-inf scores
+	3 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"infset">>,<<"inf">>,<<"a">>,<<"-inf">>,<<"b">>,3,<<"c">>]),
+	false = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"infset">>,<<"a">>]),
+	2 = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"infset">>,<<"b">>]),
+	true = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"infset">>,<<"c">>]),
+	2 = erldis_client:sr_scall(Client,[<<"zrank">>,<<"infset">>,<<"a">>]),
+	false = erldis_client:sr_scall(Client,[<<"zrank">>,<<"infset">>,<<"b">>]),
+	true = erldis_client:sr_scall(Client,[<<"zrank">>,<<"infset">>,<<"c">>]),
 	%% Against non zset
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrank">>,<<"string">>,<<"x">>]),
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zrevrank">>,<<"string">>,<<"x">>]),
@@ -324,6 +359,17 @@ zrangebyscore_zrevrangebyscore(Config)->
 	%% With LIMIT and WITHSCORES
 	[<<"e">>,<<"4">>,<<"f">>,<<"5">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"myset">>,2,5,<<"LIMIT">>,2,3,<<"withscores">>]),
 	[<<"d">>,<<"3">>,<<"c">>,<<"2">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"myset">>,5,2,<<"LIMIT">>,2,3,<<"withscores">>]),
+	%% With +inf/-inf scores
+	7 = erldis_client:sr_scall(Client,[<<"zadd">>,<<"infset">>,<<"-inf">>,<<"a">>,1,<<"b">>,
+																		 2,<<"c">>,3,<<"d">>,4,<<"e">>,5,<<"f">>,<<"inf">>,<<"g">>]),
+	[<<"a">>,<<"b">>,<<"c">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"infset">>,<<"-inf">>,2]),
+	[<<"e">>,<<"f">>,<<"g">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"infset">>,4,<<"+inf">>]),
+	[<<"c">>,<<"b">>,<<"a">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"infset">>,2,<<"-inf">>]),
+	[<<"g">>,<<"f">>,<<"e">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"infset">>,<<"+inf">>,4]),
+	[<<"b">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"infset">>,<<"(-inf">>,<<"(2">>]),
+	[<<"f">>] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"infset">>,<<"(4">>,<<"(+inf">>]),
+	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"infset">>,<<"(-2">>,<<"(-inf">>]),
+	[<<"f">>] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"infset">>,<<"(+inf">>,<<"(4">>]),
 	%% Non existing zset
 	[] = erldis_client:scall(Client,[<<"zrangebyscore">>,<<"nonexist">>,2,5]),
 	[] = erldis_client:scall(Client,[<<"zrevrangebyscore">>,<<"nonexist">>,5,2]),
@@ -492,23 +538,54 @@ zunionstore(Config)->
 	%% With +inf/-inf scores
 	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"+inf">>,<<"key">>]),
 	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"+inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
-	
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"+inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	false = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
-	
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"+inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	false = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
-	
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf3">>,4,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	%% With +inf/-inf scores and AGGREGATE MIN,MAX
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"+inf">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf3">>,4,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf3">>,<<"aggregate">>,<<"max">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf3">>,<<"aggregate">>,<<"min">>]),
+	<<"4">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"max">>]),
+	<<"4">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"min">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"aggregate">>,<<"max">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"aggregate">>,<<"min">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,3,<<"zinf1">>,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"max">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,3,<<"zinf1">>,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"min">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	%% With +inf/-inf scores and Weights
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,0,0]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,2,3]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,-2,-3]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,-2,3]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,2,-3]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"inf">>,<<"+inf">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"inf">>,<<"-inf">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"-inf">>,<<"inf">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"-inf">>,<<"-inf">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
 	%% Against non zset key
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"string">>,<<"zsetb">>]),
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zunionstore">>,<<"zsetc">>,2,<<"zseta">>,<<"string">>]),
@@ -570,23 +647,58 @@ zinterstore(Config)->
 	%% With +inf/-inf scores
 	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"+inf">>,<<"key">>]),
 	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"+inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
-	
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"+inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	false = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
-	
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"+inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	false = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
-	
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
-	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"zinf3">>,2,<<"zinf1">>,<<"zinf2">>]),
-	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"zinf3">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf3">>,4,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"-inf">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"+inf">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	%% With +inf/-inf scores and AGGREGATE MIN,MAX
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf1">>,<<"+inf">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf2">>,<<"-inf">>,<<"key">>]),
+	false = erldis_client:sr_scall(Client,[<<"zadd">>,<<"zinf3">>,4,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf3">>,<<"aggregate">>,<<"max">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf3">>,<<"aggregate">>,<<"min">>]),
+	<<"4">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"max">>]),
+	<<"4">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"min">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"aggregate">>,<<"max">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"aggregate">>,<<"min">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,3,<<"zinf1">>,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"max">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,3,<<"zinf1">>,<<"zinf2">>,<<"zinf3">>,<<"aggregate">>,<<"min">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	%% With +inf/-inf scores and Weights
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,0,0]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,2,3]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,-2,-3]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,-2,3]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,2,-3]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"inf">>,<<"+inf">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"inf">>,<<"-inf">>]),
+	<<"inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"-inf">>,<<"inf">>]),
+	<<"-inf">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
+	true = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"out">>,2,<<"zinf1">>,<<"zinf2">>,<<"weights">>,<<"-inf">>,<<"-inf">>]),
+	<<"0">> = erldis_client:sr_scall(Client,[<<"zscore">>,<<"out">>,<<"key">>]),
 	%% Against non zset key
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"zsetc">>,2,<<"string">>,<<"zsetb">>]),
 	?ERR_BAD_KEY = erldis_client:sr_scall(Client,[<<"zinterstore">>,<<"zsetc">>,2,<<"zseta">>,<<"string">>]),
