@@ -77,7 +77,7 @@ bench(Function, P1, P2, Options) ->
 
 -spec all() -> [atom()].
 all() -> [Fun || {Fun, _} <- ?MODULE:module_info(exports) -- edis_bench:behaviour_info(callbacks),
-                 Fun =/= module_info, Fun =/= bench_all, Fun =/= bench, Fun =/= msetnx].
+                 Fun =/= module_info, Fun =/= bench_all, Fun =/= bench, Fun =/= sadd].
 
 -spec init([pos_integer()]) -> ok.
 init([Port]) ->

@@ -85,10 +85,8 @@ socket(Other, State) ->
 %% @hidden
 -spec command_start(term(), state()) -> {next_state, command_start, state(), hibernate} | {next_state, arg_size | argument, state()} | {stop, {unexpected_event, term()}, state()}.
 command_start({data, <<"\r\n">>}, State) ->
-  ?INFO("Empty command in connection with ~p~n", [State#state.peerport]),
   {next_state, command_start, State};
 command_start({data, <<"\n">>}, State) ->
-  ?INFO("Empty command in connection with ~p~n", [State#state.peerport]),
   {next_state, command_start, State};
 command_start({data, <<"*", N/binary>>}, State) -> %% Unified Request Protocol
   {NArgs, "\r\n"} = string:to_integer(binary_to_list(N)),

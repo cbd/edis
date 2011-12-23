@@ -7,7 +7,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(edis_lists).
--extends(gb_trees).
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
