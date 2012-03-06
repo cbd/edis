@@ -609,7 +609,7 @@ run(#edis_command{cmd = <<"QUIT">>}, State) ->
   end;
 run(#edis_command{cmd = <<"AUTH">>, args = [Password]}, State) ->
   case edis_config:get(requirepass) of
-    undefined -> tcp_ok(State);
+    undefined -> throw(auth_not_allowed);
     Password -> tcp_ok(State#state{authenticated = true});
     _ -> throw(invalid_password)
   end;
@@ -1060,6 +1060,7 @@ parse_error(Cmd, bad_arg_num) -> <<"wrong number of arguments for '", Cmd/binary
 parse_error(_Cmd, {bad_arg_num, SubCmd}) -> ["wrong number of arguments for ", SubCmd];
 parse_error(_Cmd, unauthorized) -> <<"operation not permitted">>;
 parse_error(_Cmd, nan_result) -> <<"resulting score is not a number (NaN)">>;
+parse_error(_Cmd, auth_not_allowed) -> <<"Client sent AUTH, but no password is set">>;
 parse_error(_Cmd, {error, Reason}) -> Reason;
 parse_error(_Cmd, Error) -> io_lib:format("~p", [Error]).
 
