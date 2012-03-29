@@ -1,4 +1,4 @@
-An *Erlang* version of [Redis](http://redis.io). Still in its very early stages.
+An *Erlang* version of [Redis](http://redis.io), with the goal of similar algorithmic performance but support for multiple master nodes and larger-than-RAM datasets. For [More info](http://inakanetworks.com/edis/Edis_Implementing_Redis_In_Erlang.pdf), see this PDF of a Talk at Erlang Factory 2012.
 
 ## Usage
 Just run `$ make run` and open connections with your favourite redis client.
@@ -21,6 +21,8 @@ Just run `$ make run` and open connections with your favourite redis client.
 
 ### Unsupported Commands
 _SYNC_, _SLOWLOG_, _SLAVEOF_, _DEBUG *_
+
+
 
 
 ### License
