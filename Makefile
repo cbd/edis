@@ -13,7 +13,7 @@ all: erl
 
 erl:
 	rebar get-deps && rebar compile
-	
+
 clean:
 	rm -rf bin
 	rebar clean
@@ -27,12 +27,12 @@ analyze: erl
 
 xref: erl
 	rebar skip_deps=true xref
-	
-run: erl
+
+run:
 	${ERL} -s edis
 
 test: erl
-	${ERL} -config test.config -noshell -sname edis_test_server -s edis -run elog debug & 
+	${ERL} -config test.config -noshell -sname edis_test_server -s edis -run elog debug &
 	mkdir -p ./test/ebin
 	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
 	rebar skip_deps=true ct ; \
@@ -42,7 +42,7 @@ shell: erl
 	${ERL}
 
 doc: erl
-	cd deps/erldocs 
+	cd deps/erldocs
 	make
 	cd ../..
 	./deps/erldocs/erldocs doc
@@ -57,4 +57,4 @@ service: install
 	mkdir -p /etc/edis/db/
 	if [ ! -f /etc/edis/edis.config ] ; then cp priv/edis.config /etc/edis/ ; fi
 	cp priv/edis.init.d /etc/init.d/edis
-	
+
