@@ -32,7 +32,14 @@ run:  erl
 	${ERL} -s edis
 
 test: erl
-	${ERL} -config test.config -noshell -sname edis_test_server -s edis -run elog debug &
+	${ERL} -config test/test.config -noshell -sname edis_test_server -s edis -run elog debug &
+	mkdir -p ./test/ebin
+	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
+	rebar skip_deps=true ct ; \
+	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
+
+test-hanoidb:
+	${ERL} -config test/test-hanoidb.config -noshell -sname edis_test_server -s edis -run elog debug &
 	mkdir -p ./test/ebin
 	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
 	rebar skip_deps=true ct ; \
