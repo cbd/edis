@@ -59,7 +59,7 @@ get(requirepass) ->
 get(dir) ->
   get(dir, "./db/");
 get(backend) ->
-  get(backend, {edis_hanoidb_backend, []});
+  get(backend, {edis_eleveldb_backend, [{create_if_missing, true}]});
 get(Pattern) ->
   [{K, V} ||
    {K, V} <- application:get_all_env(edis),

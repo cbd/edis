@@ -35,6 +35,8 @@ init(Dir, Index, Options) ->
 write(#ref{db = Db}, Actions) ->
   ParseAction = fun({put, Key, Item}) ->
                         {put, sext:encode(Key), erlang:term_to_binary(Item)};
+                   ({delete, Key}) ->
+                        {delete, sext:encode(Key)};
                    (Action) -> Action
                 end,
   hanoidb:transact(Db, lists:map(ParseAction, Actions)).
@@ -75,11 +77,11 @@ is_empty(#ref{db = Db}) ->
 
 -spec destroy(ref()) -> ok | {error, term()}.
 destroy(#ref{file = _File}) ->
-    ok. %% TODO: not yet implemented
+    throw(not_implemented). %% TODO: not yet implemented
 
 -spec status(ref()) -> {ok, binary()} | error.
 status(#ref{db = _Db}) ->
-    []. %% TODO: not yet implemented
+    throw(not_implemented). %% TODO: not yet implemented
 
 -spec get(ref(), binary()) -> #edis_item{} | not_found | {error, term()}.
 get(#ref{db = Db}, Key) ->

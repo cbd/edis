@@ -28,7 +28,7 @@ analyze: erl
 xref: erl
 	rebar skip_deps=true xref
 
-run:
+run:  erl
 	${ERL} -s edis
 
 test: erl
