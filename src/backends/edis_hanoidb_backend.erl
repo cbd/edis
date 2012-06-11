@@ -76,8 +76,8 @@ is_empty(#ref{db = Db}) ->
     end.
 
 -spec destroy(ref()) -> ok | {error, term()}.
-destroy(#ref{file = _File}) ->
-    throw(not_implemented). %% TODO: not yet implemented
+destroy(#ref{db = Db}) ->
+    hanoidb:destroy(Db).
 
 -spec status(ref()) -> {ok, binary()} | error.
 status(#ref{db = _Db}) ->
