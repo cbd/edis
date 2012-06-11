@@ -12,7 +12,7 @@ all: erl
 	./priv/script_builder
 
 erl:
-	rebar get-deps && rebar compile
+	rebar get-deps compile
 
 clean:
 	rm -rf bin
@@ -38,7 +38,7 @@ test: erl
 	rebar skip_deps=true ct ; \
 	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
 
-test-hanoidb:
+test-hanoidb: erl
 	${ERL} -config test/test-hanoidb.config -noshell -sname edis_test_server -s edis -run elog debug &
 	mkdir -p ./test/ebin
 	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
