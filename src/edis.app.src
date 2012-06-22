@@ -1,7 +1,7 @@
 {application, edis,
  [
-  {description, "Redis KV Store - The Erlang Way :)"},
-  {vsn, "0.1"},
+  {description, "An Erlang implementation of the Redis KV Store"},
+  {vsn, "0.2.0"},
   {registered, []},
   {applications, [
                   kernel,
