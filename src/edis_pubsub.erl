@@ -79,7 +79,7 @@ handle_call(_Request, State) -> {ok, ok, State}.
 %% @hidden
 -spec handle_info(term(), state()) -> {ok, state()}.
 handle_info(Info, State) ->
-  lager:warn("Unexpected Info:~n\t~p~n", [Info]),
+  lager:warning("Unexpected Info:~n\t~p~n", [Info]),
   {ok, State}.
 
 %% @hidden
