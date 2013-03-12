@@ -35,7 +35,7 @@ reload() ->
 %% @hidden
 -spec init([]) -> {ok, {{one_for_one, 5, 10}, [supervisor:child_spec()]}}.
 init([]) ->
-  ?INFO("Listener supervisor initialized~n", []),
+  lager:info("Listener supervisor initialized~n", []),
   {MinPort, MaxPort} = edis_config:get(listener_port_range),
   Listeners =
     [{list_to_atom("edis-listener-" ++ integer_to_list(I)),

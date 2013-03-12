@@ -24,7 +24,7 @@
 %% ====================================================================
 -spec init(string(), non_neg_integer(), [any()]) -> {ok, ref()} | {error, term()}.
 init(_Dir, _Index, _Options) ->
-  ?WARN("USING PD BACKEND!! This should not be a production environment!~n", []),
+  lager:warn("USING PD BACKEND!! This should not be a production environment!~n", []),
   {ok, #ref{}}.
 
 -spec write(ref(), edis_backend:write_actions()) -> ok | {error, term()}.

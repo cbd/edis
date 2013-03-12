@@ -54,11 +54,11 @@ init(Port) ->
   case gen_tcp:listen(Port, ?TCP_OPTIONS) of
     {ok, Socket} ->
       {ok, Ref} = prim_inet:async_accept(Socket, -1),
-      ?INFO("Client listener initialized (listening on port ~p)~n", [Port]),
+      lager:info("Client listener initialized (listening on port ~p)~n", [Port]),
       {ok, #state{listener = Socket,
                   acceptor = Ref}};
     {error, Reason} ->
-      ?THROW("Client listener couldn't listen to port ~p: ~p~n", [Port, Reason]),
+      lager:alert("Client listener couldn't listen to port ~p: ~p~n", [Port, Reason]),
       {stop, Reason}
     end.
 
@@ -89,7 +89,7 @@ handle_info({inet_async, ListSock, Ref, {ok, CliSocket}},
     end,
     
     %% New client connected - spawn a new process using the simple_one_for_one supervisor.
-    ?DEBUG("Client ~p starting...~n", [PeerPort]),
+    lager:debug("Client ~p starting...~n", [PeerPort]),
     {ok, Pid} = edis_client_sup:start_client(),
 
     ok = gen_tcp:controlling_process(CliSocket, Pid),
@@ -103,19 +103,19 @@ handle_info({inet_async, ListSock, Ref, {ok, CliSocket}},
         {ok, NR} ->
           NR;
         {error, Err} ->
-          ?THROW("Couldn't accept: ~p~n", [inet:format_error(Err)]),
+          lager:alert("Couldn't accept: ~p~n", [inet:format_error(Err)]),
           exit({async_accept, inet:format_error(Err)})
       end,
     
     {noreply, State#state{acceptor = NewRef}}
   catch
     exit:Error ->
-      ?ERROR("Error in async accept: ~p.\n", [Error]),
+      lager:error("Error in async accept: ~p.\n", [Error]),
       {stop, Error, State}
   end;
 handle_info({inet_async, ListSock, Ref, Error},
             #state{listener = ListSock, acceptor = Ref} = State) ->
-  ?THROW("Error in socket acceptor: ~p.\n", [Error]),
+  lager:alert("Error in socket acceptor: ~p.\n", [Error]),
   {stop, Error, State};
 handle_info(_Info, State) ->
   {noreply, State, hibernate}.
@@ -123,7 +123,7 @@ handle_info(_Info, State) ->
 %% @hidden
 -spec terminate(any(), #state{}) -> any().
 terminate(Reason, _State) ->
-  ?INFO("Listener terminated: ~p~n", [Reason]),
+  lager:info("Listener terminated: ~p~n", [Reason]),
   ok.
 
 %% @hidden
