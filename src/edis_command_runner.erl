@@ -101,17 +101,17 @@ handle_cast({run, Cmd, Args}, State) ->
     _:timeout ->
       tcp_multi_bulk(undefined, State);
     _:invalid_password ->
-      ?WARN("Invalid password.~n", []),
+      lager:warn("Invalid password.~n", []),
       tcp_err(<<"invalid password">>, State#state{authenticated = false});
     _:Error ->
-      ?ERROR("Error in db ~p: ~p~n", [State#state.db_index, Error]),
+      debug:error("Error in db ~p: ~p~n", [State#state.db_index, Error]),
       tcp_err(parse_error(Cmd, Error), State)
   end.
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
 handle_info(#edis_message{} = Message, State = #state{subscriptions = undefined}) ->
-  ?WARN("Unexpected message: ~p~n", [Message]),
+  lager:warn("Unexpected message: ~p~n", [Message]),
   {noreply, State, hibernate};
 handle_info(#edis_message{} = Message, State) ->
   {ChannelSet, PatternSet} = State#state.subscriptions,
@@ -139,10 +139,10 @@ handle_info(#edis_command{} = Command, State) ->
                                                 Command#edis_command.cmd,
                                                 edis_util:join(Command#edis_command.args, <<" ">>)]), State);
 handle_info({gen_event_EXIT, _Handler, Reason}, State) ->
-  ?INFO("Monitor deactivated. Reason: ~p~n", [Reason]),
+  lager:info("Monitor deactivated. Reason: ~p~n", [Reason]),
   {noreply, State, hibernate};
 handle_info(Info, State) ->
-  ?INFO("Unexpected info: ~p~n", [Info]),
+  lager:info("Unexpected info: ~p~n", [Info]),
   {noreply, State, hibernate}.
 
 %% @hidden
@@ -912,22 +912,22 @@ tcp_string(Message, State) ->
 %% @private
 -spec tcp_send(iodata(), state()) -> {noreply, state(), hibernate} | {stop, normal | {error, term()}, state()}.
 tcp_send(Message, State) ->
-  ?CDEBUG(data, "~p << ~s~n", [State#state.peerport, Message]),
+  lager:debug("~p << ~s~n", [State#state.peerport, Message]),
   try gen_tcp:send(State#state.socket, [Message, "\r\n"]) of
     ok ->
       {noreply, State, hibernate};
     {error, closed} ->
-      ?DEBUG("Connection closed~n", []),
+      lager:debug("Connection closed~n", []),
       {stop, normal, State};
     {error, Error} ->
-      ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Error]),
+      lager:alert("Couldn't send msg through TCP~n\tError: ~p~n", [Error]),
       {stop, {error, Error}, State}
   catch
     _:{Exception, _} ->
-      ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
+      lager:alert("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
       {stop, normal, State};
     _:Exception ->
-      ?THROW("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
+      lager:alert("Couldn't send msg through TCP~n\tError: ~p~n", [Exception]),
       {stop, normal, State}
   end.
 

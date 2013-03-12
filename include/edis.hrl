@@ -1,4 +1,3 @@
--include("elog.hrl").
 
 -define(POS_INFINITY,1.7976931348623157e308).
 -define(NEG_INFINITY,-1.7976931348623157e308).

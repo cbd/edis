@@ -65,12 +65,12 @@ run(Db, Command) ->
 %% @doc Executes Command in Db with some Timeout 
 -spec run(atom(), edis:command(), infinity | pos_integer()) -> term().
 run(Db, Command, Timeout) ->
-  ?DEBUG("CALL for ~p: ~p~n", [Db, Command]),
+  lager:debug("CALL for ~p: ~p~n", [Db, Command]),
   try gen_server:call(Db, Command, Timeout) of
     ok -> ok;
     {ok, Reply} -> Reply;
     {error, Error} ->
-      ?THROW("Error trying ~p on ~p:~n\t~p~n", [Command, Db, Error]),
+      lager:alert("Error trying ~p on ~p:~n\t~p~n", [Command, Db, Error]),
       throw(Error)
   catch
     _:{timeout, _} ->
@@ -91,7 +91,7 @@ init(Index) ->
                   last_save = edis_util:timestamp(), start_time = edis_util:now(),
                   accesses = dict:new(), updates = dict:new(), blocked_list_ops = dict:new()}};
     {error, Reason} ->
-      ?THROW("Couldn't start backend (~p): ~p~n", [{Mod, InitArgs}, Reason]),
+      lager:alert("Couldn't start backend (~p): ~p~n", [{Mod, InitArgs}, Reason]),
       {stop, Reason}
   end.
 
@@ -1355,7 +1355,7 @@ handle_call(#edis_command{cmd = <<"ZINTERSTORE">>, args = [Destination, Weighted
         _ = (State#state.backend_mod):delete(State#state.backend_ref, Destination),
         {ok, 0};
       _:Error ->
-        ?ERROR("~p~n", [Error]),
+        lager:error("~p~n", [Error]),
         {error, Error}
     end,
   {reply, Reply, stamp(Destination, write, stamp([Key || {Key, _} <- WeightedKeys], read, State))};
@@ -1557,7 +1557,7 @@ handle_call(#edis_command{cmd = <<"ZUNIONSTORE">>, args = [Destination, Weighted
         _ = (State#state.backend_mod):delete(State#state.backend_ref, Destination),
         {ok, 0};
       _:Error ->
-        ?ERROR("~p~n", [Error]),
+        lager:error("~p~n", [Error]),
         {error, Error}
     end,
   {reply, Reply, stamp(Destination, write, stamp([Key || {Key, _} <- WeightedKeys], read, State))};
@@ -1824,7 +1824,7 @@ update(Mod, Ref, Key, Type, Encoding, Fun, Default) ->
     end
   catch
     _:Error ->
-      ?ERROR("~p~n", [Error]),
+      lager:error("~p~n", [Error]),
       {error, Error}
   end.
 

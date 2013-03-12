@@ -32,5 +32,4 @@ edis is licensed by Electronic Inaka, LLC under the Apache 2.0 license; see the 
     * Make use of the efficient range searchs with start/end for searching ranges
     * Make use of time-based key expiry
     * Finish the TODO items
-* Logging
-  * Swap out elog for lager
+

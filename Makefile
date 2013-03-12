@@ -2,7 +2,7 @@
 # Copyright (C) 2011 Electronic Inaka, LLC <contact at inakanetworks dot com>
 # edis is licensed by Electronic Inaka, LLC under the Apache 2.0 license
 
-ERL := erl -pa deps/*/ebin -pa ebin -pa src -boot start_sasl +Bc +K true -smp enable -s crypto -s inets -s ssl -s elog ${ERL_ARGS}
+ERL := erl -pa deps/*/ebin -pa ebin -pa src -boot start_sasl +Bc +K true -smp enable -s crypto -s inets -s ssl -s lager ${ERL_ARGS}
 PREFIX= /usr/local
 INSTALL_BIN= $(PREFIX)/bin
 INSTALL= cp -p
@@ -32,7 +32,7 @@ run:  erl
 	${ERL} -s edis
 
 test: erl
-	${ERL} -config test/test.config -noshell -sname edis_test_server -s edis -run elog debug &
+	${ERL} -config test/test.config -noshell -sname edis_test_server -s edis &
 	mkdir -p ./test/ebin
 	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
 	rebar skip_deps=true ct ; \

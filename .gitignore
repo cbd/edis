@@ -6,4 +6,5 @@ ebin
 deps
 erl_crash.dump
 logs/
+log/
 *~
