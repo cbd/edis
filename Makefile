@@ -34,14 +34,14 @@ run:  erl
 test: erl
 	${ERL} -config test/test.config -noshell -sname edis_test_server -s edis &
 	mkdir -p ./test/ebin
-	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
-	rebar skip_deps=true ct ; \
+	mkdir -p ./logs/ct
+	rebar skip_deps=true ct -v; \
 	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
 
 test-hanoidb: erl
 	${ERL} -config test/test-hanoidb.config -noshell -sname edis_test_server -s edis -run elog debug &
 	mkdir -p ./test/ebin
-	erlc -o ./test/ebin +debug_info ./test/*_SUITE.erl
+	erlc -o ./test/ebin -pa deps/lager/ebin +debug_info +'{parse_transform, lager_transform}' ./test/*_SUITE.erl
 	rebar skip_deps=true ct ; \
 	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
 

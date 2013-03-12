@@ -102,7 +102,7 @@ binary_to_integer(Bin, Default) ->
       try erlang:trunc(list_to_float(binary_to_list(Bin)))
       catch
         _:badarg ->
-          lager:warn("Using ~p because we received '~s'. This behaviour was copied from redis-server~n", [Default, Bin]),
+          lager:warning("Using ~p because we received '~s'. This behaviour was copied from redis-server~n", [Default, Bin]),
           Default
       end
   end.
