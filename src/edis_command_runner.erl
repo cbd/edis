@@ -101,17 +101,17 @@ handle_cast({run, Cmd, Args}, State) ->
     _:timeout ->
       tcp_multi_bulk(undefined, State);
     _:invalid_password ->
-      lager:warn("Invalid password.~n", []),
+      lager:warning("Invalid password.~n", []),
       tcp_err(<<"invalid password">>, State#state{authenticated = false});
     _:Error ->
-      debug:error("Error in db ~p: ~p~n", [State#state.db_index, Error]),
+      lager:error("Error in db ~p: ~p~n", [State#state.db_index, Error]),
       tcp_err(parse_error(Cmd, Error), State)
   end.
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
 handle_info(#edis_message{} = Message, State = #state{subscriptions = undefined}) ->
-  lager:warn("Unexpected message: ~p~n", [Message]),
+  lager:warning("Unexpected message: ~p~n", [Message]),
   {noreply, State, hibernate};
 handle_info(#edis_message{} = Message, State) ->
   {ChannelSet, PatternSet} = State#state.subscriptions,
