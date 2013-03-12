@@ -75,7 +75,7 @@ bench({Module1, Function1, ExtraArgs1}, {Module2, Function2, ExtraArgs2}, Option
   graph(RawResults, Options),
   Diffs = [(V1-V2)/V2 || {_K,V1,V2} <- remove_outliers(RawResults, Options), V1 /= 0, V2 /= 0],
   case proplists:get_bool(debug, Options) of
-    true -> ?INFO("Diffs: ~p~n", [Diffs]);
+    true -> lager:info("Diffs: ~p~n", [Diffs]);
     false -> ok
   end,
   lists:sum(Diffs) / erlang:length(Diffs).
@@ -141,13 +141,13 @@ do_run(Module, Function, N, Options) ->
   try timer:tc(Module, Function, [Items | proplists:get_value(extra_args, Options, [])]) of
     {Time, Result} ->
       case proplists:get_bool(debug, Options) of
-        true -> ?INFO("~p: ~p~n\t~p~n", [N, Time/1000, Result]);
+        true -> lager:info("~p: ~p~n\t~p~n", [N, Time/1000, Result]);
         false -> ok
       end,
       {N, (Time+1)/1000}
   catch
     _:Error ->
-      ?ERROR("Error on ~p:~p (N: ~p):~n\t~p~n", [Module, Function, N, Error]),
+      lager:error("Error on ~p:~p (N: ~p):~n\t~p~n", [Module, Function, N, Error]),
       {N, error}
   after
       try Module:quit_per_round(Function, Items, proplists:get_value(extra_args, Options, [])) catch _:undef -> ok end
@@ -159,7 +159,7 @@ graph(Results, Options) ->
                           erlang:min(proplists:get_value(columns, Options, 250),
                                      proplists:get_value(rounds, Options, 250))),
   case proplists:get_bool(debug, Options) of
-    true -> ?INFO("RawData:~n\t~p~n", [RawData]);
+    true -> lager:info("RawData:~n\t~p~n", [RawData]);
     false -> ok
   end,
   Data = remove_outliers(RawData, Options),

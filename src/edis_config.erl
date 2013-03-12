@@ -21,18 +21,18 @@ set(listener_port_range, {P1, P2}) when is_integer(P1), is_integer(P2), P1 =< P2
   ok = application:set_env(edis, listener_port_range, {P1, P2}),
   edis_listener_sup:reload();
 set(listener_port_range, Param) ->
-  ?THROW("Invalid range: ~p~n", [Param]),
+  lager:alert("Invalid range: ~p~n", [Param]),
   throw(invalid_param);
 set(client_timeout, Timeout) when is_integer(Timeout), Timeout >= 0 ->
   ok = application:set_env(edis, client_timeout, Timeout);
 set(client_timeout, Param) ->
-  ?THROW("Invalid timeout: ~p~n", [Param]),
+  lager:alert("Invalid timeout: ~p~n", [Param]),
   throw(invalid_param);
 set(databases, Dbs) when is_integer(Dbs), Dbs > 0 ->
   ok = application:set_env(edis, databases, Dbs),
   edis_db_sup:reload();
 set(databases, Param) ->
-  ?THROW("Invalid number: ~p~n", [Param]),
+  lager:alert("Invalid number: ~p~n", [Param]),
   throw(invalid_param);
 set(requirepass, Pass) ->
   ok = application:set_env(edis, requirepass, Pass);
@@ -40,10 +40,10 @@ set(dir, Dir) when is_binary(Dir) ->
   ok = application:set_env(edis, dir, binary_to_list(Dir)),
   edis_db_sup:reload();
 set(dir, Param) ->
-  ?THROW("Invalid dir: ~p~n", [Param]),
+  lager:alert("Invalid dir: ~p~n", [Param]),
   throw(invalid_param);
 set(Param, Value) ->
-  ?THROW("Unsupported param: ~p: ~p~n", [Param, Value]),
+  lager:alert("Unsupported param: ~p: ~p~n", [Param, Value]),
   throw(unsupported_param).
 
 %% @doc gets configuration params
@@ -68,9 +68,9 @@ get(Pattern) ->
 get(Field, Default) ->
   case application:get_env(edis, Field) of
     {ok, Value} ->
-      ?DEBUG("~p := ~p~n", [Field, Value]),
+      lager:debug("~p := ~p~n", [Field, Value]),
       Value;
     _ ->
-      ?DEBUG("~p := ~p~n", [Field, Default]),
+      lager:debug("~p := ~p~n", [Field, Default]),
       Default
   end.

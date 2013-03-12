@@ -57,7 +57,7 @@ count_clients() ->
 %% @hidden
 -spec init([]) -> {ok, {{one_for_one, 5, 10}, [supervisor:child_spec()]}}.
 init([]) ->
-  ?INFO("Client supervisor initialized (~p managers)~n", [?MANAGERS]),
+  lager:info("Client supervisor initialized (~p managers)~n", [?MANAGERS]),
   Managers =
     [{list_to_atom("edis-client-mgr-" ++ integer_to_list(I)),
       {edis_client_mgr, start_link, [list_to_atom("edis-client-mgr-" ++ integer_to_list(I))]},
