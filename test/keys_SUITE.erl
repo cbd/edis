@@ -1,4 +1,4 @@
-%% @hidden
+%% Author: Joachim Nilsson joachim@inakanetworks.com
 
 %% SCOPE: 
 %% OBJECT subtypes "refcount" and "encoding" are not tested, only "idletime"
@@ -6,9 +6,7 @@
 
 
 -module(keys_SUITE).
-
 -compile(export_all).
-
 -include_lib("common_test/include/ct.hrl").
 
 all() -> 
@@ -45,13 +43,17 @@ generate_random(Amount, Acc, Client) ->
 
 
 
+
+%%%%%%%%%%%
+%% TESTS %%
+%%%%%%%%%%%
+
 exists_del(Config)->
 	{client,Client} = lists:keyfind(client, 1, Config),
 
 	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"hello">>]),
 	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key2">>,<<"world">>]),
 	true = erldis_client:sr_scall(Client,[<<"exists">>,<<"key1">>]),
-
 	2 = erldis_client:sr_scall(Client,[<<"del">>,<<"key1">>, <<"key2">>]),
 	false = erldis_client:sr_scall(Client,[<<"exists">>,<<"key1">>]).
 
@@ -69,13 +71,9 @@ expire_ttl(Config)->
 
 	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"hello">>]),
 	true = erldis_client:sr_scall(Client,[<<"del">>,<<"key1">>,<<"hello">>]),
-
-	%% For redis the following should be -2?
 	-1 = erldis_client:sr_scall(Client,[<<"ttl">>,<<"key1">>]),
-	
 	ok = erldis_client:sr_scall(Client,[<<"set">>,<<"key1">>,<<"hello">>]),
 	-1 = erldis_client:sr_scall(Client,[<<"ttl">>,<<"key1">>]),
-
 	true = erldis_client:sr_scall(Client,[<<"expire">>,<<"key1">>,<<"3">>]),
 	timer:sleep(1000),
 	2 = erldis_client:sr_scall(Client,[<<"ttl">>,<<"key1">>]),
@@ -191,28 +189,7 @@ randomkey(Config)->
 
 	Randoms = generate_random(200,Client),
 
-	%true = erldis_client:sr_scall(Client,[<<"randomkey">>]),
 	true = lists:member(<<"foo">>, Randoms),
 	true = lists:member(<<"food">>, Randoms),
 	true = lists:member(<<"fool">>, Randoms),
 	true = lists:member(<<"foot">>, Randoms).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	%ct:pal(Value, "this is the returnvalue") - This sometimes prints Value when doing a make test. 
