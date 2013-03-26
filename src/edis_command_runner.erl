@@ -620,7 +620,7 @@ run(#edis_command{cmd = <<"SHUTDOWN">>}, State) ->
   _ = spawn(edis, stop, []),
   {stop, normal, State};
 run(#edis_command{cmd = <<"SELECT">>, args = [DbIndex]}, State) ->
-  tcp_ok(State#state{db = edis_db:process(DbIndex)});
+  tcp_ok(State#state{db = edis_db:process(DbIndex), db_index = DbIndex});
 run(#edis_command{cmd = <<"CONFIG GET">>, args = [Pattern]}, State) ->
   Configs = edis_config:get(Pattern),
   Lines = lists:flatten(

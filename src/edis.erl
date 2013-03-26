@@ -60,6 +60,12 @@ stop() -> application:stop(?MODULE).
 %% @private
 -spec start(any(), any()) -> {ok, pid()}.
 start(_StartType, _StartArgs) ->
+%% Try to connect to a specific host - by choosing a cookie.
+%% erlang:get_cookie() (of the current node)
+%%  OtherNodes = net_adm:world(),
+  %%Me = node(),
+  %%erlang:set_cookie(Me, my_cookie),
+  pg2:create(node_group),
   edis_sup:start_link().
 
 %% @private

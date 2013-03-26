@@ -9,8 +9,8 @@
                   crypto
                  ]},
   {mod, {edis, []}},
-  {env, [{listener_port_range, {6379,6379}},
+  {env, [{listener_port_range, {6378,6379}},
          {client_timeout, 32000},
-         {databases, 16},
+         {databases, 1},
          {requirepass, undefined}]}
  ]}.
