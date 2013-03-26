@@ -29,7 +29,6 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-multi_node_set(Key,Value) -> gen_server:abcast('bar@Joachims-MacBook-Air.local', 'bar', {set, Key, Value}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -43,7 +42,6 @@ multi_node_set(Key,Value) -> gen_server:abcast('bar@Joachims-MacBook-Air.local',
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init([]) ->
-  ok = pg2:join(node_group, self()),
   ok = net_kernel:monitor_nodes(true, [nodedown_reason]),
   net_adm:world(),
   {ok, #state{}}.
@@ -90,9 +88,7 @@ handle_info({Event, Node, Data}, State) ->
      nodeup ->
        lager:notice("~n~n\t\t~p is UP! (~p)~n~n", [Node, Data]);
      nodedown ->
-       lager:notice("~n~n\t\t~p is DOWN! (~p).", [Node, Data]);
-     nodegone ->
-      lager:notice("~n~n\t\t~p is GONE! (~p).", [Node, Data])
+       lager:notice("~n~n\t\t~p is DOWN! (~p).", [Node, Data])
   end,
 
 
