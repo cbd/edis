@@ -104,7 +104,7 @@ handle_cast({run, Cmd, Args}, State) ->
       lager:warning("Invalid password.~n", []),
       tcp_err(<<"invalid password">>, State#state{authenticated = false});
     _:Error ->
-      lager:error("Error in db ~p: ~p~n", [State#state.db_index, Error]),
+      lager:error("Error in db ~p: ~p~nStack: ~p", [State#state.db_index, Error, erlang:get_stacktrace()]),
       tcp_err(parse_error(Cmd, Error), State)
   end.
 
