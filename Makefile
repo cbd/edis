@@ -32,11 +32,12 @@ run:  erl
 	${ERL} -s edis
 
 test: erl
-	${ERL} -config test/test.config -noshell -sname edis_test_server -s edis &
+	#${ERL} -config test/test.config -noshell -sname edis_test_server -s edis &
 	mkdir -p ./test/ebin
 	mkdir -p ./logs/ct
-	rebar skip_deps=true ct -v; \
-	kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
+	# To run all tests, remove: suites=keys
+	rebar skip_deps=true ct suites=keys -v; \
+	#kill `ps aux | grep beam | grep edis_[t]est_server | awk '{print $$2}'`
 
 test-hanoidb: erl
 	${ERL} -config test/test-hanoidb.config -noshell -sname edis_test_server -s edis -run elog debug &

@@ -104,7 +104,7 @@ handle_cast({run, Cmd, Args}, State) ->
       lager:warning("Invalid password.~n", []),
       tcp_err(<<"invalid password">>, State#state{authenticated = false});
     _:Error ->
-      lager:error("Error in db ~p: ~p~n", [State#state.db_index, Error]),
+      lager:error("Error in db ~p: ~p~nStack: ~p", [State#state.db_index, Error, erlang:get_stacktrace()]),
       tcp_err(parse_error(Cmd, Error), State)
   end.
 
@@ -620,7 +620,7 @@ run(#edis_command{cmd = <<"SHUTDOWN">>}, State) ->
   _ = spawn(edis, stop, []),
   {stop, normal, State};
 run(#edis_command{cmd = <<"SELECT">>, args = [DbIndex]}, State) ->
-  tcp_ok(State#state{db = edis_db:process(DbIndex)});
+  tcp_ok(State#state{db = edis_db:process(DbIndex), db_index = DbIndex});
 run(#edis_command{cmd = <<"CONFIG GET">>, args = [Pattern]}, State) ->
   Configs = edis_config:get(Pattern),
   Lines = lists:flatten(
