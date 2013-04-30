@@ -1,4 +1,4 @@
-An *Erlang* version of [Redis](http://redis.io), with the goal of similar algorithmic performance but support for multiple master nodes and larger-than-RAM datasets. For [More info](http://inakanetworks.com/edis/Edis_Implementing_Redis_In_Erlang.pdf), see this PDF of a Talk at Erlang Factory 2012.
+An *Erlang* version of [Redis](http://redis.io), with the goal of similar algorithmic performance but support for multiple master nodes and larger-than-RAM datasets. For [More info](http://inakanetworks.com/assets/pdf//Edis_Implementing_Redis_In_Erlang.pdf), see this PDF of a Talk at Erlang Factory 2012.
 
 ## Usage
 Just run `$ make run` and open connections with your favourite redis client.
