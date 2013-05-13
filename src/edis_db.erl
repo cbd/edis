@@ -1,6 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Fernando Benavides <fernando.benavides@inakanetworks.com>
 %%% @author Chad DePue <chad@inakanetworks.com>
+%%% @author Joachim Nilsson <joachim@inakanetworks.com>
 %%% @copyright (C) 2011 InakaLabs SRL
 %%% @doc edis Database
 %%% @todo It's currently delivering all operations to the leveldb instance, i.e. no in-memory management
@@ -216,8 +217,7 @@ handle_call(#edis_command{cmd = <<"MSET">>, args = KVs}, _From, State) ->
                      #edis_item{key = Key, encoding = raw,
                                 type = string, value = Value}} || {Key, Value} <- KVs], State),
   {reply, Reply, stamp([K || {K, _} <- KVs], write, State)};
-handle_call(#edis_command{cmd = <<"
-  ">>, args = KVs}, _From, State) ->
+handle_call(#edis_command{cmd = <<"MSETNX">>, args = KVs}, _From, State) ->
   {Reply, Action} =
     case lists:any(
            fun({Key, _}) ->
@@ -1616,11 +1616,56 @@ handle_call(X, _From, State) ->
 handle_cast({db_write, Actions}, State) ->
   (State#state.backend_mod):write(State#state.backend_ref, Actions),
   {noreply, State};
+
 handle_cast({db_put, Destination, EdisItem}, State) ->
-  (State#state.backend_mod):put(State#state.backend_ref, Destination, EdisItem),
+  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, EdisItem),
+  case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
+    true -> 
+      %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
+      db_put(Destination, EdisItem, State)
+  end,
+
+  case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
+    true ->
+      %% The case of when the incoming EdisItem vclock is LESS advanced than the local one
+      db_put(Destination, EdisItemLocal, State);
+    false ->
+      LocalTS = EdisItemLocal#edis_item.timestamp,
+      IncomingTS = EdisItem#edis_item.timestamp,
+      DescVClock = edis_vclock:merge([EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock]),
+      case IncomingTS > LocalTS of
+        true ->
+          UpdatedVClock = EdisItem#edis_item{vclock = DescVClock},
+          db_put(Destination, UpdatedVClock, State);
+        false ->
+          UpdatedVClock = EdisItemLocal#edis_item{vclock = DescVClock},
+          db_put(Destination, UpdatedVClock, State)
+      end
+  end,
   {noreply, State};
-handle_cast({db_delete, Destination}, State) ->
-  (State#state.backend_mod):delete(State#state.backend_ref, Destination),
+
+handle_cast({db_delete, Destination, EdisItem}, State) ->
+  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, EdisItem),
+  case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
+    true -> 
+      %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
+      db_delete(Destination, State)
+  end,
+
+  case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
+    true ->
+      %% The case of when the incoming EdisItem vclock is LESS advanced than the local one
+      db_delete(Destination, State);
+    false ->
+      LocalTS = EdisItemLocal#edis_item.timestamp,
+      IncomingTS = EdisItem#edis_item.timestamp,
+      case IncomingTS > LocalTS of
+        true -> 
+          db_delete(EdisItem#edis_item.key, State);
+        false ->
+          db_delete(EdisItemLocal#edis_item.key, State)
+      end
+  end,
   {noreply, State}.
 
 %% @hidden
@@ -1968,14 +2013,35 @@ db_write(Actions, State) ->
   ok.
 
 db_put(Destination, EdisItem, State) ->
+  IncrementedVClock = EdisItem#edis_item{
+                                          vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                                          timestamp = edis_vclock:timestamp()},
   (State#state.backend_mod):put(
                    State#state.backend_ref,
                    Destination,
-                   EdisItem),
-  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_put, Destination, EdisItem}),
+                   IncrementedVClock),
+  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_put, Destination, IncrementedVClock}),
   ok.
 
 db_delete(Destination, State) ->
-  (State#state.backend_mod):delete(State#state.backend_ref, Destination),
-  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_delete, Destination}),
+  EdisItem = (State#state.backend_mod):get(State#state.backend_ref, Destination),
+  case EdisItem of
+    #edis_item{vclock = _} ->
+      NewEdisItem = EdisItem#edis_item{
+                                          vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                                          timestamp = edis_vclock:timestamp()},
+      (State#state.backend_mod):delete(State#state.backend_ref, Destination),
+      abcast = gen_server:abcast(nodes(), process(State#state.index), {db_delete, Destination, NewEdisItem});
+    #edis_item{} ->
+    %% It has to be resolved what to do in respect of vector clocks for this case
+      {error, bad_item_type};
+    not_found ->
+      not_found;
+    {error, Reason} ->
+      lager:error("~p~n", [Reason])
+  end,
   ok.
+
+
+
+
