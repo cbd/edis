@@ -1613,16 +1613,76 @@ handle_call(X, _From, State) ->
 
 %% @hidden
 -spec handle_cast({write|put|delete, term()}, state()) -> {noreply, state()}.
+
 handle_cast({db_write, Actions}, State) ->
-  (State#state.backend_mod):write(State#state.backend_ref, Actions),
+
+  CategorizeActions = 
+    fun({put, Key, EdisItem}, [{local_writes, LocalWrites}, {broadcast_writes, AbcastWrites}, LocalState]) -> 
+          EdisItemLocal = (LocalState#state.backend_mod):get(LocalState#state.backend_ref, Key),
+          case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) orelse EdisItemLocal == not_found of
+            true -> 
+              %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
+              [{local_writes, [{put, Key, EdisItem} | LocalWrites]}, {broadcast_writes, AbcastWrites}, LocalState];
+            false ->
+              case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
+                true ->
+                  %% The case of when the incoming EdisItem vclock is LESS advanced than the local one
+                  [{local_writes, LocalWrites}, {broadcast_writes, [{put, Key, EdisItemLocal} | AbcastWrites]}, LocalState];
+                false ->
+                  LocalTS = EdisItemLocal#edis_item.timestamp,
+                  IncomingTS = EdisItem#edis_item.timestamp,
+                  DescVClock = edis_vclock:merge([EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock]),
+                  case IncomingTS > LocalTS of
+                    true ->
+                      UpdatedVClock = EdisItem#edis_item{vclock = DescVClock},
+                      [{local_writes, LocalWrites}, {broadcast_writes, [{put, Key, UpdatedVClock} | AbcastWrites]}, LocalState]; 
+                    false ->
+                      UpdatedVClock = EdisItemLocal#edis_item{vclock = DescVClock},
+                      [{local_writes, LocalWrites}, {broadcast_writes, [{put, Key, UpdatedVClock} | AbcastWrites]}, LocalState]
+                  end
+              end
+          end;
+        ({delete, Key, EdisItem}, [{local_writes, LocalWrites}, {broadcast_writes, AbcastWrites}, LocalState]) -> 
+          EdisItemLocal = (LocalState#state.backend_mod):get(LocalState#state.backend_ref, Key),
+          case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) orelse EdisItemLocal == not_found of
+            true -> 
+              %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
+              [{local_writes, [{delete, Key} | LocalWrites]}, {broadcast_writes, AbcastWrites}, LocalState];
+            false ->
+              case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
+                true ->
+                  %% The case of when the incoming EdisItem vclock is LESS advanced than the local one
+                  [{local_writes, LocalWrites}, {broadcast_writes, [{delete, Key} | AbcastWrites]}, LocalState]; 
+                false ->
+                  LocalTS = EdisItemLocal#edis_item.timestamp,
+                  IncomingTS = EdisItem#edis_item.timestamp,
+                  case IncomingTS > LocalTS of
+                    true -> 
+                      [{local_writes, LocalWrites}, {broadcast_writes, [{delete, Key} | AbcastWrites]}, LocalState];
+                    false ->
+                      [{local_writes, LocalWrites}, {broadcast_writes, [{delete, EdisItemLocal#edis_item.key} | AbcastWrites]}, LocalState]
+                  end
+              end
+          end
+      end,
+
+  NewActions = lists:foldr(CategorizeActions, [{local_writes, []}, {broadcast_writes, []}, State], Actions),
+  MatchMe = fun([{local, LocalActions},{broadcast, AbcastActions}, MatchState]) -> 
+    (MatchState#state.backend_mod):write(MatchState#state.backend_ref, LocalActions),
+    db_write(AbcastActions, MatchState)
+  end,
+  MatchMe(NewActions),
   {noreply, State};
 
 handle_cast({db_put, Destination, EdisItem}, State) ->
-  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, EdisItem),
-  case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
+  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Destination),
+  case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) orelse EdisItemLocal == not_found of
     true -> 
       %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
-      db_put(Destination, EdisItem, State)
+      (State#state.backend_mod):put(
+                   State#state.backend_ref,
+                   Destination,
+                   EdisItem)
   end,
 
   case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
@@ -1645,11 +1705,11 @@ handle_cast({db_put, Destination, EdisItem}, State) ->
   {noreply, State};
 
 handle_cast({db_delete, Destination, EdisItem}, State) ->
-  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, EdisItem),
-  case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
+  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Destination),
+  case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) orelse EdisItemLocal == not_found of
     true -> 
       %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
-      db_delete(Destination, State)
+      (State#state.backend_mod):delete(State#state.backend_ref, Destination)
   end,
 
   case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
@@ -2007,10 +2067,36 @@ retrieve(State, Element, Pattern) ->
 
 
 
-db_write(Actions, State) ->
-  (State#state.backend_mod):write(State#state.backend_ref, Actions),
-  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_write, Actions}),
+db_write(Actions, IncomingState) ->
+  SortActions = 
+  fun({put, Key, EdisItem}, [{local, LocalActions},{broadcast, AbcastActions}, State]) -> 
+        PutItem = {put, Key, EdisItem#edis_item{
+                                              vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                                              timestamp = edis_vclock:timestamp()}},
+        [{local, [PutItem | LocalActions]},{broadcast, [PutItem | AbcastActions]}, State];
+      ({delete, Key}, [{local, LocalActions},{broadcast, AbcastActions}, State]) -> 
+        EdisItem = (State#state.backend_mod):get(State#state.backend_ref, Key),
+        case EdisItem of 
+          #edis_item{} -> 
+            [{local, [{delete, Key} | LocalActions]},
+            {broadcast, [{delete, Key, EdisItem#edis_item{
+                            vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                            timestamp = edis_vclock:timestamp()}} | AbcastActions]}, State];
+          %% Below means that the value did not exist, assume that it has already been deleted. Adding nothing to actionlists
+          not_found -> [{local, LocalActions},{broadcast, AbcastActions}, State];
+          {error, Reason} ->
+            lager:error("~p~n", [Reason])
+        end
+  end,
+
+  NewActions = lists:foldr(SortActions, [{local, []},{broadcast, []}, IncomingState], Actions),
+  MatchMe = fun([{local, LocalActions},{broadcast, AbcastActions}, MatchState]) -> 
+    (MatchState#state.backend_mod):write(MatchState#state.backend_ref, LocalActions),
+    abcast = gen_server:abcast(nodes(), process(MatchState#state.index), {db_write, AbcastActions})
+  end,
+  MatchMe(NewActions),
   ok.
+
 
 db_put(Destination, EdisItem, State) ->
   IncrementedVClock = EdisItem#edis_item{
@@ -2026,16 +2112,14 @@ db_put(Destination, EdisItem, State) ->
 db_delete(Destination, State) ->
   EdisItem = (State#state.backend_mod):get(State#state.backend_ref, Destination),
   case EdisItem of
-    #edis_item{vclock = _} ->
+    #edis_item{} ->
       NewEdisItem = EdisItem#edis_item{
                                           vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
                                           timestamp = edis_vclock:timestamp()},
       (State#state.backend_mod):delete(State#state.backend_ref, Destination),
       abcast = gen_server:abcast(nodes(), process(State#state.index), {db_delete, Destination, NewEdisItem});
-    #edis_item{} ->
-    %% It has to be resolved what to do in respect of vector clocks for this case
-      {error, bad_item_type};
     not_found ->
+    %% Assumption: All nodes have agreed once that the item should be deleted.
       not_found;
     {error, Reason} ->
       lager:error("~p~n", [Reason])
