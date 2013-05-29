@@ -1759,7 +1759,18 @@ handle_cast({db_delete, Destination, EdisItem}, State) ->
           end
       end
   end,
-  {noreply, State}.
+  {noreply, State};
+
+
+handle_cast({db_update, Key}, State) ->
+  EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Key),
+  case EdisItemLocal == not_found of
+    true -> 
+      db_delete(Key, State);
+    false -> 
+      db_put(Key, EdisItemLocal, State)
+  end,
+{noreply, State}.
 
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
@@ -1891,23 +1902,27 @@ get_item(State, Types, Key) when is_list(Types) ->
       Other
   end;
 get_item(State, Type, Key) ->
-  case (State#state.backend_mod):get(State#state.backend_ref, Key) of
-    Item = #edis_item{type = T, expire = Expire} when Type =:= any orelse T =:= Type ->
-      Now = edis_util:now(),
-      case Expire of
-        Expire when Expire >= Now ->
-          Item;
-        _ ->
-          _ = db_delete(Key, State),
-          not_found
-      end;
-    #edis_item{} ->
-      {error, bad_item_type};
-    not_found ->
-      not_found;
-    {error, Reason} ->
-      {error, Reason}
-  end.
+  Result = 
+    case (State#state.backend_mod):get(State#state.backend_ref, Key) of
+      Item = #edis_item{type = T, expire = Expire} when Type =:= any orelse T =:= Type ->
+        Now = edis_util:now(),
+        case Expire of
+          Expire when Expire >= Now ->
+            Item;
+          _ ->
+            _ = db_delete(Key, State),
+            not_found
+        end;
+      #edis_item{} ->
+        {error, bad_item_type};
+      not_found ->
+        not_found;
+      {error, Reason} ->
+        {error, Reason}
+    end,
+  db_update(Key, State),
+  Result.
+  % There is no "end" to this function clause? Why? Also the function has two parts, i thought the syntax to introduce the second part would be to only specify the set of parameters and not the function name again?
 
 %% @private
 update(State, Key, Type, Fun) ->
@@ -2158,6 +2173,10 @@ db_delete(Destination, State) ->
       lager:error("~p~n", [Reason])
   end,
   ok.
+
+db_update(Key, State) ->
+  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_update, Key}),
+ok.
 
 
 
