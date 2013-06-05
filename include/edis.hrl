@@ -27,4 +27,6 @@
                     type              :: edis_db:item_type(),
                     encoding          :: edis_db:item_encoding(),
                     value             :: term(),
+                    vclock = edis_vclock:fresh()           :: edis_vclock:vclock(), %type defined in edis_vclock.erl
+                    timestamp = edis_vclock:timestamp()     :: integer(),
                     expire = infinity :: infinity | pos_integer()}).
