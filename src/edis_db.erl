@@ -1616,7 +1616,6 @@ handle_call(X, _From, State) ->
 
 handle_cast({db_write, Actions}, State) ->
 
-
   ActionAnalytics = fun({_, Key, EdisItem}) ->
     EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Key),
     case EdisItemLocal == not_found orelse edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
@@ -1646,7 +1645,6 @@ handle_cast({db_write, Actions}, State) ->
                   ({put, Key, EdisItem}) -> {put, Key, EdisItem} 
                   end,
   PatchedActions = lists:map(PatchDeletes, Actions),
-
 
   ChooseLocal = 
     fun({_, Key, EdisItem}) -> 
@@ -1681,8 +1679,6 @@ handle_cast({db_write, Actions}, State) ->
           end
     end,
 
-
-
   case lists:all(fun(X) -> X == local_write end, AnalyticsResult) of 
     true ->
       (State#state.backend_mod):write(State#state.backend_ref, PatchedActions);
@@ -1702,8 +1698,6 @@ handle_cast({db_write, Actions}, State) ->
           end
       end
   end,
-
-
 
   {noreply, State};
 
@@ -1762,16 +1756,30 @@ handle_cast({db_delete, Destination, EdisItem}, State) ->
   {noreply, State};
 
 
-handle_cast({db_update, Key}, State) ->
+handle_cast({db_update, Key, EdisItem}, State) ->
   EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Key),
-  case EdisItemLocal == not_found of
-    true -> 
-      db_delete(Key, State);
-    false -> 
-      db_put(Key, EdisItemLocal, State)
-  end,
-{noreply, State}.
+    case {EdisItemLocal,EdisItem} of
+      {not_found,not_found} ->
+        {noreply, State}; 
+    _ -> 
+      case {EdisItemLocal,EdisItem} of
+        {not_found,#edis_item{}} ->
+          db_delete(Key, EdisItem, State),
+          {noreply, State};
+        _ ->
+          case EdisItemLocal of
+            #edis_item{}  ->
+              db_put(Key, EdisItemLocal, State),
+              {noreply, State};
+            _ ->
+              {noreply, State}
+          end
+      end
+  end;
 
+handle_cast(Msg, State) ->
+lager:debug("unknown cast"),
+{noreply, State}.
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
 handle_info(_, State) -> {noreply, State, hibernate}.
@@ -1920,9 +1928,14 @@ get_item(State, Type, Key) ->
       {error, Reason} ->
         {error, Reason}
     end,
-  db_update(Key, State),
-  Result.
-  % There is no "end" to this function clause? Why? Also the function has two parts, i thought the syntax to introduce the second part would be to only specify the set of parameters and not the function name again?
+
+  case Result of
+    {error,_} ->
+      Result;
+    _ ->
+      db_update(Key, Result, State),
+      Result
+  end.
 
 %% @private
 update(State, Key, Type, Fun) ->
@@ -2159,6 +2172,9 @@ db_put(Destination, EdisItem, State) ->
 
 db_delete(Destination, State) ->
   EdisItem = (State#state.backend_mod):get(State#state.backend_ref, Destination),
+  db_delete(Destination, EdisItem, State).
+
+db_delete(Destination, EdisItem, State) ->
   case EdisItem of
     #edis_item{} ->
       NewEdisItem = EdisItem#edis_item{
@@ -2174,8 +2190,8 @@ db_delete(Destination, State) ->
   end,
   ok.
 
-db_update(Key, State) ->
-  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_update, Key}),
+db_update(Key, EdisItem, State) ->
+  abcast = gen_server:abcast(nodes(), process(State#state.index), {db_update, Key, EdisItem}),
 ok.
 
 
