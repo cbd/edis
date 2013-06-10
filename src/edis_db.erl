@@ -1679,6 +1679,7 @@ handle_cast({db_write, Actions}, State) ->
           end
     end,
 
+
   case lists:all(fun(X) -> X == local_write end, AnalyticsResult) of 
     true ->
       (State#state.backend_mod):write(State#state.backend_ref, PatchedActions);
@@ -1698,8 +1699,8 @@ handle_cast({db_write, Actions}, State) ->
           end
       end
   end,
-
-  {noreply, State};
+  Destinations = lists:map(fun({_Fn, Key, _EdisItem}) -> Key end, Actions), 
+  {noreply, stamp(Destinations, write, State)};
 
 handle_cast({db_put, Destination, EdisItem}, State) ->
   EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Destination),
@@ -1730,7 +1731,7 @@ handle_cast({db_put, Destination, EdisItem}, State) ->
           end
       end
   end,
-  {noreply, State};
+  {noreply, stamp(Destination, write, State)};
 
 handle_cast({db_delete, Destination, EdisItem}, State) ->
   EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Destination),
@@ -1754,26 +1755,26 @@ handle_cast({db_delete, Destination, EdisItem}, State) ->
           end
       end
   end,
-  {noreply, State};
+  {noreply, stamp(Destination, write, State)};
 
 
 handle_cast({db_update, Key, EdisItem}, State) ->
   EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Key),
     case {EdisItemLocal,EdisItem} of
       {not_found,not_found} ->
-        {noreply, State}; 
+        {noreply, stamp(Key, read, State)}; 
     _ -> 
       case {EdisItemLocal,EdisItem} of
         {not_found,#edis_item{}} ->
           db_delete(Key, EdisItem, State),
-          {noreply, State};
+          {noreply, stamp(Key, write, State)};
         _ ->
           case EdisItemLocal of
             #edis_item{}  ->
               db_put(Key, EdisItemLocal, State),
-              {noreply, State};
+              {noreply, stamp(Key, write, State)};
             _ ->
-              {noreply, State}
+              {noreply, stamp(Key, read, State)}
           end
       end
   end.
@@ -2195,7 +2196,3 @@ db_delete(Destination, EdisItem, State) ->
 db_update(Key, EdisItem, State) ->
   abcast = gen_server:abcast(nodes(), process(State#state.index), {db_update, Key, EdisItem}),
 ok.
-
-
-
-
