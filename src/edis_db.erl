@@ -89,7 +89,7 @@ init(Index) ->
   case Mod:init(edis_config:get(dir), Index, InitArgs) of
     {ok, Ref} ->
       {ok, #state{index = Index, backend_mod = Mod, backend_ref = Ref,
-                  last_save = edis_util:timestamp(), start_time = edis_util:now(),
+                  last_save = edis_util:timestamp(), start_time = edis_vclock:timestamp(), 
                   accesses = dict:new(), updates = dict:new(), blocked_list_ops = dict:new()}};
     {error, Reason} ->
       lager:alert("Couldn't start backend (~p): ~p~n", [{Mod, InitArgs}, Reason]),
@@ -418,7 +418,7 @@ handle_call(#edis_command{cmd = <<"OBJECT IDLETIME">>, args = [Key]}, _From, Sta
             {ok, O} -> O;
             error -> 0
           end,
-        {ok, edis_util:now() - Offset - State#state.start_time};
+        {ok, edis_vclock:timestamp() - Offset - State#state.start_time};
       false -> {ok, undefined};
       {error, Reason} -> {error, Reason}
     end,
@@ -1703,7 +1703,7 @@ handle_cast({db_write, Actions}, State) ->
 
 handle_cast({db_put, Destination, EdisItem}, State) ->
   EdisItemLocal = (State#state.backend_mod):get(State#state.backend_ref, Destination),
-  case EdisItemLocal == not_found orelse edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
+  case EdisItemLocal == not_found orelse edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
     true -> 
       %% The case of when the incoming EdisItem vclock is MORE advanced than the local one
       (State#state.backend_mod):put(
@@ -1711,10 +1711,11 @@ handle_cast({db_put, Destination, EdisItem}, State) ->
                    Destination,
                    EdisItem);
     false ->
-      case edis_vclock:descends(EdisItem#edis_item.vclock, EdisItemLocal#edis_item.vclock) of
+      case edis_vclock:descends(EdisItemLocal#edis_item.vclock, EdisItem#edis_item.vclock) of
         true ->
           %% The case of when the incoming EdisItem vclock is LESS advanced than the local one
           db_put(Destination, EdisItemLocal, State);
+
         false ->
           LocalTS = EdisItemLocal#edis_item.timestamp,
           IncomingTS = EdisItem#edis_item.timestamp,
@@ -1775,11 +1776,9 @@ handle_cast({db_update, Key, EdisItem}, State) ->
               {noreply, State}
           end
       end
-  end;
+  end.
 
-handle_cast(Msg, State) ->
-lager:debug("unknown cast"),
-{noreply, State}.
+
 %% @hidden
 -spec handle_info(term(), state()) -> {noreply, state(), hibernate}.
 handle_info(_, State) -> {noreply, State, hibernate}.
@@ -1803,12 +1802,12 @@ stamp([Key|Keys], Action, State) ->
 stamp(_Key, none, State) -> State;
 stamp(Key, read, State) ->
   State#state{accesses =
-                  dict:store(Key, edis_util:now() - State#state.start_time, State#state.accesses)};
+                  dict:store(Key, edis_vclock:timestamp() - State#state.start_time, State#state.accesses)};
 stamp(Key, write, State) ->
   State#state{updates =
-                  dict:store(Key, edis_util:now() - State#state.start_time, State#state.updates),
+                  dict:store(Key, edis_vclock:timestamp() - State#state.start_time, State#state.updates),
               accesses =
-                  dict:store(Key, edis_util:now() - State#state.start_time, State#state.accesses)}.
+                  dict:store(Key, edis_vclock:timestamp() - State#state.start_time, State#state.accesses)}.
 
 %% @private
 block_list_op(_Key, _Req, _From, undefined, State) -> State;
@@ -1929,8 +1928,11 @@ get_item(State, Type, Key) ->
         {error, Reason}
     end,
 
+
   case Result of
     {error,_} ->
+      Result;
+    #edis_item{timestamp = TS} when TS > State#state.start_time -> 
       Result;
     _ ->
       db_update(Key, Result, State),
@@ -2132,7 +2134,7 @@ db_write(Actions, IncomingState) ->
   SortActions = 
   fun({put, Key, EdisItem}, [{local, LocalActions},{broadcast, AbcastActions}, State]) -> 
         PutItem = {put, Key, EdisItem#edis_item{
-                                              vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                                              vclock = edis_vclock:increment(node(), EdisItem#edis_item.vclock), 
                                               timestamp = edis_vclock:timestamp()}},
         [{local, [PutItem | LocalActions]},{broadcast, [PutItem | AbcastActions]}, State];
       ({delete, Key}, [{local, LocalActions},{broadcast, AbcastActions}, State]) -> 
@@ -2141,7 +2143,7 @@ db_write(Actions, IncomingState) ->
           #edis_item{} -> 
             [{local, [{delete, Key} | LocalActions]},
             {broadcast, [{delete, Key, EdisItem#edis_item{
-                            vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                            vclock = edis_vclock:increment(node(), EdisItem#edis_item.vclock), 
                             timestamp = edis_vclock:timestamp()}} | AbcastActions]}, State];
           %% Below means that the value did not exist, assume that it has already been deleted. Adding nothing to actionlists
           not_found -> [{local, LocalActions},{broadcast, AbcastActions}, State];
@@ -2161,7 +2163,7 @@ db_write(LocalActions, AbcastActions, IncomingState) ->
 
 db_put(Destination, EdisItem, State) ->
   IncrementedVClock = EdisItem#edis_item{
-                                          vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                                          vclock = edis_vclock:increment(node(), EdisItem#edis_item.vclock), 
                                           timestamp = edis_vclock:timestamp()},
   (State#state.backend_mod):put(
                    State#state.backend_ref,
@@ -2178,7 +2180,7 @@ db_delete(Destination, EdisItem, State) ->
   case EdisItem of
     #edis_item{} ->
       NewEdisItem = EdisItem#edis_item{
-                                          vclock = edis_vclock:increment(process(State#state.index), EdisItem#edis_item.vclock), 
+                                          vclock = edis_vclock:increment(node(), EdisItem#edis_item.vclock),
                                           timestamp = edis_vclock:timestamp()},
       (State#state.backend_mod):delete(State#state.backend_ref, Destination),
       abcast = gen_server:abcast(nodes(), process(State#state.index), {db_delete, Destination, NewEdisItem});
