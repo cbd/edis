@@ -29,6 +29,7 @@ xref: erl
 	rebar skip_deps=true xref
 
 run:  erl
+	if [ ! -f ~/.hosts.erlang ] ; then echo "file ~/.hosts.erlang does not exist, run 'touch ~/.hosts.erlang' to fix this problem" ; exit 1  ; fi
 	${ERL} -s edis
 
 test: erl
