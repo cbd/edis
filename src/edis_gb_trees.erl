@@ -10,6 +10,8 @@
 -author('Fernando Benavides <fernando.benavides@inakanetworks.com>').
 -author('Chad DePue <chad@inakanetworks.com>').
 
+-compile({parse_transform,pmod_pt}).
+
 -export([rev_iterator/1, previous/1]).
 
 -type edis_gb_tree() :: gb_tree().
