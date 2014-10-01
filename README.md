@@ -1,5 +1,13 @@
 An *Erlang* version of [Redis](http://redis.io), with the goal of similar algorithmic performance but support for multiple master nodes and larger-than-RAM datasets. For [More info](http://inakanetworks.com/assets/pdf//Edis_Implementing_Redis_In_Erlang.pdf), see this PDF of a Talk at Erlang Factory 2012.
 
+## Contact Us
+For **questions** or **general comments** regarding the use of this library, please use our public
+[hipchat room](https://www.hipchat.com/gpBpW3SsT).
+
+If you find any **bugs** or have a **problem** while using this library, please [open an issue](https://github.com/inaka/edis/issues/new) in this repo (or a pull request :)).
+
+And you can check all of our open-source projects at [inaka.github.io](http://inaka.github.io)
+
 ## Usage
 Just run `$ make run` and open connections with your favourite redis client.
 
